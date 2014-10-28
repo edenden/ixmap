@@ -113,6 +113,7 @@ struct uio_ixgbe_link_req {
 #define UIO_IXGBE_MALLOC _IOW('U', 208, int)
 struct uio_ixgbe_malloc_req {
 	uint64_t mmap_offset;
+	uint64_t physical_addr;
 	uint32_t size;
 	uint16_t numa_node;
 	uint16_t cache;

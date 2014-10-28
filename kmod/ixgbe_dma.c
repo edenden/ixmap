@@ -62,6 +62,8 @@ int ixgbe_dma_malloc(struct uio_ixgbe_udapter *ud, struct uio_ixgbe_malloc_req *
 	if (!area)
 		return -ENOMEM;
 
+	req->physical_addr = area->paddr;
+
 	/* Add to the context */
 	area->mmap_offset = req->mmap_offset;
 	list_add(&area->list, where);

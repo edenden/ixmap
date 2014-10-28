@@ -1,3 +1,12 @@
+#define ALIGN(x,a)		__ALIGN_MASK(x,(typeof(x))(a)-1)
+#define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
+
+#define min(x, y) ({			\
+	typeof(x) _min1 = (x);		\
+	typeof(y) _min2 = (y);		\
+	(void) (&_min1 == &_min2);		\
+	_min1 < _min2 ? _min1 : _min2; })
+
 /* MAC and PHY info */
 struct uio_ixgbe_info {
 	uint32_t  irq;
@@ -15,18 +24,70 @@ struct uio_ixgbe_info {
 	uint32_t        max_msix_vectors;
 };
 
+struct ixgbe_ring {
+	void		*vaddr;
+	uint32_t	count;
+	uint64_t	paddr;
+};
+
+struct ixgbe_buf {
+	void		*vaddr;
+	uint32_t	mtu;
+	uint32_t	count;
+	uint64_t	paddr;
+};
+
 struct ixgbe_handle {
- 	int             fd;
-	void		*bar;
-	uint32_t	bar_size;
+ 	int			fd;
+	void			*bar;
+	uint32_t		bar_size;
+	uint64_t		mmapped_offset;
+	uint32_t		num_queues;
 
-//	struct ixgbe_ring tx_ring[IXGBE_MAX_TX_QUEUES];
-//	struct ixgbe_ring rx_ring[IXGBE_MAX_RX_QUEUES];
-
-	unsigned int    rx_buflen;
-	unsigned int    mtu;
+	struct ixgbe_ring	*tx_ring;
+	struct ixgbe_ring	*rx_ring;
+	struct ixgbe_buf	*buf;
 
 	struct uio_ixgbe_info info;
+};
+
+#define IXGBE_DEFAULT_TXD		512
+#define IXGBE_MAX_TXD			4096
+#define IXGBE_MIN_TXD			64
+
+#define IXGBE_DEFAULT_RXD		512
+#define IXGBE_MAX_RXD			4096
+#define IXGBE_MIN_RXD			64
+
+/* Transmit Descriptor - Legacy */
+struct ixgbe_legacy_tx_desc {
+	uint64_t buffer_addr; /* Address of the descriptor's data buffer */
+	union {
+		__le32 data;
+		struct {
+			__le16 length; /* Data buffer length */
+			uint8_t cso; /* Checksum offset */
+			uint8_t cmd; /* Descriptor control */
+		} flags;
+	} lower;
+	union {
+		__le32 data;
+		struct {
+			uint8_t status; /* Descriptor status */
+			uint8_t css; /* Checksum start */
+			__le16 vlan;
+		} fields;
+	} upper;
+};
+
+/* Receive Descriptor - Legacy */
+struct ixgbe_legacy_rx_desc {
+	__le64 buffer_addr; /* Address of the descriptor's data buffer */
+	__le16 length; /* Length of data DMAed into data buffer */
+	__le16 csum; /* Packet checksum */
+	uint8_t status;   /* Descriptor status */
+	uint8_t errors;   /* Descriptor Errors */
+	__le16 vlan;
 };
 
 /* Ioctl defines */
@@ -41,5 +102,29 @@ struct uio_ixgbe_up_req {
 	struct uio_ixgbe_info info;
 };
 
+#define UIO_IXGBE_MALLOC _IOW('U', 208, int)
+enum {
+	IXGBE_DMA_CACHE_DEFAULT = 0,
+	IXGBE_DMA_CACHE_DISABLE,
+	IXGBE_DMA_CACHE_WRITECOMBINE
+};
+struct uio_ixgbe_malloc_req {
+        uint64_t mmap_offset;
+	uint64_t physical_addr;
+        uint32_t size;
+        uint16_t numa_node;
+        uint16_t cache;
+};
+
+#define UIO_IXGBE_MFREE  _IOW('U', 209, int)
+struct uio_ixgbe_mfree_req {
+        uint64_t mmap_offset;
+};
+
+int ixgbe_alloc_descring(struct ixgbe_handle *ih,
+	uint32_t num_rx_desc, uint32_t num_tx_desc);
+int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count);
+int ixgbe_malloc(struct ixgbe_handle *ih,
+	uint64_t *offset, uint64_t *paddr, uint32_t size, uint16_t numa_node);
 struct ixgbe_handle *ixgbe_open();
 void ixgbe_close(struct ixgbe_handle *h);
