@@ -22,6 +22,7 @@
 #include "ixgbe_eeprom.h"
 #include "ixgbe_dma.h"
 
+static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud);
 static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud);
 static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixgbe_info *info);
 static int uio_ixgbe_cmd_malloc(struct uio_ixgbe_udapter *ud, void __user *argp);
@@ -32,11 +33,16 @@ static ssize_t uio_ixgbe_read(struct file * file, char __user * buf,
 			    size_t count, loff_t *pos);
 static ssize_t uio_ixgbe_write(struct file * file, const char __user * buf,
 			     size_t count, loff_t *pos);
-static unsigned int uio_ixgbe_poll(struct file *file, poll_table *wait);
 static int uio_ixgbe_open(struct inode *inode, struct file * file);
 static int uio_ixgbe_close(struct inode *inode, struct file *file);
 static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma);
 static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+
+static ssize_t ixgbe_read_irq(struct file * file, char __user * buf,
+	size_t count, loff_t *pos);
+static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait);
+static int ixgbe_open_irq(struct inode *inode, struct file * file);
+static int ixgbe_close_irq(struct inode *inode, struct file *file);
 
 char uio_ixgbe_driver_name[]    = "uio-82599";
 char uio_ixgbe_driver_string[]  = "Intel ixgbe 82599 UIO driver";
@@ -45,16 +51,25 @@ char uio_ixgbe_copyright1[] = "Copyright (c) 1999-2014 Intel Corporation.";
 char uio_ixgbe_copyright2[] = "Copyright (c) 2009 Qualcomm Inc.";
 char uio_ixgbe_copyright3[] = "Copyright (c) 2014 by Yukito Ueno <eden@sfc.wide.ad.jp>.";
 
-static struct file_operations uio_ixgbe_fops = {
+static struct file_operations ixgbe_fops = {
 	.owner   = THIS_MODULE,
 	.llseek  = no_llseek,
 	.read    = uio_ixgbe_read,
 	.write   = uio_ixgbe_write,
-	.poll    = uio_ixgbe_poll,
 	.open    = uio_ixgbe_open,
 	.release = uio_ixgbe_close,
 	.mmap    = uio_ixgbe_mmap,
 	.unlocked_ioctl = uio_ixgbe_ioctl,
+};
+
+static struct file_operations ixgbe_fops_irq = {
+	.owner   = THIS_MODULE,
+	.llseek  = no_llseek,
+	.read    = ixgbe_read_irq,
+	.write   = uio_ixgbe_write,
+	.open    = ixgbe_open_irq,
+	.release = ixgbe_close_irq,
+	.poll	 = ixgbe_poll_irq,
 };
 
 static DEFINE_PCI_DEVICE_TABLE(uio_ixgbe_pci_tbl) = {
@@ -68,7 +83,8 @@ MODULE_DEVICE_TABLE(pci, uio_ixgbe_pci_tbl);
 static LIST_HEAD(dev_list);
 static DEFINE_SEMAPHORE(dev_sem);
 
-u16 ixgbe_read_pci_cfg_word(struct ixgbe_hw *hw, u32 reg){
+u16 ixgbe_read_pci_cfg_word(struct ixgbe_hw *hw, u32 reg)
+{
 	struct uio_ixgbe_udapter *ud = hw->back;
 	u16 value;
 
@@ -80,7 +96,8 @@ u16 ixgbe_read_pci_cfg_word(struct ixgbe_hw *hw, u32 reg){
 	return value;
 }
 
-static int uio_ixgbe_alloc_enid(void){
+static int uio_ixgbe_alloc_enid(void)
+{
 	struct uio_ixgbe_udapter *ud;
 	unsigned int id = 0;
 
@@ -91,18 +108,6 @@ static int uio_ixgbe_alloc_enid(void){
 	return id;
 }
 
-static struct uio_ixgbe_udapter *uio_ixgbe_lookup_minorid(int minor){
-	struct uio_ixgbe_udapter *ud;
-
-	list_for_each_entry(ud, &dev_list, list){
-		if(ud->minor == minor){
-			return ud;
-		}
-	}
-
-	return NULL;
-}
-
 static int uio_ixgbe_udapter_inuse(struct uio_ixgbe_udapter *ud)
 {
 	unsigned ref = atomic_read(&ud->refcount);
@@ -111,15 +116,37 @@ static int uio_ixgbe_udapter_inuse(struct uio_ixgbe_udapter *ud)
 	return 1;
 }
 
+static int ixgbe_irqdev_inuse(struct ixgbe_irqdev *irqdev)
+{
+	unsigned ref = atomic_read(&irqdev->refcount);
+	if (ref == 1)
+		return 0;
+	return 1;
+}
+
 static void uio_ixgbe_udapter_get(struct uio_ixgbe_udapter *ud)
 {
 	atomic_inc(&ud->refcount);
+	return;
+}
+
+static void ixgbe_irqdev_get(struct ixgbe_irqdev *irqdev)
+{
+        atomic_inc(&irqdev->refcount);
+	return;
 }
 
 static void uio_ixgbe_udapter_put(struct uio_ixgbe_udapter *ud)
 {
 	if (atomic_dec_and_test(&ud->refcount))
 		kfree(ud);
+	return;
+}
+
+static void ixgbe_irqdev_put(struct ixgbe_irqdev *irqdev)
+{
+        atomic_dec_and_test(&irqdev->refcount);
+	return;
 }
 
 static struct uio_ixgbe_udapter *uio_ixgbe_udapter_alloc(void)
@@ -137,10 +164,8 @@ static struct uio_ixgbe_udapter *uio_ixgbe_udapter_alloc(void)
 	}
 
 	atomic_set(&ud->refcount, 1);
-
-	spin_lock_init(&ud->lock);
 	sema_init(&ud->sem,1);
-	init_waitqueue_head(&ud->read_wait);
+
 	return ud;
 }
 
@@ -186,7 +211,6 @@ static int uio_ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent
 {
 	struct uio_ixgbe_udapter *ud;
 	struct ixgbe_hw *hw;
-	struct miscdevice *miscdev;
 	char *miscdev_name;
 	u16 offset = 0, eeprom_verh = 0, eeprom_verl = 0;
 	u16 eeprom_cfg_blkh = 0, eeprom_cfg_blkl = 0;
@@ -260,6 +284,10 @@ static int uio_ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent
 	/* setup for userland pci register access */
 	INIT_LIST_HEAD(&ud->areas);
 	ixgbe_dma_iobase(ud);
+
+	/* setup for userland interrupt notification */
+	INIT_LIST_HEAD(&ud->irqdev_rx);
+	INIT_LIST_HEAD(&ud->irqdev_tx);
 
 	/* SOFTWARE INITIALIZATION */
 	err = uio_ixgbe_sw_init(ud);
@@ -363,37 +391,28 @@ static int uio_ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent
 	IXGBE_INFO("device[%u] %s dma mask %llx\n", ud->id, pci_name(pdev),
 		(unsigned long long) pdev->dma_mask);
 
-	miscdev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
-	if (!miscdev){
-		goto err_misc_register_alloc;
-	}
-
 	miscdev_name = kmalloc(MISCDEV_NAME_SIZE, GFP_KERNEL);
 	if(!miscdev_name){
 		goto err_misc_register_alloc_name;
 	}
 	snprintf(miscdev_name, MISCDEV_NAME_SIZE, "ixgbe%d", ud->id);
 
-	miscdev->minor = MISC_DYNAMIC_MINOR;
-	miscdev->name = miscdev_name;
-	miscdev->fops = &uio_ixgbe_fops;
-	err = misc_register(miscdev);
+	ud->miscdev.minor = MISC_DYNAMIC_MINOR;
+	ud->miscdev.name = miscdev_name;
+	ud->miscdev.fops = &ixgbe_fops;
+	err = misc_register(&ud->miscdev);
 	if (err) {
 		IXGBE_ERR("failed to register misc device\n");
 		goto err_misc_register;
 	}
 
-	ud->miscdev = miscdev;
-	ud->minor = miscdev->minor;
-	IXGBE_INFO("misc device registered as %s\n", miscdev->name);
+	IXGBE_INFO("misc device registered as %s\n", ud->miscdev.name);
 
 	return 0;
 
 err_misc_register:
-	kfree(miscdev->name);
+	kfree(ud->miscdev.name);
 err_misc_register_alloc_name:
-	kfree(miscdev);
-err_misc_register_alloc:
 err_sw_init:
 	iounmap(hw->hw_addr);
 err_ioremap:
@@ -409,16 +428,14 @@ err_dma:
 
 static void uio_ixgbe_remove(struct pci_dev *pdev){
 	struct uio_ixgbe_udapter *ud = pci_get_drvdata(pdev);
-	struct miscdevice *miscdev = ud->miscdev;
 
 	if(ud->up){
 		uio_ixgbe_down(ud);
 	}
 
-	misc_deregister(miscdev);
-	IXGBE_INFO("misc device %s unregistered\n", miscdev->name);
-	kfree(miscdev->name);
-	kfree(miscdev);
+	misc_deregister(&ud->miscdev);
+	IXGBE_INFO("misc device %s unregistered\n", ud->miscdev.name);
+	kfree(ud->miscdev.name);
 
 	ixgbe_dma_mfree_all(ud);
 	pci_release_selected_regions(pdev, pci_select_bars(pdev, IORESOURCE_MEM));
@@ -431,7 +448,6 @@ static void uio_ixgbe_remove(struct pci_dev *pdev){
 
 	IXGBE_INFO("device[%u] %s removed\n", ud->id, pci_name(pdev));
 
-	wake_up_interruptible(&ud->read_wait);
 	uio_ixgbe_udapter_put(ud);
 }
 
@@ -455,22 +471,22 @@ static void uio_ixgbe_io_resume(struct pci_dev *pdev)
 
 static irqreturn_t uio_ixgbe_interrupt(int irq, void *data)
 {
-	struct uio_ixgbe_udapter *ud = data;
-	struct ixgbe_hw *hw = ud->hw;
+	struct ixgbe_irqdev *irqdev = data;
+	struct ixgbe_hw *hw = irqdev->ud->hw;
 	uint32_t eicr;
 
 	eicr = IXGBE_READ_REG(hw, IXGBE_EICR);
 	if (unlikely(!eicr))
-		return IRQ_NONE; /* Not our interrupt */
+		return IRQ_NONE;
 
-	(void) xchg(&ud->eicr, eicr);
+	(void) xchg(&irqdev->eicr, eicr);
 
 	/* 
 	 * We setup EIAM such that interrupts are auto-masked (disabled).
 	 * User-space will re-enable them.
 	 */
 
-	wake_up_interruptible(&ud->read_wait);
+	wake_up_interruptible(&irqdev->read_wait);
 	return IRQ_HANDLED;
 }
 
@@ -499,19 +515,57 @@ static void uio_ixgbe_set_ivar(struct uio_ixgbe_udapter *ud, s8 direction, u8 qu
 	IXGBE_WRITE_REG(hw, IXGBE_IVAR(queue >> 1), ivar);
 }
 
+static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud){
+	struct ixgbe_irqdev *irqdev, *next;
+	int i = 0;
+
+	list_for_each_entry_safe(irqdev, next, &ud->irqdev_rx, list) {
+		list_del(&irqdev->list);
+		free_irq(irqdev->msix_entry->vector, ud);
+		misc_deregister(&irqdev->miscdev);
+		wake_up_interruptible(&irqdev->read_wait);
+		kfree(irqdev->miscdev.name);
+		kfree(irqdev);
+		i++;
+	}
+
+	list_for_each_entry_safe(irqdev, next, &ud->irqdev_tx, list) {
+		list_del(&irqdev->list);
+		free_irq(irqdev->msix_entry->vector, ud);
+		misc_deregister(&irqdev->miscdev);
+		wake_up_interruptible(&irqdev->read_wait);
+		kfree(irqdev->miscdev.name);
+		kfree(irqdev);
+		i++;
+	}
+
+	if(i != ud->num_q_vectors)
+		pr_err("failed to free all irqs\n");
+
+	pci_disable_msix(ud->pdev);
+	kfree(ud->msix_entries);
+	ud->msix_entries = NULL;
+	ud->num_q_vectors = 0;
+
+	return;
+}
+
 static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 	int vector, vector_num, queue_idx, err;
 	struct ixgbe_hw *hw = ud->hw;
+	struct msix_entry *entry;
+	struct ixgbe_irqdev *irqdev;
+	char *irqdev_name;
 
 	vector_num = ud->num_rx_queues + ud->num_tx_queues;
 	if(vector_num > hw->mac.max_msix_vectors){
-		return -1;
+		goto err_num_msix_vectors;
 	}
 	pr_info("required vector num = %d\n", vector_num);
 
 	ud->msix_entries = kcalloc(vector_num, sizeof(struct msix_entry), GFP_KERNEL);
 	if (!ud->msix_entries) {
-		return -1;
+		goto err_allocate_msix_entries;
 	}
 
 	for (vector = 0; vector < vector_num; vector++){
@@ -525,18 +579,50 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 
 		if(err < 0){
 		       	/* failed to allocate enough msix vector */
-			return -1;
+			goto err_pci_enable_msix;
 	       	}
 	}
 	ud->num_q_vectors = vector_num;
 	
 	vector = 0;
+
 	for(queue_idx = 0; queue_idx < ud->num_rx_queues; queue_idx++){
-		struct msix_entry *entry = &ud->msix_entries[vector];
+		entry = &ud->msix_entries[vector];
+
+		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
+		if(!irqdev){
+			goto err_allocate_irqdev;
+		}
+
+		irqdev_name = kmalloc(MISCDEV_NAME_SIZE, GFP_KERNEL);
+		if(!irqdev_name){
+			goto err_allocate_irqdev_name;
+		}
+		snprintf(irqdev_name, MISCDEV_NAME_SIZE,
+			"ixgbe%d-irqrx%d", ud->id, queue_idx);
+
+		irqdev->miscdev.minor = MISC_DYNAMIC_MINOR;
+		irqdev->miscdev.name = irqdev_name;
+		irqdev->miscdev.fops = &ixgbe_fops_irq;
+		err = misc_register(&irqdev->miscdev);
+		if (err) {
+			pr_err("failed to register irq device\n");
+			goto err_misc_register;
+		}
+
+		irqdev->ud = ud;
+		irqdev->msix_entry = entry;
+		atomic_set(&irqdev->refcount, 1);
+		sema_init(&irqdev->sem, 1);
+		init_waitqueue_head(&irqdev->read_wait);
+
+		list_add(&irqdev->list, &ud->irqdev_rx);
+		IXGBE_INFO("irq device registered as %s\n", irqdev->miscdev.name);
+
 		err = request_irq(entry->vector, &uio_ixgbe_interrupt,
-				0, pci_name(ud->pdev), ud);
+				0, pci_name(ud->pdev), irqdev);
 		if(err){
-			return -1;
+			goto err_request_irq;
 		}
 
 		/* set RX queue interrupt */
@@ -545,12 +631,44 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 
 		vector++;
 	}
+
 	for(queue_idx = 0; queue_idx < ud->num_tx_queues; queue_idx++){
-		struct msix_entry *entry = &ud->msix_entries[vector];
+		entry = &ud->msix_entries[vector];
+
+		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
+		if(!irqdev){
+			goto err_allocate_irqdev;
+		}
+
+		irqdev_name = kmalloc(MISCDEV_NAME_SIZE, GFP_KERNEL);
+		if(!irqdev_name){
+			goto err_allocate_irqdev_name;
+		}
+		snprintf(irqdev_name, MISCDEV_NAME_SIZE,
+			"ixgbe%d-irqtx%d", ud->id, queue_idx);
+
+		irqdev->miscdev.minor = MISC_DYNAMIC_MINOR;
+		irqdev->miscdev.name = irqdev_name;
+		irqdev->miscdev.fops = &ixgbe_fops_irq;
+		err = misc_register(&irqdev->miscdev);
+		if (err) {
+			pr_err("failed to register irq device\n");
+			goto err_misc_register;
+		}
+
+		irqdev->ud = ud;
+		irqdev->msix_entry = entry;
+		atomic_set(&irqdev->refcount, 1);
+		sema_init(&irqdev->sem, 1);
+		init_waitqueue_head(&irqdev->read_wait);
+
+		list_add(&irqdev->list, &ud->irqdev_tx);
+		IXGBE_INFO("irq device registered as %s\n", irqdev->miscdev.name);
+
 		err = request_irq(entry->vector, &uio_ixgbe_interrupt,
-				0, pci_name(ud->pdev), ud);
+			0, pci_name(ud->pdev), irqdev);
 		if(err){
-			return -1;
+			goto err_request_irq;
 		}
 
 		/* set TX queue interrupt */
@@ -561,6 +679,24 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 	}
 
 	return 0;
+
+err_request_irq:
+	misc_deregister(&irqdev->miscdev);
+err_misc_register:
+	kfree(irqdev->miscdev.name);
+err_allocate_irqdev_name:
+	kfree(irqdev);
+err_allocate_irqdev:
+	uio_ixgbe_free_msix(ud);
+	return -1;
+
+err_pci_enable_msix:
+	pci_disable_msix(ud->pdev);
+	kfree(ud->msix_entries);
+	ud->msix_entries = NULL;
+err_allocate_msix_entries:
+err_num_msix_vectors:
+	return -1;
 }
 
 static void uio_ixgbe_setup_gpie(struct uio_ixgbe_udapter *ud){
@@ -588,7 +724,9 @@ static int uio_ixgbe_up(struct uio_ixgbe_udapter *ud){
 	uio_ixgbe_setup_gpie(ud);
 
 	/* set up msix interupt */
-	uio_ixgbe_configure_msix(ud);
+	if(uio_ixgbe_configure_msix(ud) < 0){
+		pr_err("failed to allocate MSI-X\n");
+	}
 
 	/* enable the optics for 82599 SFP+ fiber */
 	if (hw->mac.ops.enable_tx_laser){
@@ -690,17 +828,10 @@ static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud){
 	}
 
 	/* free irqs */
-	for (vector = 0; vector < ud->num_q_vectors; vector++) {
-		struct msix_entry *entry = &ud->msix_entries[vector];
-		free_irq(entry->vector, ud);
-	}
+	uio_ixgbe_free_msix(ud);
 
-	pci_disable_msix(ud->pdev);
-	kfree(ud->msix_entries);
-	ud->msix_entries = NULL;
 	ud->num_rx_queues = 0;
 	ud->num_tx_queues = 0;
-	ud->num_q_vectors = 0;
 
 	uio_ixgbe_release_hw_control(ud);
 	ud->up = 0;
@@ -999,46 +1130,41 @@ static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long a
 	return err;
 }
 
-static unsigned int uio_ixgbe_poll(struct file *file, poll_table *wait)
+static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait)
 {
 	unsigned int mask = POLLOUT | POLLWRNORM;
-	struct uio_ixgbe_udapter *ud = file->private_data;
-	if (!ud)
+	struct ixgbe_irqdev *irqdev = file->private_data;
+	if (!irqdev)
 		return -EBADFD;
 
-	IXGBE_DBG("poll eicr=0x%x\n", ud->eicr);
+	IXGBE_DBG("poll eicr=0x%x\n", irqdev->eicr);
 
-	poll_wait(file, &ud->read_wait, wait);
-	if (ud->eicr)
+	poll_wait(file, &irqdev->read_wait, wait);
+	if (irqdev->eicr)
 		mask |= POLLIN | POLLRDNORM;
 
 	return mask;
 }
 
-static ssize_t uio_ixgbe_read(struct file * file, char __user * buf,
+static ssize_t ixgbe_read_irq(struct file * file, char __user * buf,
 			    size_t count, loff_t *pos)
 {
-	struct uio_ixgbe_udapter *ud = file->private_data;
+	struct ixgbe_irqdev *irqdev = file->private_data;
 	DECLARE_WAITQUEUE(wait, current);
 	uint32_t eicr;
 	int err;
 
-	if (!ud)
+	if (!irqdev)
 		return -EBADFD;
 
 	if (count < sizeof(eicr))
 		return -EINVAL;
 
-	add_wait_queue(&ud->read_wait, &wait);
+	add_wait_queue(&irqdev->read_wait, &wait);
 	while (count) {
 		set_current_state(TASK_INTERRUPTIBLE);
 
-		if (ud->removed) {
-			err = -ENODEV;
-			break;
-		}
-
-		eicr = xchg(&ud->eicr, 0);
+		eicr = xchg(&irqdev->eicr, 0);
 
 		IXGBE_DBG("read eicr 0x%x\n", eicr);
 
@@ -1064,9 +1190,56 @@ static ssize_t uio_ixgbe_read(struct file * file, char __user * buf,
 	}
 
 	__set_current_state(TASK_RUNNING);
-	remove_wait_queue(&ud->read_wait, &wait);
+	remove_wait_queue(&irqdev->read_wait, &wait);
 
 	return err;
+}
+
+static int ixgbe_open_irq(struct inode *inode, struct file *file)
+{
+	struct ixgbe_irqdev *irqdev;
+	struct miscdevice *miscdev = file->private_data;
+	int err;
+
+	IXGBE_DBG("open req irqdev=%p\n", miscdev);
+	irqdev = container_of(miscdev, struct ixgbe_irqdev, miscdev);
+
+	down(&irqdev->sem);
+
+	if (ixgbe_irqdev_inuse(irqdev)) {
+		err = -EBUSY;
+		goto out;
+	}
+
+	ixgbe_irqdev_get(irqdev);
+	file->private_data = irqdev;
+	err = 0;
+
+out:
+	up(&irqdev->sem);
+	return err;
+}
+
+static int ixgbe_close_irq(struct inode *inode, struct file *file)
+{
+	struct ixgbe_irqdev *irqdev = file->private_data;
+	if (!irqdev)
+		return 0;
+
+	IXGBE_DBG("close irqdev=%p\n", irqdev);
+
+	down(&irqdev->sem);
+	//uio_ixgbe_cmd_down(ud, 0);
+	up(&irqdev->sem);
+
+	ixgbe_irqdev_put(irqdev);
+	return 0;
+}
+
+static ssize_t uio_ixgbe_read(struct file * file, char __user * buf,
+	size_t count, loff_t *pos)
+{
+	return 0;
 }
 
 static ssize_t uio_ixgbe_write(struct file * file, const char __user * buf,
@@ -1081,17 +1254,12 @@ static int uio_ixgbe_open(struct inode *inode, struct file * file)
 	struct miscdevice *miscdev = file->private_data;
 	int err;
 
+	ud = container_of(miscdev, struct uio_ixgbe_udapter, miscdev);
 	IXGBE_DBG("open req miscdev=%p\n", miscdev);
 
 	down(&dev_sem);
 
-	ud = uio_ixgbe_lookup_minorid(miscdev->minor);
-	if (!ud) {
-		err = -ENOENT;
-		goto out;
-	}
-
-	// Only one process is alowed to bind
+	// Only one process is alowed to open
 	if (uio_ixgbe_udapter_inuse(ud)) {
 		err = -EBUSY;
 		goto out;

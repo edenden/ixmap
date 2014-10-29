@@ -18,7 +18,7 @@
 #define IXGBE_INFO(args...) printk(KERN_INFO "uio-ixgbe: " args)
 #define IXGBE_ERR(args...)  printk(KERN_ERR  "uio-ixgbe: " args)
 
-#define MISCDEV_NAME_SIZE	16
+#define MISCDEV_NAME_SIZE	32
 #define IXGBE_10K_ITR		400
 #define IXGBE_20K_ITR		200
 #define MIN_MSIX_Q_VECTORS	1
@@ -38,11 +38,12 @@ struct uio_ixgbe_udapter {
 	uint8_t			removed;
 	uint8_t			up;
 
-	struct miscdevice	*miscdev;
-	int			minor;
+	struct miscdevice	miscdev;
+
+	struct list_head	irqdev_rx;
+	struct list_head	irqdev_tx;
 
 	struct semaphore	sem;
-	spinlock_t		lock;
 	atomic_t		refcount;
 
 	uint64_t		dma_mask;
@@ -57,11 +58,20 @@ struct uio_ixgbe_udapter {
 	uint16_t		link_speed;
 	uint16_t		link_duplex;
 
-	wait_queue_head_t	read_wait;
 	uint32_t		num_rx_queues;
 	uint32_t		num_tx_queues;
+};
 
-	uint32_t		eicr;
+struct ixgbe_irqdev {
+	struct uio_ixgbe_udapter	*ud;
+	struct list_head		list;
+	struct miscdevice		miscdev;
+	struct semaphore		sem;
+	atomic_t			refcount;
+
+	struct msix_entry		*msix_entry;
+	wait_queue_head_t		read_wait;
+	uint32_t			eicr;
 };
 
 /* MAC and PHY info */
