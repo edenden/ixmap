@@ -1,6 +1,8 @@
 #define ALIGN(x,a)		__ALIGN_MASK(x,(typeof(x))(a)-1)
 #define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
 
+#define FILENAME_SIZE 256
+
 #define min(x, y) ({			\
 	typeof(x) _min1 = (x);		\
 	typeof(y) _min2 = (y);		\
@@ -10,6 +12,7 @@
 struct ixgbe_thread {
 	pthread_t		tid;
 	uint32_t		index;
+	char			*int_name;
 	struct ixgbe_ring	*rx_ring;
 	struct ixgbe_ring	*tx_ring;
 	struct ixgbe_buf	*buf;
@@ -129,10 +132,3 @@ struct uio_ixgbe_mfree_req {
         uint64_t mmap_offset;
 };
 
-int ixgbe_alloc_descring(struct ixgbe_handle *ih,
-	uint32_t num_rx_desc, uint32_t num_tx_desc);
-int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count);
-int ixgbe_malloc(struct ixgbe_handle *ih,
-	uint64_t *offset, uint64_t *paddr, uint32_t size, uint16_t numa_node);
-struct ixgbe_handle *ixgbe_open();
-void ixgbe_close(struct ixgbe_handle *h);

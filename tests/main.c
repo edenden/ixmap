@@ -16,6 +16,15 @@
 
 static int mtu = 1518;
 static int buf_count = 1024;
+static char *ixgbe_interface = "ixgbe1";
+
+static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
+	uint32_t num_rx_desc, uint32_t num_tx_desc);
+static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count);
+static int ixgbe_malloc(struct ixgbe_handle *ih,
+	uint64_t *offset, uint64_t *paddr, uint32_t size, uint16_t numa_node);
+static struct ixgbe_handle *ixgbe_open(char *int_name);
+static void ixgbe_close(struct ixgbe_handle *ih);
 
 int main(int argc, char **argv)
 {
@@ -23,7 +32,7 @@ int main(int argc, char **argv)
 	struct ixgbe_thread *threads;
 	int ret, i;
 
-	ih = ixgbe_open();
+	ih = ixgbe_open(ixgbe_interface);
 	if(!ih){
 		perror("ixgbe_open");
 		return -1;
@@ -49,6 +58,7 @@ int main(int argc, char **argv)
 
 	for(i = 0; i < ih->num_queues; i++){
 		threads[i].index = i;
+		threads[i].int_name = ixgbe_interface;
 		threads[i].rx_ring = &ih->rx_ring[i];
 		threads[i].tx_ring = &ih->tx_ring[i];
 		threads[i].buf = &ih->buf[i];
@@ -70,7 +80,7 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-int ixgbe_alloc_descring(struct ixgbe_handle *ih,
+static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc)
 {
 	uint64_t offset = ih->mmapped_offset;
@@ -127,7 +137,7 @@ int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	return 0;
 }
 
-int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count)
+static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count)
 {
 	uint64_t offset = ih->mmapped_offset;
 	int ret, i;
@@ -159,7 +169,7 @@ int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count)
 	return 0;
 }
 
-int ixgbe_malloc(struct ixgbe_handle *ih,
+static int ixgbe_malloc(struct ixgbe_handle *ih,
 	uint64_t *offset, uint64_t *paddr, uint32_t size, uint16_t numa_node)
 {
 	struct uio_ixgbe_malloc_req req_malloc;
@@ -179,11 +189,12 @@ int ixgbe_malloc(struct ixgbe_handle *ih,
 	return 0;
 }
 
-struct ixgbe_handle *ixgbe_open()
+static struct ixgbe_handle *ixgbe_open(char *int_name)
 {
 	struct uio_ixgbe_info_req req_info;
 	struct uio_ixgbe_up_req req_up;
 	struct ixgbe_handle *ih;
+	char filename[FILENAME_SIZE];
 	int err;
 
 	ih = malloc(sizeof(struct ixgbe_handle));
@@ -191,7 +202,8 @@ struct ixgbe_handle *ixgbe_open()
 		return NULL;
 	memset(ih, 0, sizeof(struct ixgbe_handle));
 
-	ih->fd = open("/dev/ixgbe1", O_RDWR);
+	snprintf(filename, sizeof(filename), "/dev/%s", int_name);
+	ih->fd = open(filename, O_RDWR);
 	if (ih->fd < 0)
 		goto failed;
 
@@ -231,7 +243,7 @@ failed:
 	return NULL;
 }
 
-void ixgbe_close(struct ixgbe_handle *ih)
+static void ixgbe_close(struct ixgbe_handle *ih)
 {
 	munmap(ih->bar, ih->bar_size);
 	close(ih->fd);
