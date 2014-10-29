@@ -14,6 +14,7 @@
 
 #include "main.h"
 #include "forward.h"
+#include "descring.h"
 
 static int epoll_add(int fd_ep, int fd);
 
@@ -54,6 +55,8 @@ void *process_interrupt(void *data)
 		perror("failed to add fd in epoll");
 		return NULL;
 	}
+
+	ixgbe_alloc_rx_buffers(ring, ixgbe_desc_unused(ring));
 
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);

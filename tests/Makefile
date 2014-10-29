@@ -18,3 +18,4 @@ main.o : main.c
 
 forward.o : forward.c
 	$(CC) $(OPTIONS) -c forward.c
+

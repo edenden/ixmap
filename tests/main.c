@@ -13,6 +13,7 @@
 
 #include "main.h"
 #include "forward.h"
+#include "descring.h"
 
 static int mtu = 1518;
 static int buf_count = 1024;
@@ -56,6 +57,9 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	ixgbe_configure_rx(adapter);
+	ixgbe_configure_tx(adapter);
+
 	for(i = 0; i < ih->num_queues; i++){
 		threads[i].index = i;
 		threads[i].int_name = ixgbe_interface;
@@ -94,7 +98,7 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		uint32_t size;
 		uint64_t paddr;
 
-		size = sizeof(struct ixgbe_legacy_rx_desc) * num_rx_desc;
+		size = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
 		size = ALIGN(size, 4096);
 		ret = ixgbe_malloc(ih, &offset, &paddr, size, 0);
 		if(ret < 0)
@@ -116,7 +120,7 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		uint32_t size;
 		uint64_t paddr;
 
-		size = sizeof(struct ixgbe_legacy_tx_desc) * num_tx_desc;
+		size = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
 		size = ALIGN(size, 4096);
 		ret = ixgbe_malloc(ih, &offset, &paddr, size, 0);
 		if(ret < 0)

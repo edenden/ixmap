@@ -62,45 +62,6 @@ struct ixgbe_handle {
 	struct uio_ixgbe_info info;
 };
 
-#define IXGBE_DEFAULT_TXD		512
-#define IXGBE_MAX_TXD			4096
-#define IXGBE_MIN_TXD			64
-
-#define IXGBE_DEFAULT_RXD		512
-#define IXGBE_MAX_RXD			4096
-#define IXGBE_MIN_RXD			64
-
-/* Transmit Descriptor - Legacy */
-struct ixgbe_legacy_tx_desc {
-	uint64_t buffer_addr; /* Address of the descriptor's data buffer */
-	union {
-		__le32 data;
-		struct {
-			__le16 length; /* Data buffer length */
-			uint8_t cso; /* Checksum offset */
-			uint8_t cmd; /* Descriptor control */
-		} flags;
-	} lower;
-	union {
-		__le32 data;
-		struct {
-			uint8_t status; /* Descriptor status */
-			uint8_t css; /* Checksum start */
-			__le16 vlan;
-		} fields;
-	} upper;
-};
-
-/* Receive Descriptor - Legacy */
-struct ixgbe_legacy_rx_desc {
-	__le64 buffer_addr; /* Address of the descriptor's data buffer */
-	__le16 length; /* Length of data DMAed into data buffer */
-	__le16 csum; /* Packet checksum */
-	uint8_t status;   /* Descriptor status */
-	uint8_t errors;   /* Descriptor Errors */
-	__le16 vlan;
-};
-
 /* Ioctl defines */
 
 #define UIO_IXGBE_INFO       _IOW('E', 201, int)
