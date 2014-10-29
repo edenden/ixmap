@@ -7,15 +7,23 @@
 	(void) (&_min1 == &_min2);		\
 	_min1 < _min2 ? _min1 : _min2; })
 
+struct ixgbe_thread {
+	pthread_t		tid;
+	uint32_t		index;
+	struct ixgbe_ring	*rx_ring;
+	struct ixgbe_ring	*tx_ring;
+	struct ixgbe_buf	*buf;
+};
+
 /* MAC and PHY info */
 struct uio_ixgbe_info {
-	uint32_t  irq;
-	uint64_t  mmio_base;
-	uint32_t  mmio_size;
+	uint32_t	irq;
+	uint64_t	mmio_base;
+	uint32_t	mmio_size;
 
-	uint16_t  mac_type;
-	uint8_t   mac_addr[ETH_ALEN];
-	uint16_t  phy_type;
+	uint16_t	mac_type;
+	uint8_t		mac_addr[ETH_ALEN];
+	uint16_t	phy_type;
 
 	uint32_t        num_rx_queues;
 	uint32_t        num_tx_queues;

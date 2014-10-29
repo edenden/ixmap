@@ -3,21 +3,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <syslog.h>
-#include <signal.h>
 #include <errno.h>
 #include <stdint.h>
-
 #include <sys/ioctl.h>
-#include <sys/time.h>
-#include <sys/resource.h>
 #include <sys/mman.h>
-#include <sys/user.h>
-#include <sys/types.h>
 
 #include <net/ethernet.h>
+#include <pthread.h>
 
 #include "main.h"
+#include "forward.h"
 
 static int mtu = 1518;
 static int buf_count = 1024;
@@ -25,21 +20,50 @@ static int buf_count = 1024;
 int main(int argc, char **argv)
 {
 	struct ixgbe_handle *ih;
-	int ret;
+	struct ixgbe_thread *threads;
+	int ret, i;
 
 	ih = ixgbe_open();
-	if(!ih)
+	if(!ih){
+		perror("ixgbe_open");
 		return -1;
+	}
 
 	ret = ixgbe_alloc_descring(ih, IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
-	if(ret < 0)
-		printf("error while ixgbe_alloc_descring\n");
+	if(ret < 0){
+		perror("ixgbe_alloc_descring");
+		return -1;
+	}
 
 	ret = ixgbe_alloc_buf(ih, mtu, buf_count);
-	if(ret < 0)
-		printf("error while ixgbe_alloc_buf\n");
+	if(ret < 0){
+		perror("ixgbe_alloc_buf");
+		return -1;
+	}
 
-	sleep(30);
+	threads = malloc(sizeof(struct ixgbe_thread) * ih->num_queues);
+	if(!threads){
+		perror("malloc");
+		return -1;
+	}
+
+	for(i = 0; i < ih->num_queues; i++){
+		threads[i].index = i;
+		threads[i].rx_ring = &ih->rx_ring[i];
+		threads[i].tx_ring = &ih->tx_ring[i];
+		threads[i].buf = &ih->buf[i];
+		if(pthread_create(&threads[i].tid,
+			NULL, process_interrupt, &threads[i]) < 0){
+			perror("failed to create thread");
+			return -1;
+		}
+	}
+
+	while(1){
+		sleep(30);
+	}
+
+	/* TBD: free allocated DMA areas */
 
 	ixgbe_close(ih);
 

@@ -1229,7 +1229,7 @@ static int ixgbe_close_irq(struct inode *inode, struct file *file)
 	IXGBE_DBG("close irqdev=%p\n", irqdev);
 
 	down(&irqdev->sem);
-	//uio_ixgbe_cmd_down(ud, 0);
+	/* XXX: Should we do something here? */
 	up(&irqdev->sem);
 
 	ixgbe_irqdev_put(irqdev);
