@@ -521,7 +521,7 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud){
 
 	list_for_each_entry_safe(irqdev, next, &ud->irqdev_rx, list) {
 		list_del(&irqdev->list);
-		free_irq(irqdev->msix_entry->vector, ud);
+		free_irq(irqdev->msix_entry->vector, irqdev);
 		misc_deregister(&irqdev->miscdev);
 		wake_up_interruptible(&irqdev->read_wait);
 		kfree(irqdev->miscdev.name);
@@ -531,7 +531,7 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud){
 
 	list_for_each_entry_safe(irqdev, next, &ud->irqdev_tx, list) {
 		list_del(&irqdev->list);
-		free_irq(irqdev->msix_entry->vector, ud);
+		free_irq(irqdev->msix_entry->vector, irqdev);
 		misc_deregister(&irqdev->miscdev);
 		wake_up_interruptible(&irqdev->read_wait);
 		kfree(irqdev->miscdev.name);
