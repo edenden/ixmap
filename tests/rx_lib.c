@@ -42,7 +42,7 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
         rxctrl = IXGBE_READ_REG(hw, IXGBE_RXCTRL);
 
         /* enable all receives */
-	/* XXX: Do we need disable rx-sec-path before ixgbe_enable_rx? */
+	/* XXX: Do we need disable rx-sec-path before ixgbe_enable_rx ? */
 	ixgbe_enable_rx(hw);
 }
 
@@ -100,6 +100,19 @@ void ixgbe_disable_rx(struct ixgbe_handle *ih)
                 rxctrl &= ~IXGBE_RXCTRL_RXEN;
                 IXGBE_WRITE_REG(ih, IXGBE_RXCTRL, rxctrl);
         }
+
+	return;
+}
+
+void ixgbe_enable_rx_generic(struct ixgbe_handle *ih)
+{
+        uint32_t pfdtxgswc;
+        uint32_t rxctrl;
+
+        rxctrl = IXGBE_READ_REG(ih, IXGBE_RXCTRL);
+        IXGBE_WRITE_REG(ih, IXGBE_RXCTRL, (rxctrl | IXGBE_RXCTRL_RXEN));
+
+	return;
 }
 
 static void ixgbe_setup_psrtype(struct ixgbe_handle *ih)
@@ -258,14 +271,12 @@ void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	ring->next_to_use = 0;
 
         ixgbe_configure_srrctl(ih, reg_idx, ring);
-        /* In ESX, RSCCTL configuration is done by on demand */
-        ixgbe_configure_rscctl(ih, ring);
 
 	/* enable receive descriptor ring */
 	rxdctl |= IXGBE_RXDCTL_ENABLE;
 	IXGBE_WRITE_REG(ih, IXGBE_RXDCTL(reg_idx), rxdctl);
 
-	ixgbe_rx_desc_queue_enable(ih, ring);
+	ixgbe_rx_desc_queue_enable(ih, reg_idx, ring);
 }
 
 void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
@@ -301,7 +312,7 @@ static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
         srrctl = IXGBE_RX_HDR_SIZE << IXGBE_SRRCTL_BSIZEHDRSIZE_SHIFT;
 
         /* configure the packet buffer length */
-        srrctl |= ALIGN(rx_ring->rx_buf_len, 1024) >>
+        srrctl |= ALIGN(ih->buf_size, 1024) >>
                   IXGBE_SRRCTL_BSIZEPKT_SHIFT;
 
         /* configure descriptor type */
@@ -311,66 +322,19 @@ static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
 	return;
 }
 
-void ixgbe_configure_rscctl(struct ixgbe_adapter *adapter,
-                            struct ixgbe_ring *ring)
+static void ixgbe_rx_desc_queue_enable(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        u32 rscctrl;
-        u8 reg_idx = ring->reg_idx;
-
-        if (!ring_is_rsc_enabled(ring))
-                return;
-
-        rscctrl = IXGBE_READ_REG(hw, IXGBE_RSCCTL(reg_idx));
-        rscctrl |= IXGBE_RSCCTL_RSCEN;
-        /*
-         * we must limit the number of descriptors so that the
-         * total size of max desc * buf_len is not greater
-         * than 65536
-         */
-#ifndef CONFIG_IXGBE_DISABLE_PACKET_SPLIT
-#if (MAX_SKB_FRAGS >= 16)
-        rscctrl |= IXGBE_RSCCTL_MAXDESC_16;
-#elif (MAX_SKB_FRAGS >= 8)
-        rscctrl |= IXGBE_RSCCTL_MAXDESC_8;
-#elif (MAX_SKB_FRAGS >= 4)
-        rscctrl |= IXGBE_RSCCTL_MAXDESC_4;
-#else
-        rscctrl |= IXGBE_RSCCTL_MAXDESC_1;
-#endif
-#else /* CONFIG_IXGBE_DISABLE_PACKET_SPLIT */
-        if (ring->rx_buf_len <= IXGBE_RXBUFFER_4K)
-                rscctrl |= IXGBE_RSCCTL_MAXDESC_16;
-        else if (ring->rx_buf_len <= IXGBE_RXBUFFER_8K)
-                rscctrl |= IXGBE_RSCCTL_MAXDESC_8;
-        else
-                rscctrl |= IXGBE_RSCCTL_MAXDESC_4;
-#endif
-        IXGBE_WRITE_REG(hw, IXGBE_RSCCTL(reg_idx), rscctrl);
-}
-
-static void ixgbe_rx_desc_queue_enable(struct ixgbe_adapter *adapter,
-                                       struct ixgbe_ring *ring)
-{
-        struct ixgbe_hw *hw = &adapter->hw;
         int wait_loop = IXGBE_MAX_RX_DESC_POLL;
-        u32 rxdctl;
-        u8 reg_idx = ring->reg_idx;
-
-        if (IXGBE_REMOVED(hw->hw_addr))
-                return;
-        /* RXDCTL.EN will return 0 on 82598 if link is down, so skip it */
-        if (hw->mac.type == ixgbe_mac_82598EB &&
-            !(IXGBE_READ_REG(hw, IXGBE_LINKS) & IXGBE_LINKS_UP))
-                return;
+        uint32_t rxdctl;
 
         do {
                 msleep(1);
-                rxdctl = IXGBE_READ_REG(hw, IXGBE_RXDCTL(reg_idx));
+                rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
         } while (--wait_loop && !(rxdctl & IXGBE_RXDCTL_ENABLE));
 
         if (!wait_loop) {
-                e_err(drv, "RXDCTL.ENABLE on Rx queue %d "
-                      "not set within the polling period\n", reg_idx);
+		printf("RXDCTL.ENABLE on Rx queue %d not cleared within the polling period\n",
+			reg_idx);
         }
 }
