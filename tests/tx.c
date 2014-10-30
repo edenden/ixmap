@@ -1,3 +1,15 @@
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <stdint.h>
+
+#include "main.h"
+#include "forward.h"
+#include "tx.h"
+
 static void ixgbe_configure_tx(struct ixgbe_adapter *adapter)
 {
         struct ixgbe_hw *hw = &adapter->hw;

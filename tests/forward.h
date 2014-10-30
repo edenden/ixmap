@@ -53,4 +53,46 @@ union ixgbe_adv_tx_desc {
 	} wb;
 };
 
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
+#define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
+
+static inline uint32_t readl(const volatile void *addr)
+{
+	return cpu_to_le32( *(volatile uint32_t *) addr );
+}
+
+static inline void writel(uint32_t b, volatile void *addr)
+{
+	*(volatile uint32_t *) addr = cpu_to_le32(b);
+}
+
+static inline bool IXGBE_REMOVED(void __iomem *addr)
+{
+	return unlikely(!addr);
+}
+
+static inline uint32_t IXGBE_READ_REG(struct ixgbe_handler *ih, uint32_t reg)
+{
+	uint32_t value;
+	uint8_t __iomem *reg_addr;
+
+	reg_addr = ACCESS_ONCE(ih->bar);
+	if (IXGBE_REMOVED(reg_addr))
+		return IXGBE_FAILED_READ_REG;
+	value = readl(reg_addr + reg);
+	return value;
+}
+
+static inline void IXGBE_WRITE_REG(struct ixgbe_handler *ih, uint32_t reg, uint32_t value)
+{
+	uint8_t __iomem *reg_addr;
+
+	reg_addr = ACCESS_ONCE(ih->bar);
+	if (IXGBE_REMOVED(reg_addr))
+		return;
+
+	writel(value, reg_addr + reg);
+}
+
 void *process_interrupt(void *data);

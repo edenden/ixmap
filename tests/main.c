@@ -57,8 +57,8 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	ixgbe_configure_rx(adapter);
-	ixgbe_configure_tx(adapter);
+	ixgbe_configure_rx(ih);
+	ixgbe_configure_tx(ih);
 
 	for(i = 0; i < ih->num_queues; i++){
 		threads[i].index = i;

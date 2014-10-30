@@ -1,9 +1,22 @@
-void ixgbe_configure_rx()
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <stdint.h>
+
+#include "main.h"
+#include "forward.h"
+#include "rx.h"
+
+void ixgbe_configure_rx(struct ixgbe_handler *ih)
 {
 	u32 rxctrl, rfctl;
 
-        ixgbe_disable_rx();
+	ixgbe_set_rx_mode(ih);
 
+        ixgbe_disable_rx();
         ixgbe_setup_psrtype(adapter);
         ixgbe_setup_rdrxctl(adapter);
 
@@ -32,10 +45,8 @@ void ixgbe_configure_rx()
 	ixgbe_enable_rx(hw);
 }
 
-void ixgbe_set_rx_mode(struct net_device *netdev)
+void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
 {
-        struct ixgbe_adapter *adapter = netdev_priv(netdev);
-        struct ixgbe_hw *hw = &adapter->hw;
         u32 fctrl, vmolr = IXGBE_VMOLR_BAM | IXGBE_VMOLR_AUPE;
         u32 vlnctrl;
         int count;
@@ -100,6 +111,28 @@ void ixgbe_set_rx_mode(struct net_device *netdev)
 
         IXGBE_WRITE_REG(hw, IXGBE_VLNCTRL, vlnctrl);
         IXGBE_WRITE_REG(hw, IXGBE_FCTRL, fctrl);
+}
+
+void ixgbe_disable_rx_generic(struct ixgbe_hw *hw)
+{
+        u32 pfdtxgswc;
+        u32 rxctrl;
+
+        rxctrl = IXGBE_READ_REG(hw, IXGBE_RXCTRL);
+        if (rxctrl & IXGBE_RXCTRL_RXEN) {
+                if (hw->mac.type != ixgbe_mac_82598EB) {
+                        pfdtxgswc = IXGBE_READ_REG(hw, IXGBE_PFDTXGSWC);
+                        if (pfdtxgswc & IXGBE_PFDTXGSWC_VT_LBEN) {
+                                pfdtxgswc &= ~IXGBE_PFDTXGSWC_VT_LBEN;
+                                IXGBE_WRITE_REG(hw, IXGBE_PFDTXGSWC, pfdtxgswc);
+                                hw->mac.set_lben = true;
+                        } else {
+                                hw->mac.set_lben = false;
+                        }
+                }
+                rxctrl &= ~IXGBE_RXCTRL_RXEN;
+                IXGBE_WRITE_REG(hw, IXGBE_RXCTRL, rxctrl);
+        }
 }
 
 static void ixgbe_setup_psrtype(struct ixgbe_adapter *adapter)
