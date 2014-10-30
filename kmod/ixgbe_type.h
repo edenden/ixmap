@@ -944,19 +944,6 @@ struct ixgbe_mac_info {
 	bool set_lben;
 };
 
-/* Flow control parameters */
-struct ixgbe_fc_info {
-	u32 high_water[IXGBE_DCB_MAX_TRAFFIC_CLASS]; /* Flow Ctrl High-water */
-	u32 low_water[IXGBE_DCB_MAX_TRAFFIC_CLASS]; /* Flow Ctrl Low-water */
-	u16 pause_time; /* Flow Control Pause timer */
-	bool send_xon; /* Flow control send XON */
-	bool strict_ieee; /* Strict IEEE mode */
-	bool disable_fc_autoneg; /* Do not autonegotiate FC */
-	bool fc_was_autonegged; /* Is current_mode the result of autonegging? */
-	enum ixgbe_fc_mode current_mode; /* FC mode in effect */
-	enum ixgbe_fc_mode requested_mode; /* FC mode requested by caller */
-};
-
 struct ixgbe_phy_info {
 	struct ixgbe_phy_operations ops;
 	enum ixgbe_phy_type type;
@@ -1023,7 +1010,6 @@ struct ixgbe_hw {
 	u8 __iomem *hw_addr;
 	void *back;
 	struct ixgbe_mac_info mac;
-	struct ixgbe_fc_info fc;
 	struct ixgbe_phy_info phy;
 	struct ixgbe_eeprom_info eeprom;
 	struct ixgbe_bus_info bus;

@@ -65,7 +65,7 @@ s32 ixgbe_start_hw_generic(struct ixgbe_hw *hw)
 	IXGBE_WRITE_REG(hw, IXGBE_CTRL_EXT, ctrl_ext);
 	IXGBE_WRITE_FLUSH(hw);
 
-	/* Setup flow control */
+	/* Setup flow control: Though we don't support flow control */
 	ret_val = ixgbe_setup_fc(hw);
 	if (ret_val != 0)
 		goto out;
@@ -135,22 +135,6 @@ static s32 ixgbe_setup_fc(struct ixgbe_hw *hw)
 	u32 reg = 0;
 
 	/*
-	 * Validate the requested mode.  Strict IEEE mode does not allow
-	 * ixgbe_fc_rx_pause because it will cause us to fail at UNH.
-	 */
-	if (hw->fc.strict_ieee && hw->fc.requested_mode == ixgbe_fc_rx_pause) {
-		ret_val = IXGBE_ERR_INVALID_LINK_SETTINGS;
-		goto out;
-	}
-
-	/*
-	 * 10gig parts do not have a word in the EEPROM to determine the
-	 * default flow control setting, so we explicitly set it to full.
-	 */
-	if (hw->fc.requested_mode == ixgbe_fc_default)
-		hw->fc.requested_mode = ixgbe_fc_full;
-
-	/*
 	 * Set up the 1G and 10G flow control advertisement registers so the
 	 * HW will be able to do fc autoneg once the cable is plugged in.  If
 	 * we link at 10G, the 1G advertisement is harmless and vice versa.
@@ -158,54 +142,13 @@ static s32 ixgbe_setup_fc(struct ixgbe_hw *hw)
 	switch (hw->phy.media_type) {
 	case ixgbe_media_type_fiber:
 		reg = IXGBE_READ_REG(hw, IXGBE_PCS1GANA);
-
 		break;
 	default:
 		break;
 	}
 
-	/*
-	 * The possible values of fc.requested_mode are:
-	 * 0: Flow control is completely disabled
-	 * 1: Rx flow control is enabled (we can receive pause frames,
-	 *    but not send pause frames).
-	 * 2: Tx flow control is enabled (we can send pause frames but
-	 *    we do not support receiving pause frames).
-	 * 3: Both Rx and Tx flow control (symmetric) are enabled.
-	 * other: Invalid.
-	 */
-	switch (hw->fc.requested_mode) {
-	case ixgbe_fc_none:
-		/* Flow control completely disabled by software override. */
-		reg &= ~(IXGBE_PCS1GANA_SYM_PAUSE | IXGBE_PCS1GANA_ASM_PAUSE);
-		break;
-	case ixgbe_fc_tx_pause:
-		/*
-		 * Tx Flow control is enabled, and Rx Flow control is
-		 * disabled by software override.
-		 */
-		reg |= IXGBE_PCS1GANA_ASM_PAUSE;
-		reg &= ~IXGBE_PCS1GANA_SYM_PAUSE;
-		break;
-	case ixgbe_fc_rx_pause:
-		/*
-		 * Rx Flow control is enabled and Tx Flow control is
-		 * disabled by software override. Since there really
-		 * isn't a way to advertise that we are capable of RX
-		 * Pause ONLY, we will advertise that we support both
-		 * symmetric and asymmetric Rx PAUSE, as such we fall
-		 * through to the fc_full statement.  Later, we will
-		 * disable the adapter's ability to send PAUSE frames.
-		 */
-	case ixgbe_fc_full:
-		/* Flow control (both Rx and Tx) is enabled by SW override. */
-		reg |= IXGBE_PCS1GANA_SYM_PAUSE | IXGBE_PCS1GANA_ASM_PAUSE;
-		break;
-	default:
-		ret_val = IXGBE_ERR_CONFIG;
-		goto out;
-		break;
-	}
+	/* Flow control completely disabled by software override. */
+	reg &= ~(IXGBE_PCS1GANA_SYM_PAUSE | IXGBE_PCS1GANA_ASM_PAUSE);
 
 	if (hw->mac.type < ixgbe_mac_X540) {
 		/*
@@ -213,16 +156,8 @@ static s32 ixgbe_setup_fc(struct ixgbe_hw *hw)
 		 * the MAC will advertise clause 37 flow control.
 		 */
 		IXGBE_WRITE_REG(hw, IXGBE_PCS1GANA, reg);
-		reg = IXGBE_READ_REG(hw, IXGBE_PCS1GLCTL);
-
-		/* Disable AN timeout */
-		if (hw->fc.strict_ieee)
-			reg &= ~IXGBE_PCS1GLCTL_AN_1G_TIMEOUT_EN;
-
-		IXGBE_WRITE_REG(hw, IXGBE_PCS1GLCTL, reg);
 	}
 
-out:
 	return ret_val;
 }
 

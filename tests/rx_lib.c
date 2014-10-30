@@ -318,6 +318,18 @@ static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
         /* configure descriptor type */
         srrctl |= IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF;
 
+	/*
+	 * Enable the hardware to drop packets when the buffer is
+	 * full. This is useful when multiqueue,so that no single
+	 * queue being full stalls the entire RX engine. We only
+	 * enable this when Multiqueue AND when Flow Control is 
+	 * disabled.
+	 */
+	if(ih->num_queues > 1){
+		/* TODO: Confirm kernel side module disables flow control(FC) features */
+		srrctl |= IXGBE_SRRCTL_DROP_EN;
+	}
+
         IXGBE_WRITE_REG(hw, IXGBE_SRRCTL(reg_idx), srrctl);
 	return;
 }
