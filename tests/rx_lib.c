@@ -240,7 +240,7 @@ void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 
 	/* disable queue to avoid issues while updating state */
 	rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
-	ixgbe_disable_rx_queue(ih, ring);
+	ixgbe_disable_rx_queue(ih, reg_idx, ring);
 
         IXGBE_WRITE_REG(ih, IXGBE_RDBAL(reg_idx), rdba & DMA_BIT_MASK(32));
         IXGBE_WRITE_REG(ih, IXGBE_RDBAH(reg_idx), rdba >> 32);
@@ -268,36 +268,28 @@ void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	ixgbe_rx_desc_queue_enable(ih, ring);
 }
 
-void ixgbe_disable_rx_queue(struct ixgbe_adapter *adapter,
-	struct ixgbe_ring *ring)
+void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        int wait_loop = IXGBE_MAX_RX_DESC_POLL;
-        u32 rxdctl;
-        u8 reg_idx = ring->reg_idx;
+	int wait_loop = IXGBE_MAX_RX_DESC_POLL;
+	uint32_t rxdctl;
 
-        if (IXGBE_REMOVED(hw->hw_addr))
-                return;
-        rxdctl = IXGBE_READ_REG(hw, IXGBE_RXDCTL(reg_idx));
+        rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
         rxdctl &= ~IXGBE_RXDCTL_ENABLE;
 
         /* write value back with RXDCTL.ENABLE bit cleared */
-        IXGBE_WRITE_REG(hw, IXGBE_RXDCTL(reg_idx), rxdctl);
+        IXGBE_WRITE_REG(ih, IXGBE_RXDCTL(reg_idx), rxdctl);
 
-        if (hw->mac.type == ixgbe_mac_82598EB &&
-            !(IXGBE_READ_REG(hw, IXGBE_LINKS) & IXGBE_LINKS_UP))
-                return;
+	/* the hardware may take up to 100us to really disable the rx queue */
+	do {
+		udelay(10);
+		rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
+	} while (--wait_loop && (rxdctl & IXGBE_RXDCTL_ENABLE));
 
-        /* the hardware may take up to 100us to really disable the rx queue */
-        do {
-                udelay(10);
-                rxdctl = IXGBE_READ_REG(hw, IXGBE_RXDCTL(reg_idx));
-        } while (--wait_loop && (rxdctl & IXGBE_RXDCTL_ENABLE));
-
-        if (!wait_loop) {
-                e_err(drv, "RXDCTL.ENABLE on Rx queue %d not cleared within "
-                      "the polling period\n", reg_idx);
-        }
+	if (!wait_loop) {
+		printf("RXDCTL.ENABLE on Rx queue %d not cleared within the polling period\n",
+			reg_idx);
+	}
 }
 
 static void ixgbe_configure_srrctl(struct ixgbe_adapter *adapter,

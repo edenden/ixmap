@@ -74,25 +74,14 @@ static inline bool IXGBE_REMOVED(void __iomem *addr)
 
 static inline uint32_t IXGBE_READ_REG(struct ixgbe_handler *ih, uint32_t reg)
 {
-	uint32_t value;
-	uint8_t __iomem *reg_addr;
-
-	reg_addr = ACCESS_ONCE(ih->bar);
-	if (IXGBE_REMOVED(reg_addr))
-		return IXGBE_FAILED_READ_REG;
-	value = readl(reg_addr + reg);
+	uint32_t value = readl(ih->bar + reg);
 	return value;
 }
 
 static inline void IXGBE_WRITE_REG(struct ixgbe_handler *ih, uint32_t reg, uint32_t value)
 {
-	uint8_t __iomem *reg_addr;
-
-	reg_addr = ACCESS_ONCE(ih->bar);
-	if (IXGBE_REMOVED(reg_addr))
-		return;
-
-	writel(value, reg_addr + reg);
+	writel(value, ih->bar + reg);
+	return;
 }
 
 void *process_interrupt(void *data);
