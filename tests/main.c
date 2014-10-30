@@ -44,7 +44,7 @@ int main(int argc, char **argv)
 	 * However, MTU=1522 is used by default.
 	 * See ixgbe_set_rx_buffer_len().
 	 */
-	/* ih->mtu_frame = mtu_frame; */
+	// ih->mtu_frame = mtu_frame;
 
 	ret = ixgbe_alloc_descring(ih, IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
 	if(ret < 0){
