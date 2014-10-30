@@ -257,7 +257,7 @@ void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	ring->next_to_clean = 0;
 	ring->next_to_use = 0;
 
-        ixgbe_configure_srrctl(ih, ring);
+        ixgbe_configure_srrctl(ih, reg_idx, ring);
         /* In ESX, RSCCTL configuration is done by on demand */
         ixgbe_configure_rscctl(ih, ring);
 
@@ -292,46 +292,23 @@ void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
 	}
 }
 
-static void ixgbe_configure_srrctl(struct ixgbe_adapter *adapter,
-                                   struct ixgbe_ring *rx_ring)
+static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *rx_ring)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        u32 srrctl;
-        u8 reg_idx = rx_ring->reg_idx;
-
-        if (hw->mac.type == ixgbe_mac_82598EB) {
-                u16 mask = adapter->ring_feature[RING_F_RSS].mask;
-
-                /* program one srrctl register per VMDq index */
-                if (adapter->flags & IXGBE_FLAG_VMDQ_ENABLED)
-                        mask = adapter->ring_feature[RING_F_VMDQ].mask;
-
-                /*
-                 * if VMDq is not active we must program one srrctl register
-                 * per RSS queue since we have enabled RDRXCTL.MVMEN
-                 */
-                reg_idx &= mask;
-
-                /* divide by the first bit of the mask to get the indices */
-                if (reg_idx)
-                        reg_idx /= ((~mask) + 1) & mask;
-        }
+	uint32_t srrctl;
 
         /* configure header buffer length, needed for RSC */
         srrctl = IXGBE_RX_HDR_SIZE << IXGBE_SRRCTL_BSIZEHDRSIZE_SHIFT;
 
         /* configure the packet buffer length */
-#ifdef CONFIG_IXGBE_DISABLE_PACKET_SPLIT
         srrctl |= ALIGN(rx_ring->rx_buf_len, 1024) >>
                   IXGBE_SRRCTL_BSIZEPKT_SHIFT;
-#else
-        srrctl |= ixgbe_rx_bufsz(rx_ring) >> IXGBE_SRRCTL_BSIZEPKT_SHIFT;
-#endif
 
         /* configure descriptor type */
         srrctl |= IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF;
 
         IXGBE_WRITE_REG(hw, IXGBE_SRRCTL(reg_idx), srrctl);
+	return;
 }
 
 void ixgbe_configure_rscctl(struct ixgbe_adapter *adapter,
