@@ -17,8 +17,8 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
 	ixgbe_set_rx_mode(ih);
 
         ixgbe_disable_rx(ih);
-        ixgbe_setup_psrtype(adapter);
-        ixgbe_setup_rdrxctl(adapter);
+        ixgbe_setup_psrtype(ih);
+        ixgbe_setup_rdrxctl(ih);
 
         /* We don't support RSC */
         rfctl = IXGBE_READ_REG(hw, IXGBE_RFCTL);
@@ -26,7 +26,7 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
         IXGBE_WRITE_REG(hw, IXGBE_RFCTL, rfctl);
 
         /* Program registers for the distribution of queues */
-        ixgbe_setup_mrqc(adapter);
+        ixgbe_setup_mrqc(ih);
 
         /* set_rx_buffer_len must be called before ring initialization */
         ixgbe_set_rx_buffer_len(adapter);
@@ -84,88 +84,66 @@ void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
 	return;
 }
 
-void ixgbe_disable_rx_generic(struct ixgbe_hw *hw)
+void ixgbe_disable_rx(struct ixgbe_handle *ih)
 {
         u32 pfdtxgswc;
         u32 rxctrl;
 
-        rxctrl = IXGBE_READ_REG(hw, IXGBE_RXCTRL);
+        rxctrl = IXGBE_READ_REG(ih, IXGBE_RXCTRL);
         if (rxctrl & IXGBE_RXCTRL_RXEN) {
-                if (hw->mac.type != ixgbe_mac_82598EB) {
-                        pfdtxgswc = IXGBE_READ_REG(hw, IXGBE_PFDTXGSWC);
-                        if (pfdtxgswc & IXGBE_PFDTXGSWC_VT_LBEN) {
-                                pfdtxgswc &= ~IXGBE_PFDTXGSWC_VT_LBEN;
-                                IXGBE_WRITE_REG(hw, IXGBE_PFDTXGSWC, pfdtxgswc);
-                                hw->mac.set_lben = true;
-                        } else {
-                                hw->mac.set_lben = false;
-                        }
-                }
+		pfdtxgswc = IXGBE_READ_REG(hw, IXGBE_PFDTXGSWC);
+		if (pfdtxgswc & IXGBE_PFDTXGSWC_VT_LBEN) {
+			/* TODO: Confirm Local L2 switch is disabled, and delete this process */
+		}
+
                 rxctrl &= ~IXGBE_RXCTRL_RXEN;
-                IXGBE_WRITE_REG(hw, IXGBE_RXCTRL, rxctrl);
+                IXGBE_WRITE_REG(ih, IXGBE_RXCTRL, rxctrl);
         }
 }
 
-static void ixgbe_setup_psrtype(struct ixgbe_adapter *adapter)
+static void ixgbe_setup_psrtype(struct ixgbe_handle *ih)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        int rss_i = adapter->ring_feature[RING_F_RSS].indices;
-        int p;
-
         /* PSRTYPE must be initialized in non 82598 adapters */
-        u32 psrtype = IXGBE_PSRTYPE_TCPHDR |
-                      IXGBE_PSRTYPE_UDPHDR |
-                      IXGBE_PSRTYPE_IPV4HDR |
-                      IXGBE_PSRTYPE_L2HDR |
-                      IXGBE_PSRTYPE_IPV6HDR;
+        uint32_t psrtype = IXGBE_PSRTYPE_TCPHDR |
+				IXGBE_PSRTYPE_UDPHDR |
+				IXGBE_PSRTYPE_IPV4HDR |
+				IXGBE_PSRTYPE_L2HDR |
+				IXGBE_PSRTYPE_IPV6HDR;
 
-        if (hw->mac.type == ixgbe_mac_82598EB)
-                return;
-
-        if (rss_i > 3)
+        if (ih->num_queues > 3)
                 psrtype |= 2 << 29;
-        else if (rss_i > 1)
+        else if (ih->num_queues > 1)
                 psrtype |= 1 << 29;
 
-        for (p = 0; p < adapter->num_rx_pools; p++)
-                IXGBE_WRITE_REG(hw, IXGBE_PSRTYPE(VMDQ_P(p)), psrtype);
+	IXGBE_WRITE_REG(hw, IXGBE_PSRTYPE(0), psrtype);
+	return;
 }
 
-static void ixgbe_setup_rdrxctl(struct ixgbe_adapter *adapter)
+static void ixgbe_setup_rdrxctl(struct ixgbe_handle *ih)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        u32 rdrxctl = IXGBE_READ_REG(hw, IXGBE_RDRXCTL);
+        uint32_t rdrxctl = IXGBE_READ_REG(ih, IXGBE_RDRXCTL);
 
         /* Disable RSC for ACK packets */
-        IXGBE_WRITE_REG(hw, IXGBE_RSCDBU,
+        IXGBE_WRITE_REG(ih, IXGBE_RSCDBU,
 		(IXGBE_RSCDBU_RSCACKDIS | IXGBE_READ_REG(hw, IXGBE_RSCDBU)));
 	rdrxctl &= ~IXGBE_RDRXCTL_RSCFRSTSIZE;
 	/* hardware requires some bits to be set by default */
 	rdrxctl |= (IXGBE_RDRXCTL_RSCACKC | IXGBE_RDRXCTL_FCOE_WRFIX);
 	rdrxctl |= IXGBE_RDRXCTL_CRCSTRIP;
 
-	IXGBE_WRITE_REG(hw, IXGBE_RDRXCTL, rdrxctl);
+	IXGBE_WRITE_REG(ih, IXGBE_RDRXCTL, rdrxctl);
+	return;
 }
 
-static void ixgbe_setup_mrqc(struct ixgbe_adapter *adapter)
+static void ixgbe_setup_mrqc(struct ixgbe_handle *ih)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        static const u32 seed[10] = { 0xE291D73D, 0x1805EC6C, 0x2A94B30D,
-                          0xA54F2BEC, 0xEA49AF7C, 0xE214AD3D, 0xB855AABE,
-                          0x6A3E67EA, 0x14364D17, 0x3BED200D};
+        static const uint32_t seed[10] = { 0xE291D73D, 0x1805EC6C, 0x2A94B30D,
+					0xA54F2BEC, 0xEA49AF7C, 0xE214AD3D, 0xB855AABE,
+					0x6A3E67EA, 0x14364D17, 0x3BED200D};
         u32 mrqc = 0, reta = 0;
         u32 rxcsum;
         int i, j, reta_entries = 128;
         int indices_multi;
-        u16 rss_i = adapter->ring_feature[RING_F_RSS].indices;
-
-        /*
-         * Program table for at least 2 queues w/ SR-IOV so that VFs can
-         * make full use of any rings they may have.  We will use the
-         * PSRTYPE register to control how many rings we use within the PF.
-         */
-        if ((adapter->flags & IXGBE_FLAG_SRIOV_ENABLED) && (rss_i < 2))
-                rss_i = 2;
 
         /* Fill out hash function seeds */
         for (i = 0; i < 10; i++)
@@ -175,13 +153,10 @@ static void ixgbe_setup_mrqc(struct ixgbe_adapter *adapter)
          * 82598: 128 (8 bit wide) entries containing pair of 4 bit RSS indices
          * 82599/X540: 128 (8 bit wide) entries containing 4 bit RSS index
          */
-        if (adapter->hw.mac.type == ixgbe_mac_82598EB)
-                indices_multi = 0x11;
-        else
-                indices_multi = 0x1;
-
+	/* XXX: Do we need filling out redirection table ? */
+	indices_multi = 0x1;
         for (i = 0, j = 0; i < reta_entries; i++, j++) {
-                if (j == rss_i)
+                if (j == ih->num_queues)
                         j = 0;
                 reta = (reta << 8) | (j * indices_multi);
                 if ((i & 3) == 3) {
@@ -195,43 +170,18 @@ static void ixgbe_setup_mrqc(struct ixgbe_adapter *adapter)
         rxcsum |= IXGBE_RXCSUM_PCSD;
         IXGBE_WRITE_REG(hw, IXGBE_RXCSUM, rxcsum);
 
-        if (adapter->hw.mac.type == ixgbe_mac_82598EB) {
-                if (adapter->ring_feature[RING_F_RSS].mask)
-                        mrqc = IXGBE_MRQC_RSSEN;
-        } else {
-                u8 tcs = netdev_get_num_tc(adapter->netdev);
-
-                if (adapter->flags & IXGBE_FLAG_VMDQ_ENABLED) {
-                        if (tcs > 4)
-                                mrqc = IXGBE_MRQC_VMDQRT8TCEN;  /* 8 TCs */
-                        else if (tcs > 1)
-                                mrqc = IXGBE_MRQC_VMDQRT4TCEN;  /* 4 TCs */
-                        else if (adapter->ring_feature[RING_F_RSS].indices == 4)
-                                mrqc = IXGBE_MRQC_VMDQRSS32EN;
-                        else
-                                mrqc = IXGBE_MRQC_VMDQRSS64EN;
-                } else {
-                        if (tcs > 4)
-                                mrqc = IXGBE_MRQC_RTRSS8TCEN;
-                        else if (tcs > 1)
-                                mrqc = IXGBE_MRQC_RTRSS4TCEN;
-                        else
-                                mrqc = IXGBE_MRQC_RSSEN;
-                }
-        }
+	mrqc = IXGBE_MRQC_RSSEN;
 
         /* Perform hash on these packet types */
         mrqc |= IXGBE_MRQC_RSS_FIELD_IPV4 |
                 IXGBE_MRQC_RSS_FIELD_IPV4_TCP |
+		IXGBE_MRQC_RSS_FIELD_IPV4_UDP |
                 IXGBE_MRQC_RSS_FIELD_IPV6 |
-                IXGBE_MRQC_RSS_FIELD_IPV6_TCP;
-
-        if (adapter->flags2 & IXGBE_FLAG2_RSS_FIELD_IPV4_UDP)
-                mrqc |= IXGBE_MRQC_RSS_FIELD_IPV4_UDP;
-        if (adapter->flags2 & IXGBE_FLAG2_RSS_FIELD_IPV6_UDP)
-                mrqc |= IXGBE_MRQC_RSS_FIELD_IPV6_UDP;
+                IXGBE_MRQC_RSS_FIELD_IPV6_TCP | 
+                IXGBE_MRQC_RSS_FIELD_IPV6_UDP;
 
         IXGBE_WRITE_REG(hw, IXGBE_MRQC, mrqc);
+	return;
 }
 
 static void ixgbe_set_rx_buffer_len(struct ixgbe_adapter *adapter)
