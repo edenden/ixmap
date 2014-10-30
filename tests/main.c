@@ -15,13 +15,13 @@
 #include "forward.h"
 #include "descring.h"
 
-static int mtu = 1518;
+static int mtu_frame = 1518;
 static int buf_count = 1024;
 static char *ixgbe_interface = "ixgbe1";
 
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
-static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count);
+static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count);
 static int ixgbe_malloc(struct ixgbe_handle *ih,
 	uint64_t *offset, uint64_t *paddr, uint32_t size, uint16_t numa_node);
 static struct ixgbe_handle *ixgbe_open(char *int_name);
@@ -39,13 +39,23 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
+	/*
+	 * Configuration of frame MTU is supported.
+	 * However, MTU=1522 is used by default.
+	 * See ixgbe_set_rx_buffer_len().
+	 */
+	/* ih->mtu_frame = mtu_frame; */
+
 	ret = ixgbe_alloc_descring(ih, IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
 	if(ret < 0){
 		perror("ixgbe_alloc_descring");
 		return -1;
 	}
 
-	ret = ixgbe_alloc_buf(ih, mtu, buf_count);
+        ixgbe_configure_rx(ih);
+        ixgbe_configure_tx(ih);
+
+	ret = ixgbe_alloc_buf(ih, buf_count);
 	if(ret < 0){
 		perror("ixgbe_alloc_buf");
 		return -1;
@@ -56,9 +66,6 @@ int main(int argc, char **argv)
 		perror("malloc");
 		return -1;
 	}
-
-	ixgbe_configure_rx(ih);
-	ixgbe_configure_tx(ih);
 
 	for(i = 0; i < ih->num_queues; i++){
 		threads[i].index = i;
@@ -141,7 +148,7 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	return 0;
 }
 
-static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count)
+static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count)
 {
 	uint64_t offset = ih->mmapped_offset;
 	int ret, i;
@@ -150,7 +157,7 @@ static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count
 
 	for(i = 0; i < ih->num_queues; i++){
 		uint64_t paddr;
-		uint32_t size = mtu * count;
+		uint32_t size = ih->bufsize * count;
 
 		size = ALIGN(size, 4094);
 		ret = ixgbe_malloc(ih, &offset, &paddr, size, 0);
@@ -163,7 +170,8 @@ static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t mtu, uint32_t count
 		if(ih->buf[i].vaddr == MAP_FAILED)
 			return -1;
 
-		ih->buf[i].mtu = mtu;
+		ih->buf[i].buf_size = ih->buf_size;
+		ih->buf[i].mtu_frame = ih->mtu_frame;
 		ih->buf[i].count = count;
 
 		offset += size;

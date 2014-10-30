@@ -29,7 +29,7 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
         ixgbe_setup_mrqc(ih);
 
         /* set_rx_buffer_len must be called before ring initialization */
-        ixgbe_set_rx_buffer_len(adapter);
+        ixgbe_set_rx_buffer_len(ih);
 
         /*
          * Setup the HW Rx Head and Tail Descriptor Pointers and
@@ -86,8 +86,8 @@ void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
 
 void ixgbe_disable_rx(struct ixgbe_handle *ih)
 {
-        u32 pfdtxgswc;
-        u32 rxctrl;
+        uint32_t pfdtxgswc;
+        uint32_t rxctrl;
 
         rxctrl = IXGBE_READ_REG(ih, IXGBE_RXCTRL);
         if (rxctrl & IXGBE_RXCTRL_RXEN) {
@@ -115,7 +115,7 @@ static void ixgbe_setup_psrtype(struct ixgbe_handle *ih)
         else if (ih->num_queues > 1)
                 psrtype |= 1 << 29;
 
-	IXGBE_WRITE_REG(hw, IXGBE_PSRTYPE(0), psrtype);
+	IXGBE_WRITE_REG(ih, IXGBE_PSRTYPE(0), psrtype);
 	return;
 }
 
@@ -147,7 +147,7 @@ static void ixgbe_setup_mrqc(struct ixgbe_handle *ih)
 
         /* Fill out hash function seeds */
         for (i = 0; i < 10; i++)
-                IXGBE_WRITE_REG(hw, IXGBE_RSSRK(i), seed[i]);
+                IXGBE_WRITE_REG(ih, IXGBE_RSSRK(i), seed[i]);
 
         /* Fill out the redirection table as follows:
          * 82598: 128 (8 bit wide) entries containing pair of 4 bit RSS indices
@@ -168,7 +168,7 @@ static void ixgbe_setup_mrqc(struct ixgbe_handle *ih)
         /* Disable indicating checksum in descriptor, enables RSS hash */
         rxcsum = IXGBE_READ_REG(hw, IXGBE_RXCSUM);
         rxcsum |= IXGBE_RXCSUM_PCSD;
-        IXGBE_WRITE_REG(hw, IXGBE_RXCSUM, rxcsum);
+        IXGBE_WRITE_REG(ih, IXGBE_RXCSUM, rxcsum);
 
 	mrqc = IXGBE_MRQC_RSSEN;
 
@@ -180,92 +180,55 @@ static void ixgbe_setup_mrqc(struct ixgbe_handle *ih)
                 IXGBE_MRQC_RSS_FIELD_IPV6_TCP | 
                 IXGBE_MRQC_RSS_FIELD_IPV6_UDP;
 
-        IXGBE_WRITE_REG(hw, IXGBE_MRQC, mrqc);
+        IXGBE_WRITE_REG(ih, IXGBE_MRQC, mrqc);
 	return;
 }
 
-static void ixgbe_set_rx_buffer_len(struct ixgbe_adapter *adapter)
+static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        struct net_device *netdev = adapter->netdev;
-        int max_frame = netdev->mtu + ETH_HLEN + ETH_FCS_LEN;
         struct ixgbe_ring *rx_ring;
         int i;
         u32 mhadd, hlreg0;
-#ifdef CONFIG_IXGBE_DISABLE_PACKET_SPLIT
-        int rx_buf_len;
-#endif
-
-#ifdef IXGBE_FCOE
-        /* adjust max frame to be able to do baby jumbo for FCoE */
-        if ((adapter->flags & IXGBE_FLAG_FCOE_ENABLED) &&
-            (max_frame < IXGBE_FCOE_JUMBO_FRAME_SIZE))
-                max_frame = IXGBE_FCOE_JUMBO_FRAME_SIZE;
-
-#endif /* IXGBE_FCOE */
 
         /* adjust max frame to be at least the size of a standard frame */
-        if (max_frame < (ETH_FRAME_LEN + ETH_FCS_LEN))
-                max_frame = (ETH_FRAME_LEN + ETH_FCS_LEN);
+        if (ih->mtu_frame < (ETH_FRAME_LEN + ETH_FCS_LEN))
+                ih->mtu_frame = (ETH_FRAME_LEN + ETH_FCS_LEN);
 
-        mhadd = IXGBE_READ_REG(hw, IXGBE_MHADD);
-        if (max_frame != (mhadd >> IXGBE_MHADD_MFS_SHIFT)) {
+        mhadd = IXGBE_READ_REG(ih, IXGBE_MHADD);
+        if (ih->mtu_frame != (mhadd >> IXGBE_MHADD_MFS_SHIFT)) {
                 mhadd &= ~IXGBE_MHADD_MFS_MASK;
-                mhadd |= max_frame << IXGBE_MHADD_MFS_SHIFT;
+                mhadd |= ih->mtu_frame << IXGBE_MHADD_MFS_SHIFT;
 
-                IXGBE_WRITE_REG(hw, IXGBE_MHADD, mhadd);
+                IXGBE_WRITE_REG(ih, IXGBE_MHADD, mhadd);
         }
 
-#ifdef CONFIG_IXGBE_DISABLE_PACKET_SPLIT
-                /* MHADD will allow an extra 4 bytes past for vlan tagged frames */
-                max_frame += VLAN_HLEN;
+	/* MHADD will allow an extra 4 bytes past for vlan tagged frames */
+	ih->mtu_frame += VLAN_HLEN;
 
-        if (!(adapter->flags2 & IXGBE_FLAG2_RSC_ENABLED) &&
-            (max_frame <= MAXIMUM_ETHERNET_VLAN_SIZE)) {
-                rx_buf_len = MAXIMUM_ETHERNET_VLAN_SIZE;
+        if(ih->mtu_frame <= MAXIMUM_ETHERNET_VLAN_SIZE)) {
+                ih->buf_size = MAXIMUM_ETHERNET_VLAN_SIZE;
         /*
          * Make best use of allocation by using all but 1K of a
          * power of 2 allocation that will be used for skb->head.
          */
         } else if (max_frame <= IXGBE_RXBUFFER_3K) {
-                rx_buf_len = IXGBE_RXBUFFER_3K;
+                ih->buf_size = IXGBE_RXBUFFER_3K;
         } else if (max_frame <= IXGBE_RXBUFFER_7K) {
-                rx_buf_len = IXGBE_RXBUFFER_7K;
+                ih->buf_size = IXGBE_RXBUFFER_7K;
         } else if (max_frame <= IXGBE_RXBUFFER_15K) {
-                rx_buf_len = IXGBE_RXBUFFER_15K;
+                ih->buf_size = IXGBE_RXBUFFER_15K;
         } else {
-                rx_buf_len = IXGBE_MAX_RXBUFFER;
+                ih->buf_size = IXGBE_MAX_RXBUFFER;
         }
 
-#endif /* CONFIG_IXGBE_DISABLE_PACKET_SPLIT */
-        hlreg0 = IXGBE_READ_REG(hw, IXGBE_HLREG0);
+        hlreg0 = IXGBE_READ_REG(ih, IXGBE_HLREG0);
         /* set jumbo enable since MHADD.MFS is keeping size locked at
          * max_frame
          */
         hlreg0 |= IXGBE_HLREG0_JUMBOEN;
-        IXGBE_WRITE_REG(hw, IXGBE_HLREG0, hlreg0);
+        IXGBE_WRITE_REG(ih, IXGBE_HLREG0, hlreg0);
 
-        /*
-         * Setup the HW Rx Head and Tail Descriptor Pointers and
-         * the Base and Length of the Rx Descriptor Ring
-         */
-        for (i = 0; i < adapter->num_rx_queues; i++) {
-                rx_ring = adapter->rx_ring[i];
-                if (adapter->flags2 & IXGBE_FLAG2_RSC_ENABLED)
-                        set_ring_rsc_enabled(rx_ring);
-                else
-                        clear_ring_rsc_enabled(rx_ring);
-#ifdef CONFIG_IXGBE_DISABLE_PACKET_SPLIT
-
-                rx_ring->rx_buf_len = rx_buf_len;
-
-#ifdef IXGBE_FCOE
-                if (test_bit(__IXGBE_RX_FCOE, &rx_ring->state) &&
-                    (rx_buf_len < IXGBE_FCOE_JUMBO_FRAME_SIZE))
-                        rx_ring->rx_buf_len = IXGBE_FCOE_JUMBO_FRAME_SIZE;
-#endif /* IXGBE_FCOE */
-#endif /* CONFIG_IXGBE_DISABLE_PACKET_SPLIT */
-        }
+	return;
 }
 
 void ixgbe_configure_rx_ring(struct ixgbe_adapter *adapter,

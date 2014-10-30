@@ -43,7 +43,8 @@ struct ixgbe_ring {
 
 struct ixgbe_buf {
 	void		*vaddr;
-	uint32_t	mtu;
+	uint32_t	mtu_frame;
+	uint32_t	buf_size;
 	uint32_t	count;
 	uint64_t	paddr;
 };
@@ -60,6 +61,8 @@ struct ixgbe_handle {
 	struct ixgbe_buf	*buf;
 
 	uint32_t		promisc;
+	uint32_t		mtu_frame;
+	uint32_t		buf_size;
 	struct uio_ixgbe_info info;
 };
 
