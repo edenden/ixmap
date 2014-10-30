@@ -12,7 +12,8 @@
 
 void ixgbe_configure_rx(struct ixgbe_handler *ih)
 {
-	u32 rxctrl, rfctl;
+	uint32_t rxctrl, rfctl;
+	int i;
 
 	ixgbe_set_rx_mode(ih);
 
@@ -35,8 +36,8 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
          * Setup the HW Rx Head and Tail Descriptor Pointers and
          * the Base and Length of the Rx Descriptor Ring
          */
-        for (i = 0; i < adapter->num_rx_queues; i++)
-                ixgbe_configure_rx_ring(adapter, adapter->rx_ring[i]);
+        for (i = 0; i < ih->num_queues; i++)
+		ixgbe_configure_rx_ring(ih, i, &ih->rx_ring[i]);
 
         rxctrl = IXGBE_READ_REG(hw, IXGBE_RXCTRL);
 
@@ -140,8 +141,8 @@ static void ixgbe_setup_mrqc(struct ixgbe_handle *ih)
         static const uint32_t seed[10] = { 0xE291D73D, 0x1805EC6C, 0x2A94B30D,
 					0xA54F2BEC, 0xEA49AF7C, 0xE214AD3D, 0xB855AABE,
 					0x6A3E67EA, 0x14364D17, 0x3BED200D};
-        u32 mrqc = 0, reta = 0;
-        u32 rxcsum;
+        uint32_t mrqc = 0, reta = 0;
+        uint32_t rxcsum;
         int i, j, reta_entries = 128;
         int indices_multi;
 
@@ -188,7 +189,7 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 {
         struct ixgbe_ring *rx_ring;
         int i;
-        u32 mhadd, hlreg0;
+        uint32_t mhadd, hlreg0;
 
         /* adjust max frame to be at least the size of a standard frame */
         if (ih->mtu_frame < (ETH_FRAME_LEN + ETH_FCS_LEN))
@@ -231,51 +232,44 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 	return;
 }
 
-void ixgbe_configure_rx_ring(struct ixgbe_adapter *adapter,
-                             struct ixgbe_ring *ring)
+void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
-        struct ixgbe_hw *hw = &adapter->hw;
-        u64 rdba = ring->dma;
-        u32 rxdctl;
-        u8 reg_idx = ring->reg_idx;
+        uint64_t rdba = ring->paddr;
+        uint32_t rxdctl;
 
-        /* disable queue to avoid issues while updating state */
-        rxdctl = IXGBE_READ_REG(hw, IXGBE_RXDCTL(reg_idx));
-        ixgbe_disable_rx_queue(adapter, ring);
+	/* disable queue to avoid issues while updating state */
+	rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
+	ixgbe_disable_rx_queue(ih, ring);
 
-        IXGBE_WRITE_REG(hw, IXGBE_RDBAL(reg_idx), rdba & DMA_BIT_MASK(32));
-        IXGBE_WRITE_REG(hw, IXGBE_RDBAH(reg_idx), rdba >> 32);
-        IXGBE_WRITE_REG(hw, IXGBE_RDLEN(reg_idx),
-                        ring->count * sizeof(union ixgbe_adv_rx_desc));
+        IXGBE_WRITE_REG(ih, IXGBE_RDBAL(reg_idx), rdba & DMA_BIT_MASK(32));
+        IXGBE_WRITE_REG(ih, IXGBE_RDBAH(reg_idx), rdba >> 32);
+        IXGBE_WRITE_REG(ih, IXGBE_RDLEN(reg_idx),
+		ring->count * sizeof(union ixgbe_adv_rx_desc));
 
         /* reset head and tail pointers */
-        IXGBE_WRITE_REG(hw, IXGBE_RDH(reg_idx), 0);
-        IXGBE_WRITE_REG(hw, IXGBE_RDT(reg_idx), 0);
-#ifndef NO_LER_WRITE_CHECKS
-        ring->adapter_present = &hw->hw_addr;
-#endif /* NO_LER_WRITE_CHECKS */
-        ring->tail = adapter->io_addr + IXGBE_RDT(reg_idx);
+	IXGBE_WRITE_REG(ih, IXGBE_RDH(reg_idx), 0);
+	IXGBE_WRITE_REG(ih, IXGBE_RDT(reg_idx), 0);
+
+	ring->tail = adapter->io_addr + IXGBE_RDT(reg_idx);
 
         /* reset ntu and ntc to place SW in sync with hardwdare */
-        ring->next_to_clean = 0;
-        ring->next_to_use = 0;
-#ifndef CONFIG_IXGBE_DISABLE_PACKET_SPLIT
-        ring->next_to_alloc = 0;
-#endif
+	ring->next_to_clean = 0;
+	ring->next_to_use = 0;
 
-        ixgbe_configure_srrctl(adapter, ring);
+        ixgbe_configure_srrctl(ih, ring);
         /* In ESX, RSCCTL configuration is done by on demand */
-        ixgbe_configure_rscctl(adapter, ring);
+        ixgbe_configure_rscctl(ih, ring);
 
-        /* enable receive descriptor ring */
-        rxdctl |= IXGBE_RXDCTL_ENABLE;
-        IXGBE_WRITE_REG(hw, IXGBE_RXDCTL(reg_idx), rxdctl);
+	/* enable receive descriptor ring */
+	rxdctl |= IXGBE_RXDCTL_ENABLE;
+	IXGBE_WRITE_REG(ih, IXGBE_RXDCTL(reg_idx), rxdctl);
 
-        ixgbe_rx_desc_queue_enable(adapter, ring);
+	ixgbe_rx_desc_queue_enable(ih, ring);
 }
 
 void ixgbe_disable_rx_queue(struct ixgbe_adapter *adapter,
-                            struct ixgbe_ring *ring)
+	struct ixgbe_ring *ring)
 {
         struct ixgbe_hw *hw = &adapter->hw;
         int wait_loop = IXGBE_MAX_RX_DESC_POLL;

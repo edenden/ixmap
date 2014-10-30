@@ -39,6 +39,10 @@ struct ixgbe_ring {
 	void		*vaddr;
 	uint32_t	count;
 	uint64_t	paddr;
+
+	uint8_t __iomem	*tail;
+	uint16_t	next_to_use;
+	uint16_t	next_to_clean;
 };
 
 struct ixgbe_buf {
