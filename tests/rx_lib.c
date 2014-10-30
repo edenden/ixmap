@@ -326,7 +326,6 @@ static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
 	 * disabled.
 	 */
 	if(ih->num_queues > 1){
-		/* TODO: Confirm kernel side module disables flow control(FC) features */
 		srrctl |= IXGBE_SRRCTL_DROP_EN;
 	}
 
