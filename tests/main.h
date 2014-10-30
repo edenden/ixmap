@@ -59,6 +59,7 @@ struct ixgbe_handle {
 	struct ixgbe_ring	*rx_ring;
 	struct ixgbe_buf	*buf;
 
+	uint32_t		promisc;
 	struct uio_ixgbe_info info;
 };
 

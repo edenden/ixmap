@@ -16,7 +16,7 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
 
 	ixgbe_set_rx_mode(ih);
 
-        ixgbe_disable_rx();
+        ixgbe_disable_rx(ih);
         ixgbe_setup_psrtype(adapter);
         ixgbe_setup_rdrxctl(adapter);
 
@@ -47,13 +47,13 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
 
 void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
 {
-        u32 fctrl, vmolr = IXGBE_VMOLR_BAM | IXGBE_VMOLR_AUPE;
-        u32 vlnctrl;
-        int count;
+        uint32_t fctrl;
+        uint32_t vlnctrl;
+	uint32_t vmolr = IXGBE_VMOLR_BAM | IXGBE_VMOLR_AUPE;
 
         /* Check for Promiscuous and All Multicast modes */
-        fctrl = IXGBE_READ_REG(hw, IXGBE_FCTRL);
-        vlnctrl = IXGBE_READ_REG(hw, IXGBE_VLNCTRL);
+        fctrl = IXGBE_READ_REG(ih, IXGBE_FCTRL);
+        vlnctrl = IXGBE_READ_REG(ih, IXGBE_VLNCTRL);
 
         /* set all bits that we expect to always be set */
         fctrl |= IXGBE_FCTRL_BAM;
@@ -61,56 +61,27 @@ void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
         fctrl |= IXGBE_FCTRL_PMCF;
 
         /* clear the bits we are changing the status of */
-        fctrl &= ~(IXGBE_FCTRL_UPE | IXGBE_FCTRL_MPE);
-        vlnctrl  &= ~(IXGBE_VLNCTRL_VFE | IXGBE_VLNCTRL_CFIEN);
-        if (netdev->flags & IFF_PROMISC) {
-                hw->addr_ctrl.user_set_promisc = true;
-                fctrl |= (IXGBE_FCTRL_UPE | IXGBE_FCTRL_MPE);
-                vmolr |= IXGBE_VMOLR_MPE;
-                /* Only disable hardware filter vlans in promiscuous mode
-                 * if SR-IOV and VMDQ are disabled - otherwise ensure
-                 * that hardware VLAN filters remain enabled.
-                 */
-                if ((adapter->flags & (IXGBE_FLAG_VMDQ_ENABLED |
-                                       IXGBE_FLAG_SRIOV_ENABLED)))
-                        vlnctrl |= (IXGBE_VLNCTRL_VFE | IXGBE_VLNCTRL_CFIEN);
+	fctrl &= ~(IXGBE_FCTRL_UPE | IXGBE_FCTRL_MPE);
+	vlnctrl  &= ~(IXGBE_VLNCTRL_VFE | IXGBE_VLNCTRL_CFIEN);
+
+	if (ih->promisc) {
+		fctrl |= (IXGBE_FCTRL_UPE | IXGBE_FCTRL_MPE);
+		vmolr |= IXGBE_VMOLR_MPE;
         } else {
-                if (netdev->flags & IFF_ALLMULTI) {
-                        fctrl |= IXGBE_FCTRL_MPE;
-                        vmolr |= IXGBE_VMOLR_MPE;
-                }
-                hw->addr_ctrl.user_set_promisc = false;
-        }
-#ifdef HAVE_SET_RX_MODE
-        /* Write the unicast MAC address filter list */
-        count = ixgbe_write_uc_addr_list(netdev, VMDQ_P(0));
-        if (count < 0) {
-                fctrl |= IXGBE_FCTRL_UPE;
-                vmolr |= IXGBE_VMOLR_ROPE;
-        }
-#endif
-        /*
-         * Write addresses to the MTA, if the attempt fails
-         * then we should just turn on promiscuous mode so
-         * that we can at least receive multicast traffic
-         */
-        count = ixgbe_write_mc_addr_list(netdev);
-        if (count < 0) {
-                fctrl |= IXGBE_FCTRL_MPE;
-                vmolr |= IXGBE_VMOLR_MPE;
-        } else if (count) {
-                vmolr |= IXGBE_VMOLR_ROMPE;
+		fctrl |= IXGBE_FCTRL_MPE;
+		vmolr |= IXGBE_VMOLR_MPE;
         }
 
-        if (hw->mac.type != ixgbe_mac_82598EB) {
-                vmolr |= IXGBE_READ_REG(hw, IXGBE_VMOLR(VMDQ_P(0))) &
-                         ~(IXGBE_VMOLR_MPE | IXGBE_VMOLR_ROMPE |
-                           IXGBE_VMOLR_ROPE);
-                IXGBE_WRITE_REG(hw, IXGBE_VMOLR(VMDQ_P(0)), vmolr);
-        }
+	/* XXX: Do we need to write VMOLR ? */
+	vmolr |= IXGBE_READ_REG(ih, IXGBE_VMOLR(VMDQ_P(0))) &
+			~(IXGBE_VMOLR_MPE | IXGBE_VMOLR_ROMPE |
+			IXGBE_VMOLR_ROPE);
+	IXGBE_WRITE_REG(ih, IXGBE_VMOLR(VMDQ_P(0)), vmolr);
 
-        IXGBE_WRITE_REG(hw, IXGBE_VLNCTRL, vlnctrl);
-        IXGBE_WRITE_REG(hw, IXGBE_FCTRL, fctrl);
+        IXGBE_WRITE_REG(ih, IXGBE_VLNCTRL, vlnctrl);
+        IXGBE_WRITE_REG(ih, IXGBE_FCTRL, fctrl);
+
+	return;
 }
 
 void ixgbe_disable_rx_generic(struct ixgbe_hw *hw)

@@ -233,6 +233,7 @@ static struct ixgbe_handle *ixgbe_open(char *int_name)
 		goto failed;
 
 	ih->bar_size = req_up.info.mmio_size;
+	ih->promisc = 0;
 	ih->mmapped_offset = ih->bar_size;
 
 	return ih;
