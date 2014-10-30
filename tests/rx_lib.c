@@ -251,7 +251,7 @@ void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	IXGBE_WRITE_REG(ih, IXGBE_RDH(reg_idx), 0);
 	IXGBE_WRITE_REG(ih, IXGBE_RDT(reg_idx), 0);
 
-	ring->tail = adapter->io_addr + IXGBE_RDT(reg_idx);
+	ring->tail = ih->bar + IXGBE_RDT(reg_idx);
 
         /* reset ntu and ntc to place SW in sync with hardwdare */
 	ring->next_to_clean = 0;
