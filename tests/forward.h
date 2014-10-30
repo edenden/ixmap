@@ -67,11 +67,6 @@ static inline void writel(uint32_t b, volatile void *addr)
 	*(volatile uint32_t *) addr = cpu_to_le32(b);
 }
 
-static inline bool IXGBE_REMOVED(void __iomem *addr)
-{
-	return unlikely(!addr);
-}
-
 static inline uint32_t IXGBE_READ_REG(struct ixgbe_handler *ih, uint32_t reg)
 {
 	uint32_t value = readl(ih->bar + reg);
