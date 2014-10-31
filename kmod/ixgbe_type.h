@@ -578,13 +578,6 @@ typedef u32 ixgbe_link_speed;
 #define IXGBE_PHY_REVISION_MASK	 0xFFFFFFF0
 #define IXGBE_MAX_PHY_ADDR	      32
 
-/* PCS1GLSTA Bit Masks */
-#define IXGBE_PCS1GANA_SYM_PAUSE	0x80
-#define IXGBE_PCS1GANA_ASM_PAUSE	0x100
-
-/* PCS1GLCTL Bit Masks */
-#define IXGBE_PCS1GLCTL_AN_1G_TIMEOUT_EN 0x00040000 /* PCS 1G autoneg to en */
-
 /* Transmit Config masks */
 #define IXGBE_TXDCTL_ENABLE	     0x02000000 /* Ena specific Tx Queue */
 #define IXGBE_TXDCTL_SWFLSH	     0x04000000 /* Tx Desc. wr-bk flushing */

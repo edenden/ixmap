@@ -123,28 +123,28 @@ bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw)
 
 void ixgbe_setup_fc(struct ixgbe_hw *hw)
 {
-        u32 mflcn_reg, fccfg_reg;
+	u32 mflcn_reg, fccfg_reg;
 
-        /* Disable any previous flow control settings */
-        mflcn_reg = IXGBE_READ_REG(hw, IXGBE_MFLCN);
-        mflcn_reg &= ~(IXGBE_MFLCN_RPFCE_MASK | IXGBE_MFLCN_RFCE);
+	/* Disable any previous flow control settings */
+	mflcn_reg = IXGBE_READ_REG(hw, IXGBE_MFLCN);
+	mflcn_reg &= ~(IXGBE_MFLCN_RPFCE_MASK | IXGBE_MFLCN_RFCE);
 
-        fccfg_reg = IXGBE_READ_REG(hw, IXGBE_FCCFG);
-        fccfg_reg &= ~(IXGBE_FCCFG_TFCE_802_3X | IXGBE_FCCFG_TFCE_PRIORITY);
+	fccfg_reg = IXGBE_READ_REG(hw, IXGBE_FCCFG);
+	fccfg_reg &= ~(IXGBE_FCCFG_TFCE_802_3X | IXGBE_FCCFG_TFCE_PRIORITY);
 
 	/*
 	 * Flow control is disabled by software override or autoneg.
 	 * The code below will actually disable it in the HW.
 	 */
 
-        /* Set 802.3x based flow control settings. */
-        mflcn_reg |= IXGBE_MFLCN_DPF;
-        IXGBE_WRITE_REG(hw, IXGBE_MFLCN, mflcn_reg);
-        IXGBE_WRITE_REG(hw, IXGBE_FCCFG, fccfg_reg);
+	/* Set 802.3x based flow control settings. */
+	mflcn_reg |= IXGBE_MFLCN_DPF;
+	IXGBE_WRITE_REG(hw, IXGBE_MFLCN, mflcn_reg);
+	IXGBE_WRITE_REG(hw, IXGBE_FCCFG, fccfg_reg);
 
 	/* XXX: Should we set IXGBE_FCRTL_82599 & IXGBE_FCRTH_82599 here ? */
 
-        return;
+	return;
 }
 
 s32 ixgbe_get_mac_addr_generic(struct ixgbe_hw *hw, u8 *mac_addr){
