@@ -739,6 +739,9 @@ static int uio_ixgbe_up(struct uio_ixgbe_udapter *ud){
 		pr_info("link setup complete\n");
 	}
 
+	/* Setup flow control: Though we don't support flow control */
+	ixgbe_setup_fc(hw);
+
 	/* clear any pending interrupts, may auto mask */
 	IXGBE_READ_REG(hw, IXGBE_EICR);
 

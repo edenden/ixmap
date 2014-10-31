@@ -1,5 +1,5 @@
 s32 ixgbe_init_hw_generic(struct ixgbe_hw *hw);
-s32 ixgbe_start_hw_generic(struct ixgbe_hw *hw);
+void ixgbe_start_hw_generic(struct ixgbe_hw *hw);
 s32 ixgbe_get_mac_addr_generic(struct ixgbe_hw *hw, u8 *mac_addr);
 s32 ixgbe_stop_adapter_generic(struct ixgbe_hw *hw);
 s32 ixgbe_init_rx_addrs_generic(struct ixgbe_hw *hw);
@@ -8,7 +8,7 @@ s32 ixgbe_set_fw_drv_ver_generic(struct ixgbe_hw *hw, u8 maj, u8 min, u8 build, 
 s32 ixgbe_check_mac_link_generic(struct ixgbe_hw *hw, u32 *speed,
 				 bool *link_up, bool link_up_wait_to_complete);
 u16 ixgbe_get_pcie_msix_count_generic(struct ixgbe_hw *hw);
-s32 ixgbe_start_hw_gen2(struct ixgbe_hw *hw);
+void ixgbe_start_hw_gen2(struct ixgbe_hw *hw);
 bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw);
 void ixgbe_clear_tx_pending(struct ixgbe_hw *hw);
 s32 ixgbe_disable_pcie_master(struct ixgbe_hw *hw);
@@ -21,6 +21,7 @@ s32 ixgbe_set_rar_generic(struct ixgbe_hw *hw, u32 index, u8 *addr, u32 vmdq,
 s32 ixgbe_clear_vfta_generic(struct ixgbe_hw *hw);
 s32 ixgbe_clear_hw_cntrs_generic(struct ixgbe_hw *hw);
 void ixgbe_set_lan_id_multi_port_pcie(struct ixgbe_hw *hw);
+void ixgbe_setup_fc(struct ixgbe_hw *hw);
 
 static inline bool IXGBE_REMOVED(void __iomem *addr)
 {

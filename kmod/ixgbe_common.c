@@ -26,7 +26,6 @@
 #include "ixgbe_eeprom.h"
 #include "ixgbe_uio.h"
 
-static s32 ixgbe_setup_fc(struct ixgbe_hw *hw);
 static u32 ixgbe_pcie_timeout_poll(struct ixgbe_hw *hw);
 
 s32 ixgbe_init_hw_generic(struct ixgbe_hw *hw){
@@ -43,9 +42,8 @@ s32 ixgbe_init_hw_generic(struct ixgbe_hw *hw){
 	return status;
 }
 
-s32 ixgbe_start_hw_generic(struct ixgbe_hw *hw)
+void ixgbe_start_hw_generic(struct ixgbe_hw *hw)
 {
-	s32 ret_val;
 	u32 ctrl_ext;
 
 	/* Set the media type */
@@ -65,19 +63,13 @@ s32 ixgbe_start_hw_generic(struct ixgbe_hw *hw)
 	IXGBE_WRITE_REG(hw, IXGBE_CTRL_EXT, ctrl_ext);
 	IXGBE_WRITE_FLUSH(hw);
 
-	/* Setup flow control: Though we don't support flow control */
-	ret_val = ixgbe_setup_fc(hw);
-	if (ret_val != 0)
-		goto out;
-
 	/* Clear adapter stopped flag */
 	hw->adapter_stopped = false;
 
-out:
-	return ret_val;
+	return;
 }
 
-s32 ixgbe_start_hw_gen2(struct ixgbe_hw *hw)
+void ixgbe_start_hw_gen2(struct ixgbe_hw *hw)
 {
 	u32 i;
 	u32 regval;
@@ -103,7 +95,7 @@ s32 ixgbe_start_hw_gen2(struct ixgbe_hw *hw)
 		IXGBE_WRITE_REG(hw, IXGBE_DCA_RXCTRL(i), regval);
 	}
 
-	return 0;
+	return;
 }
 
 bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw)
@@ -129,39 +121,31 @@ bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw)
 	return supported;
 }
 
-static s32 ixgbe_setup_fc(struct ixgbe_hw *hw)
+void ixgbe_setup_fc(struct ixgbe_hw *hw)
 {
-	s32 ret_val = 0;
-	u32 reg = 0;
+        u32 mflcn_reg, fccfg_reg;
+
+        /* Disable any previous flow control settings */
+        mflcn_reg = IXGBE_READ_REG(hw, IXGBE_MFLCN);
+        mflcn_reg &= ~(IXGBE_MFLCN_RPFCE_MASK | IXGBE_MFLCN_RFCE);
+
+        fccfg_reg = IXGBE_READ_REG(hw, IXGBE_FCCFG);
+        fccfg_reg &= ~(IXGBE_FCCFG_TFCE_802_3X | IXGBE_FCCFG_TFCE_PRIORITY);
 
 	/*
-	 * Set up the 1G and 10G flow control advertisement registers so the
-	 * HW will be able to do fc autoneg once the cable is plugged in.  If
-	 * we link at 10G, the 1G advertisement is harmless and vice versa.
+	 * Flow control is disabled by software override or autoneg.
+	 * The code below will actually disable it in the HW.
 	 */
-	switch (hw->phy.media_type) {
-	case ixgbe_media_type_fiber:
-		reg = IXGBE_READ_REG(hw, IXGBE_PCS1GANA);
-		break;
-	default:
-		break;
-	}
 
-	/* Flow control completely disabled by software override. */
-	reg &= ~(IXGBE_PCS1GANA_SYM_PAUSE | IXGBE_PCS1GANA_ASM_PAUSE);
+        /* Set 802.3x based flow control settings. */
+        mflcn_reg |= IXGBE_MFLCN_DPF;
+        IXGBE_WRITE_REG(hw, IXGBE_MFLCN, mflcn_reg);
+        IXGBE_WRITE_REG(hw, IXGBE_FCCFG, fccfg_reg);
 
-	if (hw->mac.type < ixgbe_mac_X540) {
-		/*
-		 * Enable auto-negotiation between the MAC & PHY;
-		 * the MAC will advertise clause 37 flow control.
-		 */
-		IXGBE_WRITE_REG(hw, IXGBE_PCS1GANA, reg);
-	}
+	/* XXX: Should we set IXGBE_FCRTL_82599 & IXGBE_FCRTH_82599 here ? */
 
-	return ret_val;
+        return;
 }
-
-
 
 s32 ixgbe_get_mac_addr_generic(struct ixgbe_hw *hw, u8 *mac_addr){
 	u32 rar_high;

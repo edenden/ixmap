@@ -236,15 +236,6 @@ struct ixgbe_hw;
 #define IXGBE_CTRL_RST_MASK     (IXGBE_CTRL_LNK_RST | IXGBE_CTRL_RST)
 
 /* MAC Registers */
-#define IXGBE_PCS1GCFIG	 0x04200
-#define IXGBE_PCS1GLCTL	 0x04208
-#define IXGBE_PCS1GLSTA	 0x0420C
-#define IXGBE_PCS1GDBG0	 0x04210
-#define IXGBE_PCS1GDBG1	 0x04214
-#define IXGBE_PCS1GANA	  0x04218
-#define IXGBE_PCS1GANLP	 0x0421C
-#define IXGBE_PCS1GANNP	 0x04220
-#define IXGBE_PCS1GANLPNP       0x04224
 #define IXGBE_HLREG0	    0x04240
 #define IXGBE_HLREG1	    0x04244
 #define IXGBE_PAP	       0x04248
@@ -764,6 +755,12 @@ typedef u32 ixgbe_link_speed;
 #define IXGBE_VLVF(_i)  (0x0F100 + ((_i) * 4))  /* 64 of these (0-63) */
 #define IXGBE_VLVFB(_i) (0x0F200 + ((_i) * 4))  /* 128 of these (0-127) */
 #define IXGBE_VLVF_ENTRIES	      64
+#define IXGBE_FCCFG             0x03D00
+#define IXGBE_MFLCN_DPF         0x00000002 /* Discard Pause Frame */
+#define IXGBE_MFLCN_RFCE        0x00000008 /* Receive FC Enable */
+#define IXGBE_MFLCN_RPFCE_MASK  0x00000FF4 /* Rx Priority FC bitmap mask */
+#define IXGBE_FCCFG_TFCE_802_3X         0x00000008 /* Tx link FC enable */
+#define IXGBE_FCCFG_TFCE_PRIORITY       0x00000010 /* Tx priority FC enable */
 
 /* Error Codes */
 #define IXGBE_ERR_EEPROM			-1
@@ -856,15 +853,6 @@ enum ixgbe_eeprom_type {
 	ixgbe_eeprom_spi,
 	ixgbe_flash,
 	ixgbe_eeprom_none /* No NVM support */
-};
-
-/* Flow Control Settings */
-enum ixgbe_fc_mode {
-	ixgbe_fc_none = 0,
-	ixgbe_fc_rx_pause,
-	ixgbe_fc_tx_pause,
-	ixgbe_fc_full,
-	ixgbe_fc_default
 };
 
 /* Function pointer table */

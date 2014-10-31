@@ -213,20 +213,14 @@ reset_hw_out:
 s32 ixgbe_start_hw_82599(struct ixgbe_hw *hw){
 	s32 ret_val = 0;
 
-	ret_val = ixgbe_start_hw_generic(hw);
-	if (ret_val != 0)
-		goto out;
-
-	ret_val = ixgbe_start_hw_gen2(hw);
-	if (ret_val != 0)
-		goto out;
+	ixgbe_start_hw_generic(hw);
+	ixgbe_start_hw_gen2(hw);
 
 	/* We need to run link autotry after the driver loads */
 	hw->mac.autotry_restart = true;
 
-	if (ret_val == 0)
-		ret_val = ixgbe_verify_fw_version_82599(hw);
-out:
+	ret_val = ixgbe_verify_fw_version_82599(hw);
+
 	return ret_val;
 }
 
