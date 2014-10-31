@@ -55,7 +55,6 @@ union ixgbe_adv_tx_desc {
 
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
-#define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
 
 static inline uint32_t readl(const volatile void *addr)
 {
@@ -77,6 +76,15 @@ static inline void IXGBE_WRITE_REG(struct ixgbe_handler *ih, uint32_t reg, uint3
 {
 	writel(value, ih->bar + reg);
 	return;
+}
+
+/* ixgbe_desc_unused - calculate if we have unused descriptors */
+static inline u16 ixgbe_desc_unused(struct ixgbe_ring *ring)
+{
+        u16 ntc = ring->next_to_clean;
+        u16 ntu = ring->next_to_use;
+
+        return ((ntc > ntu) ? 0 : ring->count) + ntc - ntu - 1;
 }
 
 void *process_interrupt(void *data);
