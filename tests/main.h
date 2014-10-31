@@ -28,6 +28,8 @@ struct uio_ixgbe_info {
 	uint8_t		mac_addr[ETH_ALEN];
 	uint16_t	phy_type;
 
+	uint16_t	max_interrupt_rate;
+	uint16_t	num_interrupt_rate;
 	uint32_t        num_rx_queues;
 	uint32_t        num_tx_queues;
 	uint32_t        max_rx_queues;
@@ -59,6 +61,7 @@ struct ixgbe_handle {
 	uint32_t		bar_size;
 	uint64_t		mmapped_offset;
 	uint32_t		num_queues;
+	uint16_t		num_interrupt_rate;
 
 	struct ixgbe_ring	*tx_ring;
 	struct ixgbe_ring	*rx_ring;

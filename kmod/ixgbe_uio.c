@@ -492,7 +492,7 @@ static irqreturn_t uio_ixgbe_interrupt(int irq, void *data)
 
 void uio_ixgbe_write_eitr(struct uio_ixgbe_udapter *ud, int vector){
 	struct ixgbe_hw *hw = ud->hw;
-	u32 itr_reg = IXGBE_20K_ITR & IXGBE_MAX_EITR;
+	u32 itr_reg = ud->num_interrupt_rate & IXGBE_MAX_EITR;
 
 	/*
 	 * set the WDIS bit to not clear the timer bits and cause an
@@ -768,6 +768,10 @@ static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp){
 
 	IXGBE_DBG("open req\n");
 
+	if(req.info.num_interrupt_rate > IXGBE_MAX_EITR){
+		return -EINVAL;
+	}
+
 	if(req.info.num_rx_queues > IXGBE_MAX_RSS_INDICES){
 		return -EINVAL;
 	}
@@ -776,6 +780,7 @@ static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp){
 		return -EINVAL;
 	}
 
+	ud->num_interrupt_rate = req.info.num_interrupt_rate;
 	ud->num_rx_queues = req.info.num_rx_queues;
 	ud->num_tx_queues = req.info.num_tx_queues;
 
@@ -833,6 +838,7 @@ static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud){
 	/* free irqs */
 	uio_ixgbe_free_msix(ud);
 
+	ud->num_interrupt_rate = 0;
 	ud->num_rx_queues = 0;
 	ud->num_tx_queues = 0;
 
@@ -1001,6 +1007,9 @@ static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixg
 	memcpy(info->mac_addr, hw->mac.perm_addr, ETH_ALEN);
 	info->mac_type = hw->mac.type;
 	info->phy_type = hw->phy.type;
+
+	info->num_interrupt_rate = ud->num_interrupt_rate;
+	info->max_interrupt_rate = IXGBE_MAX_EITR;
 
 	info->num_rx_queues = ud->num_rx_queues;
 	info->num_tx_queues = ud->num_tx_queues;

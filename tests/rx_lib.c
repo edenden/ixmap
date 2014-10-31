@@ -8,7 +8,7 @@
 
 #include "main.h"
 #include "forward.h"
-#include "rx.h"
+#include "rx_lib.h"
 
 void ixgbe_configure_rx(struct ixgbe_handler *ih)
 {

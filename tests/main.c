@@ -226,6 +226,10 @@ static struct ixgbe_handle *ixgbe_open(char *int_name)
 
 	/* UP the device */
 	memset(&req_up, 0, sizeof(struct uio_ixgbe_up_req));
+
+	ih->num_interrupt_rate = min(IXGBE_8K_ITR, req_info.info.max_interrupt_rate);
+	req_up.info.num_interrupt_rate = ih->num_interrupt_rate;
+
 	ih->num_queues = min(req_info.info.max_rx_queues, req_info.info.max_tx_queues);
 	req_up.info.num_rx_queues = ih->num_queues;
 	req_up.info.num_tx_queues = ih->num_queues;
