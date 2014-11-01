@@ -84,52 +84,47 @@ void *process_interrupt(void *data)
 	return NULL;
 }
 
-static void ixgbe_irq_enable_queues(struct ixgbe_adapter *adapter, u64 qmask)
+static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 {
         u32 mask;
-        struct ixgbe_hw *hw = &adapter->hw;
 
-        switch (hw->mac.type) {
-        case ixgbe_mac_82598EB:
-                mask = (IXGBE_EIMS_RTX_QUEUE & qmask);
-                IXGBE_WRITE_REG(hw, IXGBE_EIMS, mask);
-                break;
-        case ixgbe_mac_82599EB:
-        case ixgbe_mac_X540:
-                mask = (qmask & 0xFFFFFFFF);
-                if (mask)
-                        IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(0), mask);
-                mask = (qmask >> 32);
-                if (mask)
-                        IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(1), mask);
-                break;
-        default:
-                break;
-        }
+	mask = (qmask & 0xFFFFFFFF);
+	if (mask)
+		IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(0), mask);
+	mask = (qmask >> 32);
+	if (mask)
+		IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(1), mask);
         /* skip the flush */
 }
 
 void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 cleaned_count)
 {
         union ixgbe_adv_rx_desc *rx_desc;
-        u16 i = rx_ring->next_to_use;
+	dma_addr_t addr_dma;
+        uint16_t i = rx_ring->next_to_use;
 
         /* nothing to do */
         if (!cleaned_count)
                 return;
 
         rx_desc = IXGBE_RX_DESC(rx_ring, i);
+
+	/*
+	 * To know that rx_desc arrives rear of descripter buffer.
+	 * (For unlikely(!i)... process)
+	 */
         i -= rx_ring->count;
 
         do {
-                if (!ixgbe_alloc_mapped_skb(rx_ring, bi))
+		addr_dma = ixgbe_assign_buffer(rx_ring);
+		if(!addr_dma)
                         break;
 
                 /*
                  * Refresh the desc even if buffer_addrs didn't change
                  * because each write-back erases this info.
                  */
-                rx_desc->read.pkt_addr = cpu_to_le64(bi->dma);
+                rx_desc->read.pkt_addr = cpu_to_le64(addr_dma);
                 rx_desc++;
                 i++;
                 if (unlikely(!i)) {
@@ -145,8 +140,17 @@ void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 cleaned_count)
 
         i += rx_ring->count;
 
-        if (rx_ring->next_to_use != i)
-                ixgbe_release_rx_desc(rx_ring, i);
+        if (rx_ring->next_to_use != i){
+		rx_ring->next_to_use = i;
+		/*
+		 * Force memory writes to complete before letting h/w
+		 * know there are new descriptors to fetch.  (Only
+		 * applicable for weak-ordered memory model archs,
+		 * such as IA-64).
+		 */
+		wmb();
+		ixgbe_write_tail(rx_ring, i);
+	}
 }
 
 static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,

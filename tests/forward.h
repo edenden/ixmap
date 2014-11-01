@@ -87,4 +87,16 @@ static inline u16 ixgbe_desc_unused(struct ixgbe_ring *ring)
         return ((ntc > ntu) ? 0 : ring->count) + ntc - ntu - 1;
 }
 
+/* ixgbe_test_staterr - tests bits in Rx descriptor status and error fields */
+static inline __le32 ixgbe_test_staterr(union ixgbe_adv_rx_desc *rx_desc,
+                                        const u32 stat_err_bits)
+{
+        return rx_desc->wb.upper.status_error & cpu_to_le32(stat_err_bits);
+}
+
+static inline void ixgbe_write_tail(struct ixgbe_ring *ring, u32 value)
+{
+	writel(value, ring->tail);
+}
+
 void *process_interrupt(void *data);

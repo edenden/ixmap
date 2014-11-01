@@ -470,14 +470,8 @@ static void uio_ixgbe_io_resume(struct pci_dev *pdev)
 static irqreturn_t uio_ixgbe_interrupt(int irq, void *data)
 {
 	struct ixgbe_irqdev *irqdev = data;
-	struct ixgbe_hw *hw = irqdev->ud->hw;
-	uint32_t eicr;
 
-	eicr = IXGBE_READ_REG(hw, IXGBE_EICR);
-	if (unlikely(!eicr))
-		return IRQ_NONE;
-
-	(void) xchg(&irqdev->eicr, eicr);
+	atomic_inc(&irqdev->count_interrupt);
 
 	/* 
 	 * We setup EIAM such that interrupts are auto-masked (disabled).
@@ -611,6 +605,7 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 		irqdev->ud = ud;
 		irqdev->msix_entry = entry;
 		atomic_set(&irqdev->refcount, 1);
+		atomic_set(&irqdev->count_interrupt, 0);
 		sema_init(&irqdev->sem, 1);
 		init_waitqueue_head(&irqdev->read_wait);
 
@@ -657,6 +652,7 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 		irqdev->ud = ud;
 		irqdev->msix_entry = entry;
 		atomic_set(&irqdev->refcount, 1);
+		atomic_set(&irqdev->count_interrupt, 0);
 		sema_init(&irqdev->sem, 1);
 		init_waitqueue_head(&irqdev->read_wait);
 
@@ -1145,15 +1141,17 @@ static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
 static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait)
 {
+	uint32_t count_interrupt;
 	unsigned int mask = POLLOUT | POLLWRNORM;
 	struct ixgbe_irqdev *irqdev = file->private_data;
 	if (!irqdev)
 		return -EBADFD;
 
-	IXGBE_DBG("poll eicr=0x%x\n", irqdev->eicr);
+	count_interrupt = atomic_read(&irqdev->count_interrupt);
+	IXGBE_DBG("poll count_interrupt=0x%x\n", count_interrupt);
 
 	poll_wait(file, &irqdev->read_wait, wait);
-	if (irqdev->eicr)
+	if (count_interrupt)
 		mask |= POLLIN | POLLRDNORM;
 
 	return mask;
@@ -1164,24 +1162,21 @@ static ssize_t ixgbe_read_irq(struct file * file, char __user * buf,
 {
 	struct ixgbe_irqdev *irqdev = file->private_data;
 	DECLARE_WAITQUEUE(wait, current);
-	uint32_t eicr;
+	uint32_t count_interrupt;
 	int err;
 
 	if (!irqdev)
 		return -EBADFD;
 
-	if (count < sizeof(eicr))
+	if (count < sizeof(count_interrupt))
 		return -EINVAL;
 
 	add_wait_queue(&irqdev->read_wait, &wait);
 	while (count) {
 		set_current_state(TASK_INTERRUPTIBLE);
+		count_interrupt = atomic_xchg(&irqdev->count_interrupt, 0);
 
-		eicr = xchg(&irqdev->eicr, 0);
-
-		IXGBE_DBG("read eicr 0x%x\n", eicr);
-
-		if (!eicr) {
+		if (!count_interrupt) {
 			if (file->f_flags & O_NONBLOCK) {
 				err = -EAGAIN;
 				break;
@@ -1195,10 +1190,10 @@ static ssize_t ixgbe_read_irq(struct file * file, char __user * buf,
 			schedule();
 			continue;
 		}
-		if (copy_to_user(buf, &eicr, sizeof(eicr)))
+		if (copy_to_user(buf, &count_interrupt, sizeof(count_interrupt)))
 			err = -EFAULT;
 		else
-			err = sizeof(eicr);
+			err = sizeof(count_interrupt);
 		break;
 	}
 

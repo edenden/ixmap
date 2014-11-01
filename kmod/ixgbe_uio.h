@@ -72,7 +72,7 @@ struct ixgbe_irqdev {
 
 	struct msix_entry		*msix_entry;
 	wait_queue_head_t		read_wait;
-	uint32_t			eicr;
+	atomic_t			count_interrupt;
 };
 
 /* MAC and PHY info */
