@@ -24,6 +24,7 @@ void *process_interrupt(void *data)
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int fd_ep, fd_intrx, fd_inttx, i, num_fd;
 	char filename[FILENAME_SIZE];
+	uint64_t qmask;
 
 	/* Rx interrupt fd preparing */
 	snprintf(filename, sizeof(filename),
@@ -57,6 +58,7 @@ void *process_interrupt(void *data)
 	}
 
 	ixgbe_alloc_rx_buffers(ring, ixgbe_desc_unused(ring));
+	qmask = 1 << thread->index;
 
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
@@ -69,14 +71,15 @@ void *process_interrupt(void *data)
 			if(events[i].data.fd == fd_intrx){
 				/* Rx descripter cleaning */
 
-				ixgbe_clean_rx_irq(q_vector, ring, per_ring_budget);
-				ixgbe_irq_enable_queues(adapter, ((u64)1 << q_vector->v_idx));
+				ixgbe_clean_rx_irq(ring, budget);
+				ixgbe_irq_enable_queues(ih, qmask);
 
 			}else if(events[i].data.fd == fd_inttx){
 				/* Tx descripter cleaning */
 
-				ixgbe_clean_tx_irq(q_vector, ring);
-				ixgbe_irq_enable_queues(adapter, ((u64)1 << q_vector->v_idx));
+				ixgbe_clean_tx_irq(ring, budget);
+				ixgbe_irq_enable_queues(ih, qmask);
+
 			}
 		}
 	}
@@ -94,7 +97,7 @@ static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 	mask = (qmask >> 32);
 	if (mask)
 		IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(1), mask);
-        /* skip the flush */
+	return;
 }
 
 void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 cleaned_count)
@@ -212,7 +215,7 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
         return total_rx_packets;
 }
 
-static bool ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
+static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
 	int budget)
 {
         union ixgbe_adv_tx_desc *tx_desc;
