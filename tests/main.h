@@ -38,9 +38,9 @@ struct uio_ixgbe_info {
 };
 
 struct ixgbe_ring {
-	void		*vaddr;
+	void		*addr_virtual;
+	uint64_t	addr_dma;
 	uint32_t	count;
-	uint64_t	paddr;
 
 	uint8_t __iomem	*tail;
 	uint16_t	next_to_use;
@@ -48,18 +48,17 @@ struct ixgbe_ring {
 };
 
 struct ixgbe_buf {
-	void		*vaddr;
+	void		*addr_virtual;
+	uint64_t	addr_dma;
 	uint32_t	mtu_frame;
 	uint32_t	buf_size;
 	uint32_t	count;
-	uint64_t	paddr;
 };
 
 struct ixgbe_handle {
  	int			fd;
 	void			*bar;
 	uint32_t		bar_size;
-	uint64_t		mmapped_offset;
 	uint32_t		num_queues;
 	uint16_t		num_interrupt_rate;
 
@@ -70,7 +69,7 @@ struct ixgbe_handle {
 	uint32_t		promisc;
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
-	struct uio_ixgbe_info info;
+	struct uio_ixgbe_info	info;
 };
 
 /* Ioctl defines */
@@ -85,22 +84,15 @@ struct uio_ixgbe_up_req {
 	struct uio_ixgbe_info info;
 };
 
-#define UIO_IXGBE_MALLOC _IOW('U', 208, int)
-enum {
-	IXGBE_DMA_CACHE_DEFAULT = 0,
-	IXGBE_DMA_CACHE_DISABLE,
-	IXGBE_DMA_CACHE_WRITECOMBINE
-};
-struct uio_ixgbe_malloc_req {
-        uint64_t mmap_offset;
-	uint64_t physical_addr;
+#define UIO_IXGBE_DMAMAP _IOW('U', 210, int)
+struct uio_ixgbe_dmamap_req {
+        uint64_t addr_virtual;
+        uint64_t addr_dma;
         uint32_t size;
-        uint16_t numa_node;
         uint16_t cache;
 };
 
-#define UIO_IXGBE_MFREE  _IOW('U', 209, int)
-struct uio_ixgbe_mfree_req {
-        uint64_t mmap_offset;
+#define UIO_IXGBE_DMAUNMAP  _IOW('U', 211, int)
+struct uio_ixgbe_dmaunmap_req {
+        uint64_t addr_dma;
 };
-

@@ -18,6 +18,7 @@
 static int mtu_frame = 1518;
 static int buf_count = 1024;
 static char *ixgbe_interface = "ixgbe1";
+static int huge_page = 2 * 1024 * 1024;
 
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
@@ -84,7 +85,7 @@ int main(int argc, char **argv)
 		sleep(30);
 	}
 
-	/* TBD: free allocated DMA areas */
+	/* TBD: release mapped DMA areas */
 
 	ixgbe_close(ih);
 
@@ -94,7 +95,6 @@ int main(int argc, char **argv)
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc)
 {
-	uint64_t offset = ih->mmapped_offset;
 	int ret, i;
 
 	ih->rx_ring = malloc(sizeof(struct ixgbe_ring) * ih->num_queues);
@@ -103,101 +103,99 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	/* Rx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++){
 		uint32_t size;
-		uint64_t paddr;
+		uint64_t addr_virtual;
+		uint64_t addr_dma;
 
 		size = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
-		size = ALIGN(size, 4096);
-		ret = ixgbe_malloc(ih, &offset, &paddr, size, 0);
+		size = ALIGN(size, huge_page_size);
+
+		addr_virtual = mmap(NULL, size,
+			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+		if(addr_virtual == MAP_FAILED)
+			return 1;
+
+		ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
 		if(ret < 0)
 			return -1;
 
-		ih->rx_ring[i].paddr = paddr;
-		ih->rx_ring[i].vaddr = mmap(NULL, size,
-				PROT_READ | PROT_WRITE, MAP_SHARED, ih->fd, offset);
-		if(ih->rx_ring[i].vaddr == MAP_FAILED)
-			return -1;
-
+		ih->rx_ring[i].addr_dma = addr_dma;
+		ih->rx_ring[i].addr_virtual = addr_virtual;
 		ih->rx_ring[i].count = num_rx_desc;
-
-		offset += size;
 	}
 
 	/* Tx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++){
-		uint32_t size;
-		uint64_t paddr;
+                uint32_t size;
+                uint64_t addr_virtual;
+                uint64_t addr_dma;
 
-		size = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
-		size = ALIGN(size, 4096);
-		ret = ixgbe_malloc(ih, &offset, &paddr, size, 0);
-		if(ret < 0)
-			return -1;
+                size = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
+                size = ALIGN(size, huge_page_size);
 
-		ih->tx_ring[i].paddr = paddr;
-		ih->tx_ring[i].vaddr = mmap(NULL, size,
-			PROT_READ | PROT_WRITE, MAP_SHARED, ih->fd, offset);
-		if(ih->tx_ring[i].vaddr == MAP_FAILED)
-			return -1;
+                addr_virtual = mmap(NULL, size,
+                        PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+                if(addr_virtual == MAP_FAILED)
+                        return 1;
 
-		ih->tx_ring[i].count = num_tx_desc;
+                ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
+                if(ret < 0)
+                        return -1;
 
-		offset += size;
+                ih->tx_ring[i].addr_dma = addr_dma;
+                ih->tx_ring[i].addr_virtual = addr_virtual;
+                ih->tx_ring[i].count = num_tx_desc;
         }
 
-	ih->mmapped_offset = offset;
 	return 0;
 }
 
 static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count)
 {
-	uint64_t offset = ih->mmapped_offset;
 	int ret, i;
 
 	ih->buf = malloc(sizeof(struct ixgbe_buf) * ih->num_queues);
 
 	for(i = 0; i < ih->num_queues; i++){
-		uint64_t paddr;
-		uint32_t size = ih->bufsize * count;
+                uint32_t size;
+                uint64_t addr_virtual;
+                uint64_t addr_dma;
 
-		size = ALIGN(size, 4094);
-		ret = ixgbe_malloc(ih, &offset, &paddr, size, 0);
-		if(ret < 0)
-			return -1;
+		size = ih->bufsize * count;
+                size = ALIGN(size, huge_page_size);
 
-		ih->buf[i].paddr = paddr;
-		ih->buf[i].vaddr = mmap(NULL, size,
-			PROT_READ | PROT_WRITE, MAP_SHARED, ih->fd, offset);
-		if(ih->buf[i].vaddr == MAP_FAILED)
-			return -1;
+                addr_virtual = mmap(NULL, size,
+                        PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+                if(addr_virtual == MAP_FAILED)
+                        return 1;
 
+                ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
+                if(ret < 0)
+                        return -1;
+
+                ih->buf[i].addr_dma = addr_dma;
+                ih->buf[i].addr_virtual = addr_virtual;
 		ih->buf[i].buf_size = ih->buf_size;
-		ih->buf[i].mtu_frame = ih->mtu_frame;
-		ih->buf[i].count = count;
-
-		offset += size;
+                ih->buf[i].mtu_frame = ih->mtu_frame;
+                ih->buf[i].count = count;
 	}
 
-	ih->mmapped_offset = offset;
 	return 0;
 }
 
-static int ixgbe_malloc(struct ixgbe_handle *ih,
-	uint64_t *offset, uint64_t *paddr, uint32_t size, uint16_t numa_node)
+static int ixgbe_dma_map(struct ixgbe_handle *ih,
+	uint64_t addr_virtual, uint64_t *addr_dma, uint32_t size)
 {
-	struct uio_ixgbe_malloc_req req_malloc;
+	struct uio_ixgbe_dmamap_req req_dmamap;
 
-	
-	req_malloc.mmap_offset = *offset;
-	req_malloc.physical_addr = 0;
-	req_malloc.size = size;
-	req_malloc.numa_node = numa_node;
-	req_malloc.cache = IXGBE_DMA_CACHE_DISABLE;
+	req_dmamap.addr_virtual = addr_virtual;
+	req_dmamap.addr_dma = 0;
+	req_dmamap.size = size;
+	req_dmamap.cache = IXGBE_DMA_CACHE_DISABLE;
 
-	if(ioctl(ih->fd, UIO_IXGBE_MALLOC, (unsigned long)&req_malloc) < 0)
+	if(ioctl(ih->fd, UIO_IXGBE_DMAMAP, (unsigned long)&req_dmamap) < 0)
 		return -1;
 
-	*offset = req_malloc.mmap_offset;
-	*paddr = req_malloc.physical_addr;
+	*addr_dma = req_dmamap.addr_dma;
 	return 0;
 }
 
@@ -240,13 +238,13 @@ static struct ixgbe_handle *ixgbe_open(char *int_name)
 	ih->info = req_up.info;
 
 	/* Map PCI config register space */
-	ih->bar = mmap(NULL, ih->info.mmio_size, PROT_READ | PROT_WRITE, MAP_SHARED, ih->fd, 0);
+	ih->bar = mmap(NULL, ih->info.mmio_size,
+		PROT_READ | PROT_WRITE, MAP_SHARED, ih->fd, 0);
 	if(ih->bar == MAP_FAILED)
 		goto failed;
 
 	ih->bar_size = req_up.info.mmio_size;
 	ih->promisc = 0;
-	ih->mmapped_offset = ih->bar_size;
 
 	return ih;
 
