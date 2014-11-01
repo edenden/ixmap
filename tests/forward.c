@@ -247,6 +247,9 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
 		total_tx_packets++;
 	} while (likely(total_tx_packets < budget));
 
+	i += tx_ring->count;
+	tx_ring->next_to_clean = i;
+
 out:
         return total_tx_packets;
 }
