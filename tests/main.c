@@ -107,7 +107,10 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		uint64_t addr_dma;
 
 		size = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
-		size = ALIGN(size, huge_page_size);
+		if(size > huge_page_size){
+			printf("rx descripter size is larger than hugetlb\n");
+			return -1;
+		}
 
 		addr_virtual = mmap(NULL, size,
 			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
@@ -130,7 +133,10 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
                 uint64_t addr_dma;
 
                 size = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
-                size = ALIGN(size, huge_page_size);
+		if(size > huge_page_size){
+			printf("tx descripter size is larger than hugetlb\n");
+			return -1;
+		}
 
                 addr_virtual = mmap(NULL, size,
                         PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
@@ -161,7 +167,10 @@ static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count)
                 uint64_t addr_dma;
 
 		size = ih->bufsize * count;
-                size = ALIGN(size, huge_page_size);
+		if(size > huge_page_size){
+			printf("buffer size is larger than hugetlb\n");
+			return -1;
+		}
 
                 addr_virtual = mmap(NULL, size,
                         PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
