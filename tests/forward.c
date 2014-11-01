@@ -158,6 +158,7 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
 {
         unsigned int total_rx_packets = 0;
         uint16_t cleaned_count = ixgbe_desc_unused(rx_ring);
+	uint32_t next_to_clean;
 
         do {
                 union ixgbe_adv_rx_desc *rx_desc;
@@ -171,6 +172,9 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
                 rx_desc = IXGBE_RX_DESC(rx_ring, rx_ring->next_to_clean);
 
                 if (!ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_DD))
+                        break;
+
+                if(!ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_EOP))
                         break;
 
                 /*
@@ -188,10 +192,9 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
                         break;
 
                 cleaned_count++;
-
-                /* place incomplete frames back on ring for completion */
-                if (ixgbe_is_non_eop(rx_ring, rx_desc, skb))
-                        continue;
+		next_to_clean = rx_ring->next_to_clean + 1;
+		rx_ring->next_to_clean = 
+			(next_to_clean < rx_ring->count) ? next_to_clean : 0;
 
 		/* verify that the packet does not have any known errors */
 		if (unlikely(ixgbe_test_staterr(rx_desc,
@@ -243,12 +246,6 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
 
 		total_tx_packets++;
 	} while (likely(total_tx_packets < budget));
-
-        if (check_for_tx_hang(tx_ring) && ixgbe_check_tx_hang(tx_ring)) {
-                /* schedule immediate reset if we believe we hung */
-                printf("Detected Tx Unit Hang\n");
-                return true;
-        }
 
 out:
         return total_tx_packets;
