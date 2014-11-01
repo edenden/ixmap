@@ -25,8 +25,8 @@
 static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud);
 static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud);
 static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixgbe_info *info);
-static int uio_ixgbe_cmd_malloc(struct uio_ixgbe_udapter *ud, void __user *argp);
-static int uio_ixgbe_cmd_mfree(struct uio_ixgbe_udapter *ud, void __user *argp);
+static int uio_ixgbe_cmd_dmamap(struct uio_ixgbe_udapter *ud, void __user *argp);
+static int uio_ixgbe_cmd_dmaunmap(struct uio_ixgbe_udapter *ud, void __user *argp);
 static void uio_ixgbe_reset(struct uio_ixgbe_udapter *ud);
 static irqreturn_t uio_ixgbe_interrupt(int irq, void *data);
 static ssize_t uio_ixgbe_read(struct file * file, char __user * buf,
@@ -275,15 +275,13 @@ static int uio_ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent
 		ud->dma_mask = DMA_BIT_MASK(32);
 	}
 
-	hw->hw_addr = ioremap(ud->iobase, ud->iolen);
+	/* setup for userland pci register access */
+	INIT_LIST_HEAD(&ud->areas);
+	hw->hw_addr = ixgbe_dma_map_iobase(ud);
 	if (!hw->hw_addr) {
 		err = -EIO;
 		goto err_ioremap;
 	}
-
-	/* setup for userland pci register access */
-	INIT_LIST_HEAD(&ud->areas);
-	ixgbe_dma_iobase(ud);
 
 	/* setup for userland interrupt notification */
 	INIT_LIST_HEAD(&ud->irqdev_rx);
@@ -414,7 +412,7 @@ err_misc_register:
 	kfree(ud->miscdev.name);
 err_misc_register_alloc_name:
 err_sw_init:
-	iounmap(hw->hw_addr);
+	ixgbe_dma_unmap_all(ud);
 err_ioremap:
 	kfree(ud->hw);
 	kfree(ud);
@@ -437,7 +435,7 @@ static void uio_ixgbe_remove(struct pci_dev *pdev){
 	IXGBE_INFO("misc device %s unregistered\n", ud->miscdev.name);
 	kfree(ud->miscdev.name);
 
-	ixgbe_dma_mfree_all(ud);
+	ixgbe_dma_unmap_all(ud);
 	pci_release_selected_regions(pdev, pci_select_bars(pdev, IORESOURCE_MEM));
 	pci_disable_device(pdev);
 
@@ -1046,9 +1044,9 @@ out:
 	return err;
 }
 
-static int uio_ixgbe_cmd_malloc(struct uio_ixgbe_udapter *ud, void __user *argp){
-	struct uio_ixgbe_malloc_req req;
-	int ret;
+static int uio_ixgbe_cmd_dmamap(struct uio_ixgbe_udapter *ud, void __user *argp){
+	struct uio_ixgbe_dmamap_req req;
+	uint64_t addr_dma;
 
 	if (copy_from_user(&req, argp, sizeof(req)))
 		return -EFAULT;
@@ -1056,26 +1054,29 @@ static int uio_ixgbe_cmd_malloc(struct uio_ixgbe_udapter *ud, void __user *argp)
 	if (!req.size)
 		return -EINVAL;
 
-	ret = ixgbe_dma_malloc(ud, &req);
-	if(ret != 0)
-		return ret;
+	addr_dma = ixgbe_dma_map(ud, req.addr_virtual,
+			req.size, req.cache);
+	if(!addr_dma)
+		return -EFAULT;
+
+	req.addr_dma = addr_dma;
 
 	if (copy_to_user(argp, &req, sizeof(req))) {
-		ixgbe_dma_mfree(ud, req.mmap_offset);
+		ixgbe_dma_unmap(ud, req.addr_dma);
 		return -EFAULT;
 	}
 
 	return 0;
 }
 
-static int uio_ixgbe_cmd_mfree(struct uio_ixgbe_udapter *ud, void __user *argp){
-	struct uio_ixgbe_mfree_req req;
+static int uio_ixgbe_cmd_dmaunmap(struct uio_ixgbe_udapter *ud, void __user *argp){
+	struct uio_ixgbe_dmaunmap_req req;
 	int ret;
 
 	if (copy_from_user(&req, argp, sizeof(req)))
 		return -EFAULT;
 
-	ret = ixgbe_dma_mfree(ud, req.mmap_offset);
+	ret = ixgbe_dma_unmap(ud, req.addr_dma);
 	if(ret != 0)
 		return ret;
 
@@ -1104,12 +1105,12 @@ static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		err = uio_ixgbe_cmd_up(ud, argp);
 		break;
 
-	case UIO_IXGBE_MALLOC:
-		err = uio_ixgbe_cmd_malloc(ud, argp);
+	case UIO_IXGBE_DMAMAP:
+		err = uio_ixgbe_cmd_dmamap(ud, argp);
 		break;
 
-	case UIO_IXGBE_MFREE:
-		err = uio_ixgbe_cmd_mfree(ud, argp);
+	case UIO_IXGBE_DMAUNMAP:
+		err = uio_ixgbe_cmd_dmaunmap(ud, argp);
 		break;
 
 	case UIO_IXGBE_DOWN:
@@ -1335,7 +1336,11 @@ static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma)
 
 	IXGBE_DBG("mmap ud %p start %lu size %lu\n", ud, start, size);
 
-	area = ixgbe_dma_area_lookup(ud, offset);
+	/* Currently no area used except offset=0 for pci registers */
+	if(offset != 0)
+		return -EINVAL;
+
+	area = ixgbe_dma_area_lookup(ud, ud->iobase);
 	if (!area)
 		return -ENOENT;
 
@@ -1359,7 +1364,8 @@ static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma)
 		break;
 	}
 
-	if (remap_pfn_range(vma, start, area->paddr, size, vma->vm_page_prot))
+	if (remap_pfn_range(vma, start, area->addr_dma,
+		size, vma->vm_page_prot))
 		return -EAGAIN;
 
 	vma->vm_ops = &uio_ixgbe_mmap_ops;

@@ -123,20 +123,20 @@ struct uio_ixgbe_link_req {
 			   * after link state changed */
 };
 
-#define UIO_IXGBE_MALLOC _IOW('U', 208, int)
-struct uio_ixgbe_malloc_req {
-	uint64_t mmap_offset;
-	uint64_t physical_addr;
+#define UIO_IXGBE_DMAMAP _IOW('U', 210, int)
+struct uio_ixgbe_dmamap_req {
+	uint64_t addr_virtual;
+	uint64_t addr_dma;
 	uint32_t size;
-	uint16_t numa_node;
 	uint16_t cache;
 };
 
-#define UIO_IXGBE_MFREE  _IOW('U', 209, int)
-struct uio_ixgbe_mfree_req {
-	uint64_t mmap_offset;
+#define UIO_IXGBE_DMAUNMAP  _IOW('U', 211, int)
+struct uio_ixgbe_dmaunmap_req {
+	uint64_t addr_dma;
 };
 
 u16 ixgbe_read_pci_cfg_word(struct ixgbe_hw *hw, u32 reg);
 
 #endif /* IXGBE_IOCTL_H */
+
