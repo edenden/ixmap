@@ -99,4 +99,9 @@ static inline void ixgbe_write_tail(struct ixgbe_ring *ring, u32 value)
 	writel(value, ring->tail);
 }
 
+#define IXGBE_RX_DESC(R, i)     \
+	(&(((union ixgbe_adv_rx_desc *)((R)->desc))[i]))
+#define IXGBE_TX_DESC(R, i)     \
+	(&(((union ixgbe_adv_tx_desc *)((R)->desc))[i]))
+
 void *process_interrupt(void *data);

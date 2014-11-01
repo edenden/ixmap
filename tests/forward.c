@@ -213,72 +213,36 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
 	int budget)
 {
         union ixgbe_adv_tx_desc *tx_desc;
-        unsigned int total_packets = 0;
+        unsigned int total_tx_packets = 0;
         unsigned int i = tx_ring->next_to_clean;
 
         tx_desc = IXGBE_TX_DESC(tx_ring, i);
         i -= tx_ring->count;
 
-        do {
-                union ixgbe_adv_tx_desc *eop_desc = tx_buffer->next_to_watch;
+	union ixgbe_adv_tx_desc *eop_desc;
+	eop_desc = IXGBE_TX_DESC(tx_ring,
+		tx_ring->next_to_use ? tx_ring->next_to_use - 1 : tx_ring->count - 1);
 
-                /* if next_to_watch is not set then there is no work pending */
-                if (!eop_desc)
-                        break;
+	/* if DD is not set pending work has not been completed */
+	if (!(eop_desc->wb.status & cpu_to_le32(IXGBE_TXD_STAT_DD)))
+		goto out;
 
-                /* prevent any other reads prior to eop_desc */
-                read_barrier_depends();
+	do {
+		/* free the skb */
+		dev_kfree_skb_any(tx_buffer->skb);
 
-                /* if DD is not set pending work has not been completed */
-                if (!(eop_desc->wb.status & cpu_to_le32(IXGBE_TXD_STAT_DD)))
-                        break;
+		if(tx_desc == eop_desc)
+			break;
 
-                /* clear next_to_watch to prevent false hangs */
-                tx_buffer->next_to_watch = NULL;
+		tx_desc++;
+		i++;
+		if(unlikely(!i)){
+			i -= tx_ring->count;
+			tx_desc = IXGBE_TX_DESC(tx_ring, 0);
+		}
 
-                /* update the statistics for this packet */
-                total_packets += tx_buffer->gso_segs;
-
-                /* free the skb */
-                dev_kfree_skb_any(tx_buffer->skb);
-
-                /* unmap remaining buffers */
-                while (tx_desc != eop_desc) {
-                        tx_buffer++;
-                        tx_desc++;
-                        i++;
-                        if (unlikely(!i)) {
-                                i -= tx_ring->count;
-                                tx_buffer = tx_ring->tx_buffer_info;
-                                tx_desc = IXGBE_TX_DESC(tx_ring, 0);
-                        }
-
-                        /* unmap any remaining paged data */
-                        if (dma_unmap_len(tx_buffer, len)) {
-                                dma_unmap_page(tx_ring->dev,
-                                               dma_unmap_addr(tx_buffer, dma),
-                                               dma_unmap_len(tx_buffer, len),
-                                               DMA_TO_DEVICE);
-                                dma_unmap_len_set(tx_buffer, len, 0);
-                        }
-                }
-
-                /* move us one more past the eop_desc for start of next pkt */
-                tx_buffer++;
-                tx_desc++;
-                i++;
-                if (unlikely(!i)) {
-                        i -= tx_ring->count;
-                        tx_buffer = tx_ring->tx_buffer_info;
-                        tx_desc = IXGBE_TX_DESC(tx_ring, 0);
-                }
-
-                /* issue prefetch for next Tx descriptor */
-                prefetch(tx_desc);
-
-                /* update budget accounting */
-                budget--;
-        } while (likely(budget));
+		total_tx_packets++;
+	} while (likely(total_tx_packets < budget));
 
         if (check_for_tx_hang(tx_ring) && ixgbe_check_tx_hang(tx_ring)) {
                 /* schedule immediate reset if we believe we hung */
@@ -286,7 +250,8 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
                 return true;
         }
 
-        return !!budget;
+out:
+        return total_tx_packets;
 }
 
 static int epoll_add(int fd_ep, int fd)
