@@ -75,7 +75,7 @@ int main(int argc, char **argv)
 		threads[i].rx_ring = &ih->rx_ring[i];
 		threads[i].tx_ring = &ih->tx_ring[i];
 		threads[i].buf = &ih->buf[i];
-		threads[i].badget = badget;
+		threads[i].budget = budget;
 		if(pthread_create(&threads[i].tid,
 			NULL, process_interrupt, &threads[i]) < 0){
 			perror("failed to create thread");
