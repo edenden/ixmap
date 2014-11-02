@@ -236,9 +236,7 @@ static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 
 static inline int ixgbe_slot_assign(struct ixgbe_buf *buf)
 {
-	uint16_t next_to_use = buf->next_to_use;
 	int slot_index = -1;
-	int assigned = 0;
 
 	if(!buf->free_count)
 		goto out;
