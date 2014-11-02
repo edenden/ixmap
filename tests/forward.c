@@ -135,9 +135,9 @@ void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
                         (next_to_use < rx_ring->count) ? next_to_use : 0;
 
                 total_allocated++;
-        }while(total_allocated < max_allocation);
+        }while(likely(total_allocated < max_allocation));
 
-	if(total_allocated){
+	if(likely(total_allocated)){
 		/*
 		 * Force memory writes to complete before letting h/w
 		 * know there are new descriptors to fetch.  (Only
@@ -191,20 +191,22 @@ static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
 			(next_to_use < tx_ring->count) ? next_to_use : 0;
 
 		total_xmit++;
-	}while(total_xmit < bulk->count);
+	}while(likely(total_xmit < bulk->count));
 
-        /*
-         * Force memory writes to complete before letting h/w know there
-         * are new descriptors to fetch.  (Only applicable for weak-ordered
-         * memory model archs, such as IA-64).
-         *
-         * We also need this memory barrier to make certain all of the
-         * status bits have been updated before next_to_watch is written.
-         */
-        wmb();
+	if(likely(total_xmit)){
+		/*
+		 * Force memory writes to complete before letting h/w know there
+		 * are new descriptors to fetch.  (Only applicable for weak-ordered
+		 * memory model archs, such as IA-64).
+		 *
+		 * We also need this memory barrier to make certain all of the
+		 * status bits have been updated before next_to_watch is written.
+		 */
+		wmb();
 
-        /* notify HW of packet */
-        ixgbe_write_tail(tx_ring, tx_ring->next_to_use);
+		/* notify HW of packet */
+		ixgbe_write_tail(tx_ring, tx_ring->next_to_use);
+	}
 
         return;
 }
@@ -215,7 +217,7 @@ static int ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
         unsigned int total_rx_packets = 0;
 	uint16_t cleaned_count = ixgbe_desc_unused(rx_ring);
 
-        do {
+        do{
                 union ixgbe_adv_rx_desc *rx_desc;
 		uint16_t next_to_clean;
 		int slot_index;
@@ -262,7 +264,7 @@ static int ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 		/* XXX: Should we prefetch the next_to_clean desc ? */
 
                 total_rx_packets++;
-        } while (likely(total_rx_packets < budget));
+        }while(likely(total_rx_packets < budget));
 
         if (cleaned_count)
                 ixgbe_rx_alloc(rx_ring, buf, cleaned_count);
@@ -296,7 +298,7 @@ static int ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 			(next_to_clean < tx_ring->count) ? next_to_clean : 0;
 
 		total_tx_packets++;
-	} while (likely(total_tx_packets < budget));
+	}while(likely(total_tx_packets < budget));
 
         return total_tx_packets;
 }
