@@ -57,7 +57,7 @@ void *process_interrupt(void *data)
 		return NULL;
 	}
 
-	ixgbe_alloc_rx_buffers(thread->rx_ring,
+	ixgbe_alloc_rx_buffers(thread->rx_ring, thread->buf,
 		ixgbe_desc_unused(thread->rx_ring));
 	qmask = 1 << thread->index;
 
@@ -72,13 +72,13 @@ void *process_interrupt(void *data)
 			if(events[i].data.fd == fd_intrx){
 				/* Rx descripter cleaning */
 
-				ixgbe_clean_rx_irq(thread->rx_ring, budget);
+				ixgbe_clean_rx_irq(thread->rx_ring, thread->buf, budget);
 				ixgbe_irq_enable_queues(ih, qmask);
 
 			}else if(events[i].data.fd == fd_inttx){
 				/* Tx descripter cleaning */
 
-				ixgbe_clean_tx_irq(thread->tx_ring, budget);
+				ixgbe_clean_tx_irq(thread->tx_ring, thread->buf, budget);
 				ixgbe_irq_enable_queues(ih, qmask);
 
 			}
@@ -101,7 +101,8 @@ static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 	return;
 }
 
-void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 max_allocation)
+void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
+	u16 max_allocation)
 {
 	unsigned int total_allocated = 0;
 	uint16_t next_to_use;
@@ -113,11 +114,16 @@ void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 max_allocation)
 
         do {
 		union ixgbe_adv_rx_desc *rx_desc;
+		int slot_index;
+
 		rx_desc = IXGBE_RX_DESC(rx_ring, rx_ring->next_to_use);
 
-		addr_dma = ixgbe_assign_buffer(rx_ring);
-		if(!addr_dma)
-                        break;
+		slot_index = ixgbe_slot_assign(buf);
+		if(slot_index < 0)
+			break;
+
+		ixgbe_slot_attach(ring, rx_ring->next_to_use, slot_index);
+		addr_dma = ixgbe_slot_addr_dma(buf, slot_index);
 
                 rx_desc->read.pkt_addr = cpu_to_le64(addr_dma);
 		rx_desc->read.hdr_addr = 0;
@@ -142,7 +148,7 @@ void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 max_allocation)
 	}
 }
 
-static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
+static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 	int budget)
 {
         unsigned int total_rx_packets = 0;
@@ -151,6 +157,9 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
 
         do {
                 union ixgbe_adv_rx_desc *rx_desc;
+		int slot_index;
+		void *packet;
+
                 rx_desc = IXGBE_RX_DESC(rx_ring, rx_ring->next_to_clean);
 
 		if (!ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_DD))
@@ -163,35 +172,40 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
                  */
                 rmb();
 
-                /* retrieve a buffer from the ring */
-                skb = ixgbe_fetch_rx_buffer(rx_ring, rx_desc);
+		/* retrieve a buffer address from the ring */
+		slot_index = ixgbe_slot_detach(rx_ring, rx_ring->next_to_clean);
+		packet = ixgbe_slot_addr_virt(buf, slot_index);
 
-                /* exit if we failed to retrieve a buffer */
-                if (!skb)
-                        break;
+		/* XXX: Should we prefetch the packet buffer ? */
+
+		/*
+		 * NOTE: We have not to check IXGBE_RXD_STAT_EOP here
+		 * because we have skipped to enable(= disabled) hardware RSC.
+		 */
+
+		/* XXX: ERR_MASK will only have valid bits if EOP set ? */
+                if (unlikely(ixgbe_test_staterr(rx_desc,
+                        IXGBE_RXDADV_ERR_FRAME_ERR_MASK))) {
+			printf("frame error detected\n");
+                }
 
                 cleaned_count++;
 		next_to_clean = rx_ring->next_to_clean + 1;
 		rx_ring->next_to_clean = 
 			(next_to_clean < rx_ring->count) ? next_to_clean : 0;
 
-		/* verify that the packet does not have any known errors */
-		if (unlikely(ixgbe_test_staterr(rx_desc,
-			IXGBE_RXDADV_ERR_FRAME_ERR_MASK))) {
-			continue;
-		}
+		/* XXX: Should we prefetch the next_to_clean desc ? */
 
-                /* update budget accounting */
                 total_rx_packets++;
         } while (likely(total_rx_packets < budget));
 
         if (cleaned_count)
-                ixgbe_alloc_rx_buffers(rx_ring, cleaned_count);
+                ixgbe_alloc_rx_buffers(rx_ring, buf, cleaned_count);
 
         return total_rx_packets;
 }
 
-static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
+static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 	int budget)
 {
         unsigned int total_tx_packets = 0;
@@ -199,13 +213,16 @@ static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
 
 	do {
 		union ixgbe_adv_tx_desc *tx_desc;
+		int slot_index;
+
 		tx_desc = IXGBE_TX_DESC(tx_ring, tx_ring->next_to_clean);
 
 		if (!(tx_desc->wb.status & cpu_to_le32(IXGBE_TXD_STAT_DD)))
 			break;
 
-		/* free the skb */
-		dev_kfree_skb_any(tx_buffer->skb);
+		/* Release unused buffer */
+		slot_index = ixgbe_slot_detach(tx_ring, tx_ring->next_to_clean);
+		ixgbe_slot_release(buf, slot_index);
 
 		next_to_clean = tx_ring->next_to_clean + 1;
 		tx_ring->next_to_clean =
@@ -215,6 +232,79 @@ static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring,
 	} while (likely(total_tx_packets < budget));
 
         return total_tx_packets;
+}
+
+/* TBD: Revise to reduce overhead of slot-assigning with O(1) method */
+static inline int ixgbe_slot_assign(struct ixgbe_buf *buf)
+{
+	uint16_t next_to_use = buf->next_to_use;
+	int slot_index = -1;
+	int assigned = 0;
+
+	do{
+		if(!(buf->flag[next_to_use] & IXGBE_SLOT_USED)){
+			slot_index = next_to_use;
+			buf->flag[next_to_use] |= IXGBE_SLOT_USED;
+			assigned = 1;
+		}
+
+		next_to_use++;
+		next_to_use =
+			(next_to_use < buf->count) ? next_to_use : 0;
+	}while(next_to_use != buf->next_to_use && !assigned);
+
+	if(assigned)
+		buf->next_to_use = next_to_use;
+
+	return slot_index;
+}
+
+static inline void ixgbe_slot_attach(struct ixgbe_ring *ring,
+	uint16_t desc_index, int slot_index)
+{
+	ring->slot_index[desc_index] = slot_index;
+	return;
+}
+
+static inline int ixgbe_slot_detach(struct ixgbe_ring *ring,
+	uint16_t desc_index)
+{
+	int slot_index;
+
+	slot_index = ring->slot_index[desc_index];
+	ring->slot_index[desc_index] = -1;
+
+	return slot_index;
+}
+
+static inline void ixgbe_slot_release(struct ixgbe_buf *buf,
+	int slot_index)
+{
+	buf->flag[slot_index] &= ~IXGBE_SLOT_USED;
+	return;
+}
+
+static inline uint64_t ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
+        int slot_index)
+{
+	uint64_t addr_dma;
+
+	addr_dma = buf->addr_dma + (buf->buf_size * slot_index);
+	return addr_dma;
+}
+
+static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
+	uint16_t slot_index)
+{
+	void *slot;
+
+	if(unlikely(!(buf->flag[slot_index] & IXGBE_SLOT_USED))){
+		printf("slot unassigned\n")
+		return NULL;
+	}
+
+        slot = buf->addr_virtual + (buf->buf_size * slot_index);
+        return slot;
 }
 
 static int epoll_add(int fd_ep, int fd)

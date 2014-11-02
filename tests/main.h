@@ -45,6 +45,7 @@ struct ixgbe_ring {
 	uint8_t __iomem	*tail;
 	uint16_t	next_to_use;
 	uint16_t	next_to_clean;
+	int		*slot_index;
 };
 
 struct ixgbe_buf {
@@ -53,6 +54,9 @@ struct ixgbe_buf {
 	uint32_t	mtu_frame;
 	uint32_t	buf_size;
 	uint32_t	count;
+
+	uint16_t	next_to_use;
+	uint32_t	*flag;
 };
 
 struct ixgbe_handle {

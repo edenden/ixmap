@@ -266,10 +266,6 @@ void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 
 	ring->tail = ih->bar + IXGBE_RDT(reg_idx);
 
-        /* reset ntu and ntc to place SW in sync with hardwdare */
-	ring->next_to_clean = 0;
-	ring->next_to_use = 0;
-
         ixgbe_configure_srrctl(ih, reg_idx, ring);
 
 	/* enable receive descriptor ring */

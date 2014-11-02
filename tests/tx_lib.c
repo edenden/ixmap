@@ -75,10 +75,6 @@ void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 
         ring->tail = ih->bar + IXGBE_TDT(reg_idx);
 
-        /* reset ntu and ntc to place SW in sync with hardwdare */
-        ring->next_to_clean = 0;
-        ring->next_to_use = 0;
-
         /*
          * set WTHRESH to encourage burst writeback, it should not be set
          * higher than 1 when ITR is 0 as it could cause false TX hangs.
