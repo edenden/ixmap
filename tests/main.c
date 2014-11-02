@@ -125,7 +125,10 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		slot_index = malloc(sizeof(int) * num_rx_desc);
 		if(!slot_index)
 			return -1;
-		memset(slot_index, 0, sizeof(int) * num_rx_desc);
+#ifdef DEBUG
+		for(int j = 0; j < num_rx_desc; j++)
+			slot_index[j] = -1;
+#endif
 
 		ih->rx_ring[i].addr_dma = addr_dma;
 		ih->rx_ring[i].addr_virtual = addr_virtual;
@@ -161,7 +164,10 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
                 slot_index = malloc(sizeof(int) * num_tx_desc);
                 if(!slot_index)
                         return -1;
-                memset(slot_index, 0, sizeof(int) * num_tx_desc);
+#ifdef DEBUG
+		for(int j = 0; j < num_rx_desc; j++)
+			slot_index[j] = -1;
+#endif
 
                 ih->tx_ring[i].addr_dma = addr_dma;
                 ih->tx_ring[i].addr_virtual = addr_virtual;
@@ -206,7 +212,6 @@ static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count)
                 free_index = malloc(sizeof(uint32_t) * count);
                 if(!free_index)
                         return -1;
-                memset(free_index, 0, sizeof(uint32_t) * count);
 
                 ih->buf[i].addr_dma = addr_dma;
                 ih->buf[i].addr_virtual = addr_virtual;
