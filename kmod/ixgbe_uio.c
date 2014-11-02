@@ -706,6 +706,8 @@ static void uio_ixgbe_setup_gpie(struct uio_ixgbe_udapter *ud){
 	 */
 	IXGBE_WRITE_REG(hw, IXGBE_EIAM_EX(0), 0xFFFFFFFF);
 	IXGBE_WRITE_REG(hw, IXGBE_EIAM_EX(1), 0xFFFFFFFF);
+
+	/* XXX: Do we need GPIE(perhaps, General Purpose Interrupt) ? */
 	IXGBE_WRITE_REG(hw, IXGBE_GPIE, gpie);
 
 	return;
