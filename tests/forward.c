@@ -57,7 +57,7 @@ void *process_interrupt(void *data)
 		return NULL;
 	}
 
-	ixgbe_alloc_rx_buffers(thread->rx_ring, thread->buf,
+	ixgbe_rx_alloc(thread->rx_ring, thread->buf,
 		ixgbe_desc_unused(thread->rx_ring));
 	qmask = 1 << thread->index;
 
@@ -72,13 +72,13 @@ void *process_interrupt(void *data)
 			if(events[i].data.fd == fd_intrx){
 				/* Rx descripter cleaning */
 
-				ixgbe_clean_rx_irq(thread->rx_ring, thread->buf, budget);
+				ixgbe_rx_clean(thread->rx_ring, thread->buf, budget);
 				ixgbe_irq_enable_queues(ih, qmask);
 
 			}else if(events[i].data.fd == fd_inttx){
 				/* Tx descripter cleaning */
 
-				ixgbe_clean_tx_irq(thread->tx_ring, thread->buf, budget);
+				ixgbe_tx_clean(thread->tx_ring, thread->buf, budget);
 				ixgbe_irq_enable_queues(ih, qmask);
 
 			}
@@ -101,7 +101,7 @@ static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 	return;
 }
 
-void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
+void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
 	u16 max_allocation)
 {
 	unsigned int total_allocated = 0;
@@ -148,7 +148,62 @@ void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
 	}
 }
 
-static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
+static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
+	struct ixgbe_buf *buf)
+{
+        union ixgbe_adv_tx_desc *tx_desc;
+        dma_addr_t dma;
+        u32 tx_flags = first->tx_flags;
+        u32 cmd_type = ixgbe_tx_cmd_type(tx_flags);
+	unsigned int data_len, size;
+        u16 i = tx_ring->next_to_use;
+	uint32_t olinfo_status = 0;
+
+
+        tx_desc = IXGBE_TX_DESC(tx_ring, i);
+
+        size = skb_headlen(skb);
+        data_len = skb->data_len;
+
+	if(unlikely(size > IXGBE_MAX_DATA_PER_TXD))
+		return;
+
+        dma = dma_map_single(tx_ring->dev, skb->data, size, DMA_TO_DEVICE);
+
+	tx_desc->read.buffer_addr = cpu_to_le64(dma);
+
+        /* write last descriptor with RS and EOP bits */
+        cmd_type |= size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS;
+        tx_desc->read.cmd_type_len = cpu_to_le32(cmd_type);
+
+	tx_desc->read.olinfo_status = cpu_to_le32(olinfo_status);
+
+	i++;
+	tx_desc++;
+	if (i == tx_ring->count) {
+		tx_desc = IXGBE_TX_DESC(tx_ring, 0);
+		i = 0;
+	}
+
+        /*
+         * Force memory writes to complete before letting h/w know there
+         * are new descriptors to fetch.  (Only applicable for weak-ordered
+         * memory model archs, such as IA-64).
+         *
+         * We also need this memory barrier to make certain all of the
+         * status bits have been updated before next_to_watch is written.
+         */
+        wmb();
+
+        tx_ring->next_to_use = i;
+
+        /* notify HW of packet */
+        ixgbe_write_tail(tx_ring, i);
+
+        return;
+}
+
+static int ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 	int budget)
 {
         unsigned int total_rx_packets = 0;
@@ -200,12 +255,12 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
         } while (likely(total_rx_packets < budget));
 
         if (cleaned_count)
-                ixgbe_alloc_rx_buffers(rx_ring, buf, cleaned_count);
+                ixgbe_rx_alloc(rx_ring, buf, cleaned_count);
 
         return total_rx_packets;
 }
 
-static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
+static int ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 	int budget)
 {
         unsigned int total_tx_packets = 0;
