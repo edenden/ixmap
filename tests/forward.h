@@ -79,12 +79,14 @@ static inline void IXGBE_WRITE_REG(struct ixgbe_handler *ih, uint32_t reg, uint3
 }
 
 /* ixgbe_desc_unused - calculate if we have unused descriptors */
-static inline u16 ixgbe_desc_unused(struct ixgbe_ring *ring)
+static inline uint16_t ixgbe_desc_unused(struct ixgbe_ring *ring)
 {
-        u16 ntc = ring->next_to_clean;
-        u16 ntu = ring->next_to_use;
+        uint16_t next_to_clean = ring->next_to_clean;
+        uint16_t next_to_use = ring->next_to_use;
 
-        return ((ntc > ntu) ? 0 : ring->count) + ntc - ntu - 1;
+	return next_to_clean > next_to_use
+		? next_to_clean - next_to_use - 1
+		: (count - next_to_use) + next_to_clean - 1;
 }
 
 /* ixgbe_test_staterr - tests bits in Rx descriptor status and error fields */
