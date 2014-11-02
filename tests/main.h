@@ -55,8 +55,8 @@ struct ixgbe_buf {
 	uint32_t	buf_size;
 	uint32_t	count;
 
-	uint16_t	next_to_use;
-	uint32_t	*flag;
+	uint32_t	free_count;
+	int		*free_index;
 };
 
 struct ixgbe_handle {

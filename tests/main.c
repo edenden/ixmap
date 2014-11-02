@@ -127,13 +127,13 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 			return -1;
 		memset(slot_index, 0, sizeof(int) * num_rx_desc);
 
-		ih->rx_ring[i].slot_index = slot_index;
 		ih->rx_ring[i].addr_dma = addr_dma;
 		ih->rx_ring[i].addr_virtual = addr_virtual;
 		ih->rx_ring[i].count = num_rx_desc;
 
 		ih->rx_ring[i].next_to_use = 0;
 		ih->rx_ring[i].next_to_clean = 0;
+		ih->rx_ring[i].slot_index = slot_index;
 	}
 
 	/* Tx descripter ring allocation */
@@ -163,13 +163,13 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
                         return -1;
                 memset(slot_index, 0, sizeof(int) * num_tx_desc);
 
-                ih->tx_ring[i].slot_index = slot_index;
                 ih->tx_ring[i].addr_dma = addr_dma;
                 ih->tx_ring[i].addr_virtual = addr_virtual;
                 ih->tx_ring[i].count = num_tx_desc;
 
 		ih->tx_ring[i].next_to_use = 0;
 		ih->tx_ring[i].next_to_clean = 0;
+		ih->tx_ring[i].slot_index = slot_index;
         }
 
 	return 0;
@@ -185,7 +185,8 @@ static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count)
                 uint32_t size;
                 uint64_t addr_virtual;
                 uint64_t addr_dma;
-		uint32_t *flag;
+		uint32_t *free_index;
+		int j;
 
 		size = ih->bufsize * count;
 		if(size > huge_page_size){
@@ -202,19 +203,23 @@ static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count)
                 if(ret < 0)
                         return -1;
 
-                flag = malloc(sizeof(uint32_t) * count);
-                if(!flag)
+                free_index = malloc(sizeof(uint32_t) * count);
+                if(!free_index)
                         return -1;
-                memset(flag, 0, sizeof(uint32_t) * count);
+                memset(free_index, 0, sizeof(uint32_t) * count);
 
                 ih->buf[i].addr_dma = addr_dma;
                 ih->buf[i].addr_virtual = addr_virtual;
 		ih->buf[i].buf_size = ih->buf_size;
                 ih->buf[i].mtu_frame = ih->mtu_frame;
                 ih->buf[i].count = count;
+		ih->buf[i].free_count = 0;
+		ih->buf[i].free_index = free_index;
 
-		ih->buf[i].next_to_use = 0;
-		ih->buf[i].flag = flag;
+		for(j = 0; j < ih->buf[i].count; j++){
+			ih->buf[i].free_index[j] = j;
+			ih->buf[i].free_count++;
+		}
 	}
 
 	return 0;

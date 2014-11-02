@@ -234,28 +234,24 @@ static int ixgbe_clean_tx_irq(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
         return total_tx_packets;
 }
 
-/* TBD: Revise to reduce overhead of slot-assigning with O(1) method */
 static inline int ixgbe_slot_assign(struct ixgbe_buf *buf)
 {
 	uint16_t next_to_use = buf->next_to_use;
 	int slot_index = -1;
 	int assigned = 0;
 
-	do{
-		if(!(buf->flag[next_to_use] & IXGBE_SLOT_USED)){
-			slot_index = next_to_use;
-			buf->flag[next_to_use] |= IXGBE_SLOT_USED;
-			assigned = 1;
-		}
+	if(!buf->free_count)
+		goto out;
 
-		next_to_use++;
-		next_to_use =
-			(next_to_use < buf->count) ? next_to_use : 0;
-	}while(next_to_use != buf->next_to_use && !assigned);
-
-	if(assigned)
-		buf->next_to_use = next_to_use;
-
+	slot_index = buf->free_index[buf->free_count - 1];
+#ifdef DEBUG
+	if(slot_index < 0)
+		printf("BUG: assigned slot index is invalid\n");
+	buf->free_index[buf->free_count - 1] = -1;
+#endif
+	buf->free_count--;
+	
+out:
 	return slot_index;
 }
 
@@ -272,15 +268,20 @@ static inline int ixgbe_slot_detach(struct ixgbe_ring *ring,
 	int slot_index;
 
 	slot_index = ring->slot_index[desc_index];
+#ifdef DEBUG
+	if(slot_index < 0)
+		printf("BUG: retrieved slot index is invalid\n");
 	ring->slot_index[desc_index] = -1;
-
+#endif
 	return slot_index;
 }
 
 static inline void ixgbe_slot_release(struct ixgbe_buf *buf,
 	int slot_index)
 {
-	buf->flag[slot_index] &= ~IXGBE_SLOT_USED;
+	buf->free_index[buf->free_count] = slot_index;
+	buf->free_count++;
+
 	return;
 }
 
@@ -296,15 +297,10 @@ static inline uint64_t ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
 static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
 	uint16_t slot_index)
 {
-	void *slot;
+	void *addr_virtual;
 
-	if(unlikely(!(buf->flag[slot_index] & IXGBE_SLOT_USED))){
-		printf("slot unassigned\n")
-		return NULL;
-	}
-
-        slot = buf->addr_virtual + (buf->buf_size * slot_index);
-        return slot;
+        addr_virtual = buf->addr_virtual + (buf->buf_size * slot_index);
+        return addr_virtual;
 }
 
 static int epoll_add(int fd_ep, int fd)
