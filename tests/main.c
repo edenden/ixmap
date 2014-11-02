@@ -94,6 +94,68 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
+{
+        u32 mask;
+
+        mask = (qmask & 0xFFFFFFFF);
+        if (mask)
+                IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(0), mask);
+        mask = (qmask >> 32);
+        if (mask)
+                IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(1), mask);
+        return;
+}
+
+static inline void ixgbe_irq_enable(struct ixgbe_adapter *adapter, bool queues,
+                                    bool flush)
+{
+        u32 mask = (IXGBE_EIMS_ENABLE_MASK & ~IXGBE_EIMS_RTX_QUEUE);
+
+        /* don't reenable LSC while waiting for link */
+        if (adapter->flags & IXGBE_FLAG_NEED_LINK_UPDATE)
+                mask &= ~IXGBE_EIMS_LSC;
+
+        if (adapter->flags2 & IXGBE_FLAG2_TEMP_SENSOR_CAPABLE)
+                switch (adapter->hw.mac.type) {
+                case ixgbe_mac_82599EB:
+                        mask |= IXGBE_EIMS_GPI_SDP0;
+                        break;
+                case ixgbe_mac_X540:
+                        mask |= IXGBE_EIMS_TS;
+                        break;
+                default:
+                        break;
+                }
+        if (adapter->flags & IXGBE_FLAG_FAN_FAIL_CAPABLE)
+                mask |= IXGBE_EIMS_GPI_SDP1;
+        switch (adapter->hw.mac.type) {
+        case ixgbe_mac_82599EB:
+                mask |= IXGBE_EIMS_GPI_SDP1;
+                mask |= IXGBE_EIMS_GPI_SDP2;
+        case ixgbe_mac_X540:
+                mask |= IXGBE_EIMS_ECC;
+                mask |= IXGBE_EIMS_MAILBOX;
+#ifdef HAVE_PTP_1588_CLOCK
+                mask |= IXGBE_EIMS_TIMESYNC;
+#endif
+
+                break;
+        default:
+                break;
+        }
+
+        if ((adapter->flags & IXGBE_FLAG_FDIR_HASH_CAPABLE) &&
+            !(adapter->flags2 & IXGBE_FLAG2_FDIR_REQUIRES_REINIT))
+                mask |= IXGBE_EIMS_FLOW_DIR;
+
+        IXGBE_WRITE_REG(&adapter->hw, IXGBE_EIMS, mask);
+        if (queues)
+                ixgbe_irq_enable_queues(adapter, ~0);
+        if (flush)
+                IXGBE_WRITE_FLUSH(&adapter->hw);
+}
+
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc)
 {

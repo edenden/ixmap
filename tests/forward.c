@@ -101,19 +101,6 @@ void *process_interrupt(void *data)
 	return NULL;
 }
 
-static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
-{
-        u32 mask;
-
-	mask = (qmask & 0xFFFFFFFF);
-	if (mask)
-		IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(0), mask);
-	mask = (qmask >> 32);
-	if (mask)
-		IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(1), mask);
-	return;
-}
-
 void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
 	u16 max_allocation)
 {
