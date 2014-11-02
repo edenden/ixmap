@@ -179,7 +179,7 @@ static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 		/* XXX: Should we prefetch the packet buffer ? */
 
 		/*
-		 * NOTE: We have not to check IXGBE_RXD_STAT_EOP here
+		 * Confirm: We have not to check IXGBE_RXD_STAT_EOP here
 		 * because we have skipped to enable(= disabled) hardware RSC.
 		 */
 
