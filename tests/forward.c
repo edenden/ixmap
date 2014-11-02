@@ -101,13 +101,14 @@ static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 	return;
 }
 
-void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 cleaned_count)
+void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 max_clean)
 {
+	unsigned int total_cleaned = 0;
 	uint16_t next_to_use;
 	dma_addr_t addr_dma;
 
         /* nothing to do */
-        if (!cleaned_count)
+        if (!max_clean)
                 return;
 
         do {
@@ -125,18 +126,20 @@ void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 cleaned_count)
                 rx_ring->next_to_use =
                         (next_to_use < rx_ring->count) ? next_to_use : 0;
 
-                cleaned_count--;
-        } while (cleaned_count);
+                total_cleaned++;
+        } while (total_cleaned < max_clean);
 
-	/*
-	 * Force memory writes to complete before letting h/w
-	 * know there are new descriptors to fetch.  (Only
-	 * applicable for weak-ordered memory model archs,
-	 * such as IA-64).
-	 */
-	/* XXX: Do we need this write memory barrier ? */
-	wmb();
-	ixgbe_write_tail(rx_ring, rx_ring->next_to_use);
+	if(total_cleaned){
+		/*
+		 * Force memory writes to complete before letting h/w
+		 * know there are new descriptors to fetch.  (Only
+		 * applicable for weak-ordered memory model archs,
+		 * such as IA-64).
+		 */
+		/* XXX: Do we need this write memory barrier ? */
+		wmb();
+		ixgbe_write_tail(rx_ring, rx_ring->next_to_use);
+	}
 }
 
 static int ixgbe_clean_rx_irq(struct ixgbe_ring *rx_ring,
