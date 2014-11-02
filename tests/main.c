@@ -56,6 +56,7 @@ int main(int argc, char **argv)
 
         ixgbe_configure_rx(ih);
         ixgbe_configure_tx(ih);
+	ixgbe_irq_enable(ih);
 
 	ret = ixgbe_alloc_buf(ih, buf_count);
 	if(ret < 0){
@@ -76,6 +77,7 @@ int main(int argc, char **argv)
 		threads[i].tx_ring = &ih->tx_ring[i];
 		threads[i].buf = &ih->buf[i];
 		threads[i].budget = budget;
+		threads[i].num_threads = ih->num_queues;
 		if(pthread_create(&threads[i].tid,
 			NULL, process_interrupt, &threads[i]) < 0){
 			perror("failed to create thread");
@@ -104,56 +106,21 @@ static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
         mask = (qmask >> 32);
         if (mask)
                 IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(1), mask);
+
         return;
 }
 
-static inline void ixgbe_irq_enable(struct ixgbe_adapter *adapter, bool queues,
-                                    bool flush)
+static inline void ixgbe_irq_enable(struct ixgbe_handle *ih)
 {
-        u32 mask = (IXGBE_EIMS_ENABLE_MASK & ~IXGBE_EIMS_RTX_QUEUE);
+        uint32_t mask;
 
-        /* don't reenable LSC while waiting for link */
-        if (adapter->flags & IXGBE_FLAG_NEED_LINK_UPDATE)
-                mask &= ~IXGBE_EIMS_LSC;
+	mask = (IXGBE_EIMS_ENABLE_MASK & ~IXGBE_EIMS_RTX_QUEUE);
+        IXGBE_WRITE_REG(ih, IXGBE_EIMS, mask);
 
-        if (adapter->flags2 & IXGBE_FLAG2_TEMP_SENSOR_CAPABLE)
-                switch (adapter->hw.mac.type) {
-                case ixgbe_mac_82599EB:
-                        mask |= IXGBE_EIMS_GPI_SDP0;
-                        break;
-                case ixgbe_mac_X540:
-                        mask |= IXGBE_EIMS_TS;
-                        break;
-                default:
-                        break;
-                }
-        if (adapter->flags & IXGBE_FLAG_FAN_FAIL_CAPABLE)
-                mask |= IXGBE_EIMS_GPI_SDP1;
-        switch (adapter->hw.mac.type) {
-        case ixgbe_mac_82599EB:
-                mask |= IXGBE_EIMS_GPI_SDP1;
-                mask |= IXGBE_EIMS_GPI_SDP2;
-        case ixgbe_mac_X540:
-                mask |= IXGBE_EIMS_ECC;
-                mask |= IXGBE_EIMS_MAILBOX;
-#ifdef HAVE_PTP_1588_CLOCK
-                mask |= IXGBE_EIMS_TIMESYNC;
-#endif
+	ixgbe_irq_enable_queues(ih, ~0);
+	IXGBE_WRITE_FLUSH(ih);
 
-                break;
-        default:
-                break;
-        }
-
-        if ((adapter->flags & IXGBE_FLAG_FDIR_HASH_CAPABLE) &&
-            !(adapter->flags2 & IXGBE_FLAG2_FDIR_REQUIRES_REINIT))
-                mask |= IXGBE_EIMS_FLOW_DIR;
-
-        IXGBE_WRITE_REG(&adapter->hw, IXGBE_EIMS, mask);
-        if (queues)
-                ixgbe_irq_enable_queues(adapter, ~0);
-        if (flush)
-                IXGBE_WRITE_FLUSH(&adapter->hw);
+	return;
 }
 
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,

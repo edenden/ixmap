@@ -24,7 +24,7 @@ void *process_interrupt(void *data)
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int fd_ep, fd_intrx, fd_inttx, i, num_fd;
 	char filename[FILENAME_SIZE];
-	uint64_t qmask;
+	uint64_t tx_qmask, rx_qmask;
 	struct ixgbe_bulk bulk;
 
 	/* Rx interrupt fd preparing */
@@ -68,7 +68,9 @@ void *process_interrupt(void *data)
 
 	ixgbe_rx_alloc(thread->rx_ring, thread->buf,
 		ixgbe_desc_unused(thread->rx_ring));
-	qmask = 1 << thread->index;
+
+	rx_qmask = 1 << thread->index;
+	tx_qmask = 1 << (thread->index + thread->num_threads);
 
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
@@ -83,7 +85,7 @@ void *process_interrupt(void *data)
 
 				ixgbe_rx_clean(thread->rx_ring, thread->buf,
 					&bulk, thread->budget);
-				ixgbe_irq_enable_queues(ih, qmask);
+				ixgbe_irq_enable_queues(ih, rx_qmask);
 
 				ixgbe_tx_xmit(thread->rx_ring, thread->buf, &bulk);
 
@@ -92,7 +94,7 @@ void *process_interrupt(void *data)
 
 				ixgbe_tx_clean(thread->tx_ring, thread->buf,
 					thread->budget);
-				ixgbe_irq_enable_queues(ih, qmask);
+				ixgbe_irq_enable_queues(ih, tx_qmask);
 
 			}
 		}

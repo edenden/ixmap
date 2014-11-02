@@ -619,8 +619,8 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 		}
 
 		/* set RX queue interrupt */
-		uio_ixgbe_set_ivar(ud, 0, queue_idx, entry->vector);
-		uio_ixgbe_write_eitr(ud, entry->vector);
+		uio_ixgbe_set_ivar(ud, 0, queue_idx, vector);
+		uio_ixgbe_write_eitr(ud, vector);
 
 		vector++;
 	}
@@ -666,8 +666,8 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 		}
 
 		/* set TX queue interrupt */
-		uio_ixgbe_set_ivar(ud, 1, queue_idx, entry->vector);
-		uio_ixgbe_write_eitr(ud, entry->vector);
+		uio_ixgbe_set_ivar(ud, 1, queue_idx, vector);
+		uio_ixgbe_write_eitr(ud, vector);
 
 		vector++;
 	}

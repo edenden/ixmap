@@ -11,6 +11,7 @@
 
 struct ixgbe_thread {
 	pthread_t		tid;
+	uint32_t		num_threads;
 	uint32_t		index;
 	char			*int_name;
 	struct ixgbe_ring	*rx_ring;

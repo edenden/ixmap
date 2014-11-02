@@ -78,6 +78,8 @@ static inline void IXGBE_WRITE_REG(struct ixgbe_handler *ih, uint32_t reg, uint3
 	return;
 }
 
+#define IXGBE_WRITE_FLUSH(a) IXGBE_READ_REG(a, IXGBE_STATUS)
+
 /* ixgbe_desc_unused - calculate if we have unused descriptors */
 static inline uint16_t ixgbe_desc_unused(struct ixgbe_ring *ring)
 {
