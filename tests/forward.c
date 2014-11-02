@@ -101,14 +101,14 @@ static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 	return;
 }
 
-void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 max_clean)
+void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 max_allocation)
 {
-	unsigned int total_cleaned = 0;
+	unsigned int total_allocated = 0;
 	uint16_t next_to_use;
 	dma_addr_t addr_dma;
 
         /* nothing to do */
-        if (!max_clean)
+        if (!max_allocation)
                 return;
 
         do {
@@ -126,10 +126,10 @@ void ixgbe_alloc_rx_buffers(struct ixgbe_ring *rx_ring, u16 max_clean)
                 rx_ring->next_to_use =
                         (next_to_use < rx_ring->count) ? next_to_use : 0;
 
-                total_cleaned++;
-        } while (total_cleaned < max_clean);
+                total_allocated++;
+        } while (total_allocated < max_allocation);
 
-	if(total_cleaned){
+	if(total_allocated){
 		/*
 		 * Force memory writes to complete before letting h/w
 		 * know there are new descriptors to fetch.  (Only
