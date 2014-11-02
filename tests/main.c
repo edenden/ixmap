@@ -19,6 +19,7 @@ static int mtu_frame = 1518;
 static int buf_count = 1024;
 static char *ixgbe_interface = "ixgbe1";
 static int huge_page = 2 * 1024 * 1024;
+static int budget = 1024;
 
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
@@ -74,6 +75,7 @@ int main(int argc, char **argv)
 		threads[i].rx_ring = &ih->rx_ring[i];
 		threads[i].tx_ring = &ih->tx_ring[i];
 		threads[i].buf = &ih->buf[i];
+		threads[i].badget = badget;
 		if(pthread_create(&threads[i].tid,
 			NULL, process_interrupt, &threads[i]) < 0){
 			perror("failed to create thread");

@@ -16,6 +16,7 @@ struct ixgbe_thread {
 	struct ixgbe_ring	*rx_ring;
 	struct ixgbe_ring	*tx_ring;
 	struct ixgbe_buf	*buf;
+	int			budget;
 };
 
 /* MAC and PHY info */
@@ -57,6 +58,12 @@ struct ixgbe_buf {
 
 	uint32_t	free_count;
 	int		*free_index;
+};
+
+struct ixgbe_bulk {
+	uint32_t	count;
+	int		*slot_index;
+	uint32_t	*size;
 };
 
 struct ixgbe_handle {
