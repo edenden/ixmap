@@ -11,7 +11,7 @@
 
 /* Per port parameter each thread takes */
 struct ixgbe_port {
-	char                    *int_name;
+	char                    *interface_name;
 	struct ixgbe_ring       *rx_ring;
 	struct ixgbe_ring       *tx_ring;
 	uint32_t		mtu_frame;

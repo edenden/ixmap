@@ -22,24 +22,11 @@ void *process_interrupt(void *data)
 {
 	struct ixgbe_thread *thread = data;
 	struct epoll_event events[EPOLL_MAXEVENTS];
-	int fd_ep, fd_intrx, fd_inttx, i, num_fd;
+	int fd_ep, i, ret, num_fd;
 	char filename[FILENAME_SIZE];
 	uint64_t tx_qmask, rx_qmask;
 	struct ixgbe_bulk bulk;
-
-	/* Rx interrupt fd preparing */
-	snprintf(filename, sizeof(filename),
-		"/dev/%s-intrx%d", thread->int_name, thread->index);
-	fd_intrx = open(filename, O_RDWR);
-        if (fd_intrx < 0)
-		return NULL;
-
-        /* Tx interrupt fd preparing */
-        snprintf(filename, sizeof(filename),
-		"/dev/%s-inttx%d", thread->int_name, thread->index);
-        fd_inttx = open(filename, O_RDWR);
-        if (fd_inttx < 0)
-                return NULL;
+	struct ixgbe_irq_data *irq_data_list, *irq_data;
 
 	/* epoll fd preparing */
 	fd_ep = epoll_create(EPOLL_MAXEVENTS);
@@ -48,16 +35,7 @@ void *process_interrupt(void *data)
 		return NULL;
 	}
 
-	if(epoll_add(fd_ep, fd_intrx) != 0){
-		perror("failed to add fd in epoll");
-		return NULL;
-	}
-
-	if(epoll_add(fd_ep, fd_inttx) != 0){
-		perror("failed to add fd in epoll");
-		return NULL;
-	}
-
+	/* bulk array preparing */
 	bulk.count = 0;
 	bulk.slot_index = malloc((sizeof int) * thread->budget);
 	if(!bulk.slot_index)
@@ -66,11 +44,53 @@ void *process_interrupt(void *data)
 	if(!bulk.size)
 		return NULL;
 
-	ixgbe_rx_alloc(thread->rx_ring, thread->buf,
-		ixgbe_desc_unused(thread->rx_ring));
-
+	/* TX/RX interrupt mask preparing */
 	rx_qmask = 1 << thread->index;
 	tx_qmask = 1 << (thread->index + thread->num_threads);
+
+	/* TX/RX interrupt data preparing */
+	irq_data_list =
+		malloc(sizeof(struct ixgbe_irq_data) * thread->num_ports * 2);
+
+	for(i = 0; i < thread->num_ports; i++){
+		/* Rx interrupt fd preparing */
+		snprintf(filename, sizeof(filename), "/dev/%s-intrx%d",
+			thread->ports[i].interface_name, thread->index);
+		irq_data_list[i]->fd =
+			open(filename, O_RDWR);
+		if (irq_data_list[i]->fd < 0)
+			return NULL;
+
+		irq_data_list[i]->direction = IXGBE_IRQ_RX;
+		irq_data_list[i]->port_index = i;
+		
+
+		/* Tx interrupt fd preparing */
+		snprintf(filename, sizeof(filename), "/dev/%s-inttx%d",
+			thread->ports[i].interface_name, thread->index);
+		irq_data_list[i + thread->num_ports]->fd =
+			open(filename, O_RDWR);
+		if (irq_data_list[i + thread->num_ports]->fd < 0)
+			return NULL;
+
+		irq_data_list[i + thread->num_ports]->direction = IXGBE_IRQ_TX;
+		irq_data_list[i + thread->num_ports]->port_index = i;
+
+		ret = epoll_add(fd_ep, &irq_data_list[i]);
+		if(ret != 0){
+			perror("failed to add fd in epoll");
+			return NULL;
+		}
+
+		ret = epoll_add(fd_ep, &irq_data_list[i + thread->num_ports]);
+		if(ret != 0){
+			perror("failed to add fd in epoll");
+			return NULL;
+		}
+
+		ixgbe_rx_alloc(thread->ports[i].rx_ring, thread->buf,
+			ixgbe_desc_unused(thread->ports[i].rx_ring));
+	}
 
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
@@ -80,22 +100,31 @@ void *process_interrupt(void *data)
 		}
 
 		for(i = 0; i < num_fd; i++){
-			if(events[i].data.fd == fd_intrx){
+			irq_data = (struct ixgbe_irq_data *)events[i].data.ptr;
+			ret = read(irq_data->fd, );
+			if(ret < 0)
+				continue;
+			
+			switch(irq_data->direction)
+			case IXGBE_IRQ_RX:
 				/* Rx descripter cleaning */
-
-				ixgbe_rx_clean(thread->rx_ring, thread->buf,
-					&bulk, thread->budget);
+				ixgbe_rx_clean(thread->ports[irq_data->port_index].rx_ring,
+					thread->buf, &bulk, thread->budget);
 				ixgbe_irq_enable_queues(ih, rx_qmask);
 
-				ixgbe_tx_xmit(thread->rx_ring, thread->buf, &bulk);
+				/* XXX: Following is 2ports specific code */
+				ixgbe_tx_xmit(thread->ports[!irq_data->port_index].tx_ring,
+					thread->buf, &bulk);
 
-			}else if(events[i].data.fd == fd_inttx){
-				/* Tx descripter cleaning */
-
-				ixgbe_tx_clean(thread->tx_ring, thread->buf,
-					thread->budget);
+				break;
+			case IXGBE_IRQ_TX:
+				ixgbe_tx_clean(thread->ports[irq_data->port_index].tx_ring,
+					thread->buf, thread->budget);
 				ixgbe_irq_enable_queues(ih, tx_qmask);
 
+				break;
+			default:
+				break;
 			}
 		}
 	}
@@ -370,13 +399,13 @@ static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
         return addr_virtual;
 }
 
-static int epoll_add(int fd_ep, int fd)
+static int epoll_add(int fd_ep, void *ptr)
 {
 	struct epoll_event event;
 
 	memset(&event, 0, sizeof(struct epoll_event));
 	event.events = EPOLLIN;
-	event.data.fd = fd;
+	event.data.ptr = ptr;
 	return epoll_ctl(fd_ep, EPOLL_CTL_ADD, fd, &event);
 }
 

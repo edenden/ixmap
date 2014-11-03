@@ -115,7 +115,7 @@ int main(int argc, char **argv)
 		}
 
 		for(j = 0; j < num_ports; j++){
-			threads[i].ports[j].int_name = ixgbe_interface_list[j];
+			threads[i].ports[j].interface_name = ixgbe_interface_list[j];
 			threads[i].ports[j].rx_ring = &ih_list[j]->rx_ring[i];
 			threads[i].ports[j].tx_ring = &ih_list[j]->tx_ring[i];
 			threads[i].ports[j].mtu_frame = ih_list[j]->mtu_frame;
