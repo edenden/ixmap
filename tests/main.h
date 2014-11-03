@@ -9,15 +9,24 @@
 	(void) (&_min1 == &_min2);		\
 	_min1 < _min2 ? _min1 : _min2; })
 
+/* Per port parameter each thread takes */
+struct ixgbe_port {
+	char                    *int_name;
+	struct ixgbe_ring       *rx_ring;
+	struct ixgbe_ring       *tx_ring;
+	uint32_t		mtu_frame;
+	int                     budget;
+};
+
+/* Per thread parameter each thread takes */
 struct ixgbe_thread {
 	pthread_t		tid;
 	uint32_t		num_threads;
 	uint32_t		index;
-	char			*int_name;
-	struct ixgbe_ring	*rx_ring;
-	struct ixgbe_ring	*tx_ring;
+	uint32_t		num_ports;
 	struct ixgbe_buf	*buf;
-	int			budget;
+
+	struct ixgbe_port 	*ports;
 };
 
 /* MAC and PHY info */
@@ -53,7 +62,6 @@ struct ixgbe_ring {
 struct ixgbe_buf {
 	void		*addr_virtual;
 	uint64_t	addr_dma;
-	uint32_t	mtu_frame;
 	uint32_t	buf_size;
 	uint32_t	count;
 

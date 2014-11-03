@@ -15,9 +15,10 @@
 #include "forward.h"
 #include "descring.h"
 
-static int mtu_frame = 1518;
 static int buf_count = 1024;
-static char *ixgbe_interface = "ixgbe1";
+static char *ixgbe_interface0 = "ixgbe1";
+static char *ixgbe_interface1 = "ixgbe3";
+static int num_ports = 2;
 static int huge_page = 2 * 1024 * 1024;
 static int budget = 1024;
 
@@ -31,53 +32,96 @@ static void ixgbe_close(struct ixgbe_handle *ih);
 
 int main(int argc, char **argv)
 {
-	struct ixgbe_handle *ih;
+	struct ixgbe_handle **ih_list;
+	struct ixgbe_buf **ixgbe_buf_list;
+	char **ixgbe_interface_list;
 	struct ixgbe_thread *threads;
-	int ret, i;
+	uint32_t buf_size = 0;
+	int num_cores = 4, ret, i;
 
-	ih = ixgbe_open(ixgbe_interface);
-	if(!ih){
-		perror("ixgbe_open");
+	ixgbe_interface_list = malloc(sizeof(char *) * num_ports);
+	if(!ixgbe_interface_list)
+		return -1;
+
+	ixgbe_interface_list[0] = ixgbe_interface0;
+	ixgbe_interface_list[1] = ixgbe_interface1;
+
+	ih_list = malloc(sizeof(struct ixgbe_handle *) * num_ports);
+	if(!ih_list)
+		return -1;
+
+	for(i = 0; i < num_ports; i++){
+
+		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores);
+		if(!ih_list[i]){
+			printf("failed to ixgbe_open count = %d\n", i);
+			return -1;
+		}
+
+		/*
+		 * Configuration of frame MTU is supported.
+		 * However, MTU=1522 is used by default.
+		 * See ixgbe_set_rx_buffer_len().
+		 */
+		// ih_list[i]->mtu_frame = mtu_frame;
+
+		ret = ixgbe_alloc_descring(ih_list[i],
+			IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
+		if(ret < 0){
+			printf("failed to ixgbe_alloc_descring count = %d\n", i);
+			return -1;
+		}
+
+		ixgbe_configure_rx(ih_list[i]);
+		ixgbe_configure_tx(ih_list[i]);
+		ixgbe_irq_enable(ih_list[i]);
+
+		/* calclulate maximum buf_size we should prepare */
+		if(ih_list[i]->buf_size > buf_size)
+			buf_size = ih_list[i]->buf_size;
+	}
+
+	ixgbe_buf_list = malloc(sizeof(struct ixgbe_buf *) * num_cores);
+	if(!ixgbe_buf_list){
+		perror("malloc");
 		return -1;
 	}
 
-	/*
-	 * Configuration of frame MTU is supported.
-	 * However, MTU=1522 is used by default.
-	 * See ixgbe_set_rx_buffer_len().
-	 */
-	// ih->mtu_frame = mtu_frame;
-
-	ret = ixgbe_alloc_descring(ih, IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
-	if(ret < 0){
-		perror("ixgbe_alloc_descring");
-		return -1;
-	}
-
-        ixgbe_configure_rx(ih);
-        ixgbe_configure_tx(ih);
-	ixgbe_irq_enable(ih);
-
-	ret = ixgbe_alloc_buf(ih, buf_count);
-	if(ret < 0){
-		perror("ixgbe_alloc_buf");
-		return -1;
-	}
-
-	threads = malloc(sizeof(struct ixgbe_thread) * ih->num_queues);
+	threads = malloc(sizeof(struct ixgbe_thread) * num_cores);
 	if(!threads){
 		perror("malloc");
 		return -1;
 	}
 
-	for(i = 0; i < ih->num_queues; i++){
+	for(i = 0; i < num_cores; i++){
+		int j;
+
+                ixgbe_buf_list[i] =
+			ixgbe_alloc_buf(buf_count, buf_size);
+                if(!ixgbe_buf_list[i]){
+                        printf("failed to ixgbe_alloc_buf count = %d\n", i);
+                        return -1;
+                }
+
 		threads[i].index = i;
-		threads[i].int_name = ixgbe_interface;
-		threads[i].rx_ring = &ih->rx_ring[i];
-		threads[i].tx_ring = &ih->tx_ring[i];
-		threads[i].buf = &ih->buf[i];
-		threads[i].budget = budget;
-		threads[i].num_threads = ih->num_queues;
+		threads[i].num_threads = num_cores;
+		threads[i].num_ports = num_ports;
+		threads[i].buf = ixgbe_buf_list[i];
+
+		threads[i].ports = malloc(sizeof(struct ixgbe_port) * num_ports);
+		if(!threads[i].ports){
+			printf("failed to allocate port for each thread\n");
+			return -1;
+		}
+
+		for(j = 0; j < num_ports; j++){
+			threads[i].ports[j].int_name = ixgbe_interface_list[j];
+			threads[i].ports[j].rx_ring = &ih_list[j]->rx_ring[i];
+			threads[i].ports[j].tx_ring = &ih_list[j]->tx_ring[i];
+			threads[i].ports[j].mtu_frame = ih_list[j]->mtu_frame;
+			threads[i].ports[j].budget = budget;
+		}
+
 		if(pthread_create(&threads[i].tid,
 			NULL, process_interrupt, &threads[i]) < 0){
 			perror("failed to create thread");
@@ -89,9 +133,13 @@ int main(int argc, char **argv)
 		sleep(30);
 	}
 
-	/* TBD: release mapped DMA areas */
+	for(i = 0; i < num_cores; i++){
+		/* TBD: release mapped DMA areas */
+	}
 
-	ixgbe_close(ih);
+	for(i = 0; i < num_ports; i++){
+		ixgbe_close(ih_list[i]);
+	}
 
 	return 0;
 }
@@ -212,53 +260,53 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	return 0;
 }
 
-static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count)
+static struct ixgbe_buf *ixgbe_alloc_buf(uint32_t count,
+	uint32_t buf_size)
 {
+	struct ixgbe_buf *buf;
+	uint32_t size;
+	uint64_t addr_virtual;
+	uint64_t addr_dma;
+	uint32_t *free_index;
 	int ret, i;
 
-	ih->buf = malloc(sizeof(struct ixgbe_buf) * ih->num_queues);
-
-	for(i = 0; i < ih->num_queues; i++){
-                uint32_t size;
-                uint64_t addr_virtual;
-                uint64_t addr_dma;
-		uint32_t *free_index;
-		int j;
-
-		size = ih->bufsize * count;
-		if(size > huge_page_size){
-			printf("buffer size is larger than hugetlb\n");
-			return -1;
-		}
-
-                addr_virtual = mmap(NULL, size,
-                        PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
-                if(addr_virtual == MAP_FAILED)
-                        return 1;
-
-                ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
-                if(ret < 0)
-                        return -1;
-
-                free_index = malloc(sizeof(uint32_t) * count);
-                if(!free_index)
-                        return -1;
-
-                ih->buf[i].addr_dma = addr_dma;
-                ih->buf[i].addr_virtual = addr_virtual;
-		ih->buf[i].buf_size = ih->buf_size;
-                ih->buf[i].mtu_frame = ih->mtu_frame;
-                ih->buf[i].count = count;
-		ih->buf[i].free_count = 0;
-		ih->buf[i].free_index = free_index;
-
-		for(j = 0; j < ih->buf[i].count; j++){
-			ih->buf[i].free_index[j] = j;
-			ih->buf[i].free_count++;
-		}
+	buf = malloc(sizeof(struct ixgbe_buf));
+	if(!buf){
+		return NULL;
 	}
 
-	return 0;
+	size = buf_size * count;
+	if(size > huge_page_size){
+		printf("buffer size is larger than hugetlb\n");
+		return -1;
+	}
+
+	addr_virtual = mmap(NULL, size,
+			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+	if(addr_virtual == MAP_FAILED)
+		return NULL;
+
+	ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
+	if(ret < 0)
+		return NULL;
+
+	free_index = malloc(sizeof(uint32_t) * count);
+	if(!free_index)
+		return NULL;
+
+	buf->addr_dma = addr_dma;
+	buf->addr_virtual = addr_virtual;
+	buf->buf_size = buf_size;
+	buf->count = count;
+	buf->free_count = 0;
+	buf->free_index = free_index;
+
+	for(i = 0; i < buf->count; i++){
+		buf->free_index[i] = i;
+		buf->free_count++;
+	}
+
+	return buf;
 }
 
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
@@ -278,7 +326,7 @@ static int ixgbe_dma_map(struct ixgbe_handle *ih,
 	return 0;
 }
 
-static struct ixgbe_handle *ixgbe_open(char *int_name)
+static struct ixgbe_handle *ixgbe_open(char *int_name, int num_core)
 {
 	struct uio_ixgbe_info_req req_info;
 	struct uio_ixgbe_up_req req_up;
@@ -308,6 +356,7 @@ static struct ixgbe_handle *ixgbe_open(char *int_name)
 	req_up.info.num_interrupt_rate = ih->num_interrupt_rate;
 
 	ih->num_queues = min(req_info.info.max_rx_queues, req_info.info.max_tx_queues);
+	ih->num_queues = min(num_core, ih->num_queues);
 	req_up.info.num_rx_queues = ih->num_queues;
 	req_up.info.num_tx_queues = ih->num_queues;
 
