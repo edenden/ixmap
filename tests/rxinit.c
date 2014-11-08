@@ -5,6 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
+#include <net/ethernet.h>
 
 #include "main.h"
 #include "driver.h"
@@ -12,9 +13,10 @@
 
 static void ixgbe_set_rx_mode(struct ixgbe_handle *ih);
 static void ixgbe_disable_rx(struct ixgbe_handle *ih);
-static void ixgbe_enable_rx_generic(struct ixgbe_handle *ih);
+static void ixgbe_enable_rx(struct ixgbe_handle *ih);
 static void ixgbe_setup_psrtype(struct ixgbe_handle *ih);
 static void ixgbe_setup_rdrxctl(struct ixgbe_handle *ih);
+static void ixgbe_setup_rfctl(struct ixgbe_handle *ih);
 static void ixgbe_setup_mrqc(struct ixgbe_handle *ih);
 static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih);
 static void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
@@ -28,7 +30,6 @@ static void ixgbe_rx_desc_queue_enable(struct ixgbe_handle *ih,
 
 void ixgbe_configure_rx(struct ixgbe_handle *ih)
 {
-	uint32_t rxctrl, rfctl;
 	int i;
 
 	ixgbe_set_rx_mode(ih);
@@ -36,11 +37,7 @@ void ixgbe_configure_rx(struct ixgbe_handle *ih)
         ixgbe_disable_rx(ih);
         ixgbe_setup_psrtype(ih);
         ixgbe_setup_rdrxctl(ih);
-
-        /* We don't support RSC */
-        rfctl = IXGBE_READ_REG(hw, IXGBE_RFCTL);
-        rfctl &= ~IXGBE_RFCTL_RSC_DIS;
-        IXGBE_WRITE_REG(hw, IXGBE_RFCTL, rfctl);
+	ixgbe_setup_rfctl(ih);
 
         /* Program registers for the distribution of queues */
         ixgbe_setup_mrqc(ih);
@@ -55,11 +52,11 @@ void ixgbe_configure_rx(struct ixgbe_handle *ih)
         for (i = 0; i < ih->num_queues; i++)
 		ixgbe_configure_rx_ring(ih, i, &ih->rx_ring[i]);
 
-        rxctrl = IXGBE_READ_REG(hw, IXGBE_RXCTRL);
-
         /* enable all receives */
 	/* XXX: Do we need disable rx-sec-path before ixgbe_enable_rx ? */
-	ixgbe_enable_rx(hw);
+	ixgbe_enable_rx(ih);
+
+	return;
 }
 
 static void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
@@ -89,12 +86,12 @@ static void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
 		vmolr |= IXGBE_VMOLR_MPE;
         }
 
-	/* XXX: Do we need to write VMOLR ? */
-	vmolr |= IXGBE_READ_REG(ih, IXGBE_VMOLR(VMDQ_P(0))) &
+	/* XXX: Do we need to setup VMOLR ? */
+	vmolr |= IXGBE_READ_REG(ih, IXGBE_VMOLR) &
 			~(IXGBE_VMOLR_MPE | IXGBE_VMOLR_ROMPE |
 			IXGBE_VMOLR_ROPE);
-	IXGBE_WRITE_REG(ih, IXGBE_VMOLR(VMDQ_P(0)), vmolr);
 
+	IXGBE_WRITE_REG(ih, IXGBE_VMOLR, vmolr);
         IXGBE_WRITE_REG(ih, IXGBE_VLNCTRL, vlnctrl);
         IXGBE_WRITE_REG(ih, IXGBE_FCTRL, fctrl);
 
@@ -108,7 +105,7 @@ static void ixgbe_disable_rx(struct ixgbe_handle *ih)
 
         rxctrl = IXGBE_READ_REG(ih, IXGBE_RXCTRL);
         if (rxctrl & IXGBE_RXCTRL_RXEN) {
-		pfdtxgswc = IXGBE_READ_REG(hw, IXGBE_PFDTXGSWC);
+		pfdtxgswc = IXGBE_READ_REG(ih, IXGBE_PFDTXGSWC);
 		if (pfdtxgswc & IXGBE_PFDTXGSWC_VT_LBEN) {
 			/* TODO: Confirm Local L2 switch is disabled, and delete this process */
 		}
@@ -120,9 +117,8 @@ static void ixgbe_disable_rx(struct ixgbe_handle *ih)
 	return;
 }
 
-static void ixgbe_enable_rx_generic(struct ixgbe_handle *ih)
+static void ixgbe_enable_rx(struct ixgbe_handle *ih)
 {
-        uint32_t pfdtxgswc;
         uint32_t rxctrl;
 
         rxctrl = IXGBE_READ_REG(ih, IXGBE_RXCTRL);
@@ -145,23 +141,35 @@ static void ixgbe_setup_psrtype(struct ixgbe_handle *ih)
         else if (ih->num_queues > 1)
                 psrtype |= 1 << 29;
 
-	IXGBE_WRITE_REG(ih, IXGBE_PSRTYPE(0), psrtype);
+	IXGBE_WRITE_REG(ih, IXGBE_PSRTYPE, psrtype);
 	return;
 }
 
 static void ixgbe_setup_rdrxctl(struct ixgbe_handle *ih)
 {
-        uint32_t rdrxctl = IXGBE_READ_REG(ih, IXGBE_RDRXCTL);
+        uint32_t rdrxctl;
+
+	rdrxctl = IXGBE_READ_REG(ih, IXGBE_RDRXCTL);
 
         /* Disable RSC for ACK packets */
         IXGBE_WRITE_REG(ih, IXGBE_RSCDBU,
-		(IXGBE_RSCDBU_RSCACKDIS | IXGBE_READ_REG(hw, IXGBE_RSCDBU)));
+		(IXGBE_RSCDBU_RSCACKDIS | IXGBE_READ_REG(ih, IXGBE_RSCDBU)));
+
 	rdrxctl &= ~IXGBE_RDRXCTL_RSCFRSTSIZE;
-	/* hardware requires some bits to be set by default */
-	rdrxctl |= (IXGBE_RDRXCTL_RSCACKC | IXGBE_RDRXCTL_FCOE_WRFIX);
 	rdrxctl |= IXGBE_RDRXCTL_CRCSTRIP;
 
 	IXGBE_WRITE_REG(ih, IXGBE_RDRXCTL, rdrxctl);
+	return;
+}
+
+static void ixgbe_setup_rfctl(struct ixgbe_handle *ih)
+{
+	uint32_t rfctl;
+
+	/* We don't support RSC */
+	rfctl = IXGBE_READ_REG(ih, IXGBE_RFCTL);
+	rfctl |= IXGBE_RFCTL_RSC_DIS;
+	IXGBE_WRITE_REG(ih, IXGBE_RFCTL, rfctl);
 	return;
 }
 
@@ -191,12 +199,12 @@ static void ixgbe_setup_mrqc(struct ixgbe_handle *ih)
                 reta = (reta << 8) | (j * indices_multi);
                 if ((i & 3) == 3) {
                         if (i < 128)
-                                IXGBE_WRITE_REG(hw, IXGBE_RETA(i >> 2), reta);
+                                IXGBE_WRITE_REG(ih, IXGBE_RETA(i >> 2), reta);
                 }
         }
 
         /* Disable indicating checksum in descriptor, enables RSS hash */
-        rxcsum = IXGBE_READ_REG(hw, IXGBE_RXCSUM);
+        rxcsum = IXGBE_READ_REG(ih, IXGBE_RXCSUM);
         rxcsum |= IXGBE_RXCSUM_PCSD;
         IXGBE_WRITE_REG(ih, IXGBE_RXCSUM, rxcsum);
 
@@ -264,15 +272,16 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 static void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
-        uint64_t rdba = ring->paddr;
         uint32_t rxdctl;
 
 	/* disable queue to avoid issues while updating state */
 	rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
 	ixgbe_disable_rx_queue(ih, reg_idx, ring);
 
-        IXGBE_WRITE_REG(ih, IXGBE_RDBAL(reg_idx), rdba & DMA_BIT_MASK(32));
-        IXGBE_WRITE_REG(ih, IXGBE_RDBAH(reg_idx), rdba >> 32);
+        IXGBE_WRITE_REG(ih, IXGBE_RDBAL(reg_idx),
+		ring->addr_dma & DMA_BIT_MASK(32));
+        IXGBE_WRITE_REG(ih, IXGBE_RDBAH(reg_idx),
+		ring->addr_dma >> 32);
         IXGBE_WRITE_REG(ih, IXGBE_RDLEN(reg_idx),
 		ring->count * sizeof(union ixgbe_adv_rx_desc));
 
@@ -289,6 +298,7 @@ static void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	IXGBE_WRITE_REG(ih, IXGBE_RXDCTL(reg_idx), rxdctl);
 
 	ixgbe_rx_desc_queue_enable(ih, reg_idx, ring);
+	return;
 }
 
 static void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
@@ -313,6 +323,7 @@ static void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
 		printf("RXDCTL.ENABLE on Rx queue %d not cleared within the polling period\n",
 			reg_idx);
 	}
+	return;
 }
 
 static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
@@ -341,7 +352,7 @@ static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
 		srrctl |= IXGBE_SRRCTL_DROP_EN;
 	}
 
-        IXGBE_WRITE_REG(hw, IXGBE_SRRCTL(reg_idx), srrctl);
+        IXGBE_WRITE_REG(ih, IXGBE_SRRCTL(reg_idx), srrctl);
 	return;
 }
 
@@ -360,4 +371,5 @@ static void ixgbe_rx_desc_queue_enable(struct ixgbe_handle *ih,
 		printf("RXDCTL.ENABLE on Rx queue %d not cleared within the polling period\n",
 			reg_idx);
         }
+	return;
 }
