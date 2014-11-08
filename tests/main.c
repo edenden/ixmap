@@ -21,18 +21,18 @@ static int buf_count = 1024;
 static char *ixgbe_interface0 = "ixgbe1";
 static char *ixgbe_interface1 = "ixgbe3";
 static int num_ports = 2;
-static int huge_page = 2 * 1024 * 1024;
+static int huge_page_size = 2 * 1024 * 1024;
 static int budget = 1024;
 
 static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask);
 static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
-static struct ixgbe_buf *ixgbe_alloc_buf(uint32_t count,
-	uint32_t buf_size);
+static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
+	uint32_t count, uint32_t buf_size);
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
-	uint64_t addr_virtual, uint64_t *addr_dma, uint32_t size);
-static struct ixgbe_handle *ixgbe_open(char *int_name, int num_core);
+	void *addr_virtual, uint64_t *addr_dma, uint32_t size);
+static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core);
 static void ixgbe_close(struct ixgbe_handle *ih);
 
 int main(int argc, char **argv)
@@ -42,7 +42,8 @@ int main(int argc, char **argv)
 	char **ixgbe_interface_list;
 	struct ixgbe_thread *threads;
 	uint32_t buf_size = 0;
-	int num_cores = 4, ret, i;
+	uint32_t num_cores = 4;
+	int ret, i;
 
 	ixgbe_interface_list = malloc(sizeof(char *) * num_ports);
 	if(!ixgbe_interface_list)
@@ -102,7 +103,7 @@ int main(int argc, char **argv)
 		int j;
 
                 ixgbe_buf_list[i] =
-			ixgbe_alloc_buf(buf_count, buf_size);
+			ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
                 if(!ixgbe_buf_list[i]){
                         printf("failed to ixgbe_alloc_buf count = %d\n", i);
                         return -1;
@@ -187,9 +188,9 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	/* Rx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++){
 		uint32_t size;
-		uint64_t addr_virtual;
+		void *addr_virtual;
 		uint64_t addr_dma;
-		int *buffer_index;
+		int *slot_index;
 
 		size = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
 		if(size > huge_page_size){
@@ -226,9 +227,9 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	/* Tx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++){
                 uint32_t size;
-                uint64_t addr_virtual;
+                void	*addr_virtual;
                 uint64_t addr_dma;
-		uint16_t *slot_index;
+		int *slot_index;
 
                 size = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
 		if(size > huge_page_size){
@@ -265,14 +266,14 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	return 0;
 }
 
-static struct ixgbe_buf *ixgbe_alloc_buf(uint32_t count,
-	uint32_t buf_size)
+static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
+	uint32_t count, uint32_t buf_size)
 {
 	struct ixgbe_buf *buf;
 	uint32_t size;
-	uint64_t addr_virtual;
+	void	*addr_virtual;
 	uint64_t addr_dma;
-	uint32_t *free_index;
+	int *free_index;
 	int ret, i;
 
 	buf = malloc(sizeof(struct ixgbe_buf));
@@ -283,7 +284,7 @@ static struct ixgbe_buf *ixgbe_alloc_buf(uint32_t count,
 	size = buf_size * count;
 	if(size > huge_page_size){
 		printf("buffer size is larger than hugetlb\n");
-		return -1;
+		return NULL;
 	}
 
 	addr_virtual = mmap(NULL, size,
@@ -295,7 +296,7 @@ static struct ixgbe_buf *ixgbe_alloc_buf(uint32_t count,
 	if(ret < 0)
 		return NULL;
 
-	free_index = malloc(sizeof(uint32_t) * count);
+	free_index = malloc(sizeof(int) * count);
 	if(!free_index)
 		return NULL;
 
@@ -315,11 +316,11 @@ static struct ixgbe_buf *ixgbe_alloc_buf(uint32_t count,
 }
 
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
-	uint64_t addr_virtual, uint64_t *addr_dma, uint32_t size)
+	void *addr_virtual, uint64_t *addr_dma, uint32_t size)
 {
 	struct uio_ixgbe_dmamap_req req_dmamap;
 
-	req_dmamap.addr_virtual = addr_virtual;
+	req_dmamap.addr_virtual = (uint64_t)addr_virtual;
 	req_dmamap.addr_dma = 0;
 	req_dmamap.size = size;
 	req_dmamap.cache = IXGBE_DMA_CACHE_DISABLE;
@@ -331,7 +332,7 @@ static int ixgbe_dma_map(struct ixgbe_handle *ih,
 	return 0;
 }
 
-static struct ixgbe_handle *ixgbe_open(char *int_name, int num_core)
+static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core)
 {
 	struct uio_ixgbe_info_req req_info;
 	struct uio_ixgbe_up_req req_up;
@@ -357,7 +358,7 @@ static struct ixgbe_handle *ixgbe_open(char *int_name, int num_core)
 	/* UP the device */
 	memset(&req_up, 0, sizeof(struct uio_ixgbe_up_req));
 
-	ih->num_interrupt_rate = min(IXGBE_8K_ITR, req_info.info.max_interrupt_rate);
+	ih->num_interrupt_rate = min((uint16_t)IXGBE_8K_ITR, req_info.info.max_interrupt_rate);
 	req_up.info.num_interrupt_rate = ih->num_interrupt_rate;
 
 	ih->num_queues = min(req_info.info.max_rx_queues, req_info.info.max_tx_queues);

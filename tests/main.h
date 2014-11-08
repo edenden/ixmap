@@ -9,6 +9,38 @@
 	(void) (&_min1 == &_min2);		\
 	_min1 < _min2 ? _min1 : _min2; })
 
+/* General Registers */
+#define IXGBE_STATUS		0x00008
+
+/* Interrupt Registers */
+#define IXGBE_EIMS		0x00880
+#define IXGBE_EIMS_EX(_i)	(0x00AA0 + (_i) * 4)
+
+#define IXGBE_EICR_RTX_QUEUE	0x0000FFFF /* RTx Queue Interrupt */
+#define IXGBE_EICR_LSC		0x00100000 /* Link Status Change */
+#define IXGBE_EICR_TCP_TIMER	0x40000000 /* TCP Timer */
+#define IXGBE_EICR_OTHER	0x80000000 /* Interrupt Cause Active */
+#define IXGBE_EIMS_RTX_QUEUE	IXGBE_EICR_RTX_QUEUE /* RTx Queue Interrupt */
+#define IXGBE_EIMS_LSC		IXGBE_EICR_LSC /* Link Status Change */
+#define IXGBE_EIMS_TCP_TIMER	IXGBE_EICR_TCP_TIMER /* TCP Timer */
+#define IXGBE_EIMS_OTHER	IXGBE_EICR_OTHER /* INT Cause Active */
+#define IXGBE_EIMS_ENABLE_MASK ( \
+				IXGBE_EIMS_RTX_QUEUE    | \
+				IXGBE_EIMS_LSC          | \
+				IXGBE_EIMS_TCP_TIMER    | \
+				IXGBE_EIMS_OTHER)
+
+/*
+ * microsecond values for various ITR rates shifted by 2 to fit itr register
+ * with the first 3 bits reserved 0
+ */
+#define IXGBE_MIN_RSC_ITR	24
+#define IXGBE_100K_ITR		40
+#define IXGBE_20K_ITR		200
+#define IXGBE_16K_ITR		248
+#define IXGBE_10K_ITR		400
+#define IXGBE_8K_ITR		500
+
 /* Per port parameter each thread takes */
 struct ixgbe_port {
 	char                    *interface_name;
@@ -90,6 +122,12 @@ struct ixgbe_handle {
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
 	struct uio_ixgbe_info	info;
+};
+
+enum {
+	IXGBE_DMA_CACHE_DEFAULT = 0,
+	IXGBE_DMA_CACHE_DISABLE,
+	IXGBE_DMA_CACHE_WRITECOMBINE
 };
 
 /* Ioctl defines */
