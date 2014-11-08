@@ -1,21 +1,24 @@
 #Makefile
 #char code "LF(UNIX)" is required!!
 
-OPTIONS = -g -Wall
-PROGS = ixgbe
+CC = gcc
+CFLAGS = -Wall
+LDFLAGS =
+TARGET = ixgbe
+LIBS = pthread
+OBJECTS = main.o forward.o rxinit.o txinit.o
 
-all: $(PROGS)
+.SUFFIXES: .c .o
 
-clean :
-	rm -f $(PROGS)
-	rm -f *.o
+.PHONY: all
+all: $(TARGET)
 
-ixgbe : main.o forward.o
-	$(CC) $(OPTIONS) -o $@ main.o forward.o -l pthread
+$(TARGET): $(OBJECTS)
+	$(CC) $(LDFLAGS) -o $@ $^ -l $(LIBS)
 	
-main.o : main.c
-	$(CC) $(OPTIONS) -c main.c
+.c.o:
+	$(CC) $(CFLAGS) -c $<
 
-forward.o : forward.c
-	$(CC) $(OPTIONS) -c forward.c
-
+.PHONY: clean
+clean:
+	rm -f $(TARGET) $(OBJECTS)
