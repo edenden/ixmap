@@ -41,26 +41,6 @@
 #define IXGBE_10K_ITR		400
 #define IXGBE_8K_ITR		500
 
-/* Per port parameter each thread takes */
-struct ixgbe_port {
-	char                    *interface_name;
-	struct ixgbe_ring       *rx_ring;
-	struct ixgbe_ring       *tx_ring;
-	uint32_t		mtu_frame;
-	int                     budget;
-};
-
-/* Per thread parameter each thread takes */
-struct ixgbe_thread {
-	pthread_t		tid;
-	uint32_t		num_threads;
-	uint32_t		index;
-	uint32_t		num_ports;
-	struct ixgbe_buf	*buf;
-
-	struct ixgbe_port 	*ports;
-};
-
 /* MAC and PHY info */
 struct uio_ixgbe_info {
 	uint32_t	irq;
@@ -102,7 +82,7 @@ struct ixgbe_buf {
 };
 
 struct ixgbe_bulk {
-	uint32_t	count;
+	uint16_t	count;
 	int		*slot_index;
 	uint32_t	*size;
 };
@@ -122,6 +102,27 @@ struct ixgbe_handle {
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
 	struct uio_ixgbe_info	info;
+};
+
+/* Per port parameter each thread takes */
+struct ixgbe_port {
+	struct ixgbe_handle	*ih;
+	char                    *interface_name;
+	struct ixgbe_ring       *rx_ring;
+	struct ixgbe_ring       *tx_ring;
+	uint32_t		mtu_frame;
+	int                     budget;
+};
+
+/* Per thread parameter each thread takes */
+struct ixgbe_thread {
+	pthread_t		tid;
+	uint32_t		num_threads;
+	uint32_t		index;
+	uint32_t		num_ports;
+	struct ixgbe_buf	*buf;
+
+	struct ixgbe_port 	*ports;
 };
 
 enum {
@@ -154,3 +155,5 @@ struct uio_ixgbe_dmamap_req {
 struct uio_ixgbe_dmaunmap_req {
         uint64_t addr_dma;
 };
+
+void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask);

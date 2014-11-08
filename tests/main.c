@@ -24,7 +24,6 @@ static int num_ports = 2;
 static int huge_page_size = 2 * 1024 * 1024;
 static int budget = 1024;
 
-static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask);
 static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
@@ -121,9 +120,10 @@ int main(int argc, char **argv)
 		}
 
 		for(j = 0; j < num_ports; j++){
+			threads[i].ports[j].ih = ih_list[j];
 			threads[i].ports[j].interface_name = ixgbe_interface_list[j];
-			threads[i].ports[j].rx_ring = &ih_list[j]->rx_ring[i];
-			threads[i].ports[j].tx_ring = &ih_list[j]->tx_ring[i];
+			threads[i].ports[j].rx_ring = &(ih_list[j]->rx_ring[i]);
+			threads[i].ports[j].tx_ring = &(ih_list[j]->tx_ring[i]);
 			threads[i].ports[j].mtu_frame = ih_list[j]->mtu_frame;
 			threads[i].ports[j].budget = budget;
 		}
@@ -150,7 +150,7 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
+void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 {
         uint32_t mask;
 
