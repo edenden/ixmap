@@ -7,10 +7,14 @@
 #include <stdint.h>
 
 #include "main.h"
-#include "forward.h"
-#include "tx_lib.h"
+#include "driver.h"
+#include "txinit.h"
 
-static void ixgbe_configure_tx(struct ixgbe_handle *ih)
+static void ixgbe_setup_mtqc(struct ixgbe_handle *ih);
+static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *ring);
+
+void ixgbe_configure_tx(struct ixgbe_handle *ih)
 {
         uint32_t dmatxctl;
         int i;
@@ -48,7 +52,7 @@ static void ixgbe_setup_mtqc(struct ixgbe_handle *ih)
         IXGBE_WRITE_REG(hw, IXGBE_RTTDCS, rttdcs);
 }
 
-void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
+static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
         u64 tdba = ring->dma;

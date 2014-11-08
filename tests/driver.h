@@ -64,21 +64,21 @@ union ixgbe_adv_tx_desc {
 
 static inline uint32_t readl(const volatile void *addr)
 {
-	return cpu_to_le32( *(volatile uint32_t *) addr );
+	return htole32( *(volatile uint32_t *) addr );
 }
 
 static inline void writel(uint32_t b, volatile void *addr)
 {
-	*(volatile uint32_t *) addr = cpu_to_le32(b);
+	*(volatile uint32_t *) addr = htole32(b);
 }
 
-static inline uint32_t IXGBE_READ_REG(struct ixgbe_handler *ih, uint32_t reg)
+static inline uint32_t IXGBE_READ_REG(struct ixgbe_handle *ih, uint32_t reg)
 {
 	uint32_t value = readl(ih->bar + reg);
 	return value;
 }
 
-static inline void IXGBE_WRITE_REG(struct ixgbe_handler *ih, uint32_t reg, uint32_t value)
+static inline void IXGBE_WRITE_REG(struct ixgbe_handle *ih, uint32_t reg, uint32_t value)
 {
 	writel(value, ih->bar + reg);
 	return;
@@ -91,6 +91,7 @@ static inline uint16_t ixgbe_desc_unused(struct ixgbe_ring *ring)
 {
         uint16_t next_to_clean = ring->next_to_clean;
         uint16_t next_to_use = ring->next_to_use;
+	uint32_t count = ring->count;
 
 	return next_to_clean > next_to_use
 		? next_to_clean - next_to_use - 1
@@ -99,12 +100,12 @@ static inline uint16_t ixgbe_desc_unused(struct ixgbe_ring *ring)
 
 /* ixgbe_test_staterr - tests bits in Rx descriptor status and error fields */
 static inline __le32 ixgbe_test_staterr(union ixgbe_adv_rx_desc *rx_desc,
-                                        const u32 stat_err_bits)
+                                        const uint32_t stat_err_bits)
 {
-        return rx_desc->wb.upper.status_error & cpu_to_le32(stat_err_bits);
+	return rx_desc->wb.upper.status_error & htole32(stat_err_bits);
 }
 
-static inline void ixgbe_write_tail(struct ixgbe_ring *ring, u32 value)
+static inline void ixgbe_write_tail(struct ixgbe_ring *ring, uint32_t value)
 {
 	writel(value, ring->tail);
 }

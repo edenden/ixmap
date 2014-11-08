@@ -5,6 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
+#include <endian.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
@@ -12,8 +13,9 @@
 #include <pthread.h>
 
 #include "main.h"
-#include "forward.h"
-#include "descring.h"
+#include "driver.h"
+#include "rxinit.h"
+#include "txinit.h"
 
 static int buf_count = 1024;
 static char *ixgbe_interface0 = "ixgbe1";
@@ -22,12 +24,15 @@ static int num_ports = 2;
 static int huge_page = 2 * 1024 * 1024;
 static int budget = 1024;
 
+static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask);
+static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
-static int ixgbe_alloc_buf(struct ixgbe_handle *ih, uint32_t count);
-static int ixgbe_malloc(struct ixgbe_handle *ih,
-	uint64_t *offset, uint64_t *paddr, uint32_t size, uint16_t numa_node);
-static struct ixgbe_handle *ixgbe_open(char *int_name);
+static struct ixgbe_buf *ixgbe_alloc_buf(uint32_t count,
+	uint32_t buf_size);
+static int ixgbe_dma_map(struct ixgbe_handle *ih,
+	uint64_t addr_virtual, uint64_t *addr_dma, uint32_t size);
+static struct ixgbe_handle *ixgbe_open(char *int_name, int num_core);
 static void ixgbe_close(struct ixgbe_handle *ih);
 
 int main(int argc, char **argv)
@@ -146,14 +151,14 @@ int main(int argc, char **argv)
 
 static void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
 {
-        u32 mask;
+        uint32_t mask;
 
         mask = (qmask & 0xFFFFFFFF);
         if (mask)
-                IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(0), mask);
+                IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(0), mask);
         mask = (qmask >> 32);
         if (mask)
-                IXGBE_WRITE_REG(hw, IXGBE_EIMS_EX(1), mask);
+                IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(1), mask);
 
         return;
 }

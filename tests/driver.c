@@ -13,10 +13,28 @@
 #include <pthread.h>
 
 #include "main.h"
-#include "forward.h"
-#include "descring.h"
+#include "driver.h"
 
-static int epoll_add(int fd_ep, int fd);
+static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
+	uint16_t max_allocation);
+static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
+	struct ixgbe_buf *buf, struct ixgbe_bulk *bulk);
+static int ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
+	struct ixgbe_bulk *bulk, int budget);
+static int ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
+	int budget);
+static inline int ixgbe_slot_assign(struct ixgbe_buf *buf);
+static inline void ixgbe_slot_attach(struct ixgbe_ring *ring,
+	uint16_t desc_index, int slot_index);
+static inline int ixgbe_slot_detach(struct ixgbe_ring *ring,
+	uint16_t desc_index);
+static inline void ixgbe_slot_release(struct ixgbe_buf *buf,
+	int slot_index);
+static inline uint64_t ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
+	int slot_index);
+static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
+	uint16_t slot_index);
+static int epoll_add(int fd_ep, void *ptr);
 
 void *process_interrupt(void *data)
 {
@@ -63,7 +81,6 @@ void *process_interrupt(void *data)
 
 		irq_data_list[i]->direction = IXGBE_IRQ_RX;
 		irq_data_list[i]->port_index = i;
-		
 
 		/* Tx interrupt fd preparing */
 		snprintf(filename, sizeof(filename), "/dev/%s-inttx%d",
@@ -132,8 +149,8 @@ void *process_interrupt(void *data)
 	return NULL;
 }
 
-void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
-	u16 max_allocation)
+static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, ixgbe_buf *buf,
+	uint16_t max_allocation)
 {
 	unsigned int total_allocated = 0;
 

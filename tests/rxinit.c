@@ -7,10 +7,26 @@
 #include <stdint.h>
 
 #include "main.h"
-#include "forward.h"
-#include "rx_lib.h"
+#include "driver.h"
+#include "rxinit.h"
 
-void ixgbe_configure_rx(struct ixgbe_handler *ih)
+static void ixgbe_set_rx_mode(struct ixgbe_handle *ih);
+static void ixgbe_disable_rx(struct ixgbe_handle *ih);
+static void ixgbe_enable_rx_generic(struct ixgbe_handle *ih);
+static void ixgbe_setup_psrtype(struct ixgbe_handle *ih);
+static void ixgbe_setup_rdrxctl(struct ixgbe_handle *ih);
+static void ixgbe_setup_mrqc(struct ixgbe_handle *ih);
+static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih);
+static void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *ring);
+static void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *ring);
+static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *rx_ring);
+static void ixgbe_rx_desc_queue_enable(struct ixgbe_handle *ih,
+	uint8_t reg_idx, struct ixgbe_ring *ring);
+
+void ixgbe_configure_rx(struct ixgbe_handle *ih)
 {
 	uint32_t rxctrl, rfctl;
 	int i;
@@ -46,7 +62,7 @@ void ixgbe_configure_rx(struct ixgbe_handler *ih)
 	ixgbe_enable_rx(hw);
 }
 
-void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
+static void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
 {
         uint32_t fctrl;
         uint32_t vlnctrl;
@@ -85,7 +101,7 @@ void ixgbe_set_rx_mode(struct ixgbe_handle *ih)
 	return;
 }
 
-void ixgbe_disable_rx(struct ixgbe_handle *ih)
+static void ixgbe_disable_rx(struct ixgbe_handle *ih)
 {
         uint32_t pfdtxgswc;
         uint32_t rxctrl;
@@ -104,7 +120,7 @@ void ixgbe_disable_rx(struct ixgbe_handle *ih)
 	return;
 }
 
-void ixgbe_enable_rx_generic(struct ixgbe_handle *ih)
+static void ixgbe_enable_rx_generic(struct ixgbe_handle *ih)
 {
         uint32_t pfdtxgswc;
         uint32_t rxctrl;
@@ -245,7 +261,7 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 	return;
 }
 
-void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
+static void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
         uint64_t rdba = ring->paddr;
@@ -275,7 +291,7 @@ void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	ixgbe_rx_desc_queue_enable(ih, reg_idx, ring);
 }
 
-void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
+static void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
 	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
 	int wait_loop = IXGBE_MAX_RX_DESC_POLL;

@@ -53,7 +53,7 @@ struct ixgbe_ring {
 	uint64_t	addr_dma;
 	uint32_t	count;
 
-	uint8_t __iomem	*tail;
+	uint8_t		*tail;
 	uint16_t	next_to_use;
 	uint16_t	next_to_clean;
 	int		*slot_index;
