@@ -6,7 +6,7 @@ CFLAGS = -Wall
 LDFLAGS =
 TARGET = ixgbe
 LIBS = pthread
-OBJECTS = main.o forward.o rxinit.o txinit.o
+OBJECTS = main.o driver.o rxinit.o txinit.o
 
 .SUFFIXES: .c .o
 
