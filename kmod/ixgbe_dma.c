@@ -107,10 +107,13 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 		goto err_alloc_sgt_from_pages;
 
 	ret = dma_map_sg(&pdev->dev, sgt->sgl, sgt->nents, DMA_BIDIRECTIONAL);
-	if(!ret)
+	if(!ret){
 		goto err_dma_map_sg;
+	}else if(ret > 1){
+		goto err_dma_map_sg_not_contiguous;
+	}
 
-	addr_dma = sgt->sgl[0].dma_address;
+	addr_dma = sg_dma_address(&sgt->sgl[0]);
         where = ixgbe_dma_area_whereto(ud, addr_dma, size);
         if (!where)
 		goto err_area_whereto;
@@ -135,6 +138,7 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 
 err_alloc_area:
 err_area_whereto:
+err_dma_map_sg_not_contiguous:
 	dma_unmap_sg(&pdev->dev, sgt->sgl, sgt->nents, DMA_BIDIRECTIONAL);
 err_dma_map_sg:
 	sg_free_table(sgt);
