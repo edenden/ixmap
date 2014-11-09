@@ -98,6 +98,7 @@ struct ixgbe_handle {
 	uint32_t		num_queues;
 	uint16_t		num_interrupt_rate;
 
+	char			*interface_name;
 	struct ixgbe_ring	*tx_ring;
 	struct ixgbe_ring	*rx_ring;
 	struct ixgbe_buf	*buf;
@@ -105,6 +106,7 @@ struct ixgbe_handle {
 	uint32_t		promisc;
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
+	int			budget;
 	struct uio_ixgbe_info	info;
 };
 

@@ -19,12 +19,15 @@
 #include "txinit.h"
 
 static int buf_count = 1024;
-static char *ixgbe_interface0 = "ixgbe1";
-static char *ixgbe_interface1 = "ixgbe3";
+static char *ixgbe_interface_list[2];
 static int huge_page_size = 2 * 1024 * 1024;
 static int budget = 1024;
 
 static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
+static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
+	struct ixgbe_thread *thread, int num_ports,
+	int num_cores, int thread_index, struct ixgbe_buf *buf);
+static void ixgbe_destroy_thread(struct ixgbe_thread *thread);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
 static void ixgbe_release_descring(struct ixgbe_handle *ih);
@@ -35,15 +38,14 @@ static int ixgbe_dma_map(struct ixgbe_handle *ih,
 	void *addr_virtual, uint64_t *addr_dma, uint32_t size);
 static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
 	uint64_t addr_dma);
-static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core);
+static struct ixgbe_handle *ixgbe_open(char *interface_name,
+	uint32_t num_core, int budget);
 static void ixgbe_close(struct ixgbe_handle *ih);
 static int ixgbe_set_signal(sigset_t *sigset);
 
 int main(int argc, char **argv)
 {
 	struct ixgbe_handle **ih_list;
-	struct ixgbe_buf **ixgbe_buf_list;
-	char **ixgbe_interface_list;
 	struct ixgbe_thread *threads;
 	uint32_t buf_size = 0;
 	uint32_t num_cores = 4;
@@ -52,19 +54,15 @@ int main(int argc, char **argv)
 	int ret = 0, i, signal;
 	int cores_assigned = 0, ports_assigned = 0;
 
-	ixgbe_interface_list = malloc(sizeof(char *) * num_ports);
-	if(!ixgbe_interface_list)
-		goto err_interface_list;
-
-	ixgbe_interface_list[0] = ixgbe_interface0;
-	ixgbe_interface_list[1] = ixgbe_interface1;
+	ixgbe_interface_list[0] = "ixgbe1";
+	ixgbe_interface_list[1] = "ixgbe3";
 
 	ih_list = malloc(sizeof(struct ixgbe_handle *) * num_ports);
 	if(!ih_list)
 		goto err_ih_list;
 
 	for(i = 0; i < num_ports; i++, ports_assigned++){
-		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores);
+		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores, budget);
 		if(!ih_list[i]){
 			printf("failed to ixgbe_open count = %d\n", i);
 			goto err_ixgbe_open;
@@ -94,12 +92,6 @@ int main(int argc, char **argv)
 			buf_size = ih_list[i]->buf_size;
 	}
 
-	ixgbe_buf_list = malloc(sizeof(struct ixgbe_buf *) * num_cores);
-	if(!ixgbe_buf_list){
-		perror("malloc");
-		goto err_ixgbe_buf_list;
-	}
-
 	threads = malloc(sizeof(struct ixgbe_thread) * num_cores);
 	if(!threads){
 		perror("malloc");
@@ -107,42 +99,19 @@ int main(int argc, char **argv)
 	}
 
 	for(i = 0; i < num_cores; i++, cores_assigned++){
-		int j;
+		struct ixgbe_buf *buf;
 
-		ixgbe_buf_list[i] =
-			ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
-		if(!ixgbe_buf_list[i]){
+		buf = ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
+		if(!buf){
 			printf("failed to ixgbe_alloc_buf count = %d\n", i);
 			goto err_ixgbe_alloc_buf;
 		}
 
-		threads[i].index = i;
-		threads[i].num_threads = num_cores;
-		threads[i].num_ports = num_ports;
-		threads[i].buf = ixgbe_buf_list[i];
-
-		threads[i].ports = malloc(sizeof(struct ixgbe_port) * num_ports);
-		if(!threads[i].ports){
-			printf("failed to allocate port for each thread\n");
-			free(ixgbe_buf_list[i]);
-			goto err_ixgbe_alloc_ports;
-		}
-
-		for(j = 0; j < num_ports; j++){
-			threads[i].ports[j].ih = ih_list[j];
-			threads[i].ports[j].interface_name = ixgbe_interface_list[j];
-			threads[i].ports[j].rx_ring = &(ih_list[j]->rx_ring[i]);
-			threads[i].ports[j].tx_ring = &(ih_list[j]->tx_ring[i]);
-			threads[i].ports[j].mtu_frame = ih_list[j]->mtu_frame;
-			threads[i].ports[j].budget = budget;
-		}
-
-		if(pthread_create(&threads[i].tid,
-			NULL, process_interrupt, &threads[i]) < 0){
-			perror("failed to create thread");
-			free(ixgbe_buf_list[i]);
-			free(threads[i].ports);
-			goto err_ixgbe_create_threads;
+		ret = ixgbe_thread_create(ih_list, &threads[i],
+			num_ports, num_cores, i, buf);
+		if(ret != 0){
+			ixgbe_release_buf(ih_list[0], buf);
+			goto err_ixgbe_thread_create;
 		}
 	}
 
@@ -157,18 +126,14 @@ int main(int argc, char **argv)
 	}
 
 err_ixgbe_set_signal:
-err_ixgbe_create_threads:
-err_ixgbe_alloc_ports:
+err_ixgbe_thread_create:
 err_ixgbe_alloc_buf:
 	for(i = 0; i < cores_assigned; i++){
-		//pthread_kill();
-		free(threads[i].ports);
+		ixgbe_destroy_thread(&threads[i]);
 		ixgbe_release_buf(ih_list[0], threads[i].buf);
 	}
 	free(threads);
 err_ixgbe_alloc_threads:
-	free(ixgbe_buf_list);
-err_ixgbe_buf_list:
 err_ixgbe_alloc_descring:
 err_ixgbe_open:
 	for(i = 0; i < ports_assigned; i++){
@@ -177,8 +142,6 @@ err_ixgbe_open:
 	}
 	free(ih_list);
 err_ih_list:
-	free(ixgbe_interface_list);
-err_interface_list:
 
 	return ret;
 }
@@ -208,6 +171,52 @@ static inline void ixgbe_irq_enable(struct ixgbe_handle *ih)
 	IXGBE_WRITE_FLUSH(ih);
 
 	return;
+}
+
+static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
+	struct ixgbe_thread *thread, int num_ports,
+	int num_cores, int thread_index, struct ixgbe_buf *buf)
+{
+	int i;
+
+	thread->index = thread_index;
+	thread->num_threads = num_cores;
+	thread->num_ports = num_ports;
+	thread->buf = buf;
+
+	thread->ports = malloc(sizeof(struct ixgbe_port) * num_ports);
+	if(!thread->ports){
+		printf("failed to allocate port for each thread\n");
+		goto err_ixgbe_alloc_ports;
+	}
+
+	for(i = 0; i < num_ports; i++){
+		thread->ports[i].ih = ih_list[i];
+		thread->ports[i].interface_name = ih_list[i]->interface_name;
+		thread->ports[i].rx_ring = &(ih_list[i]->rx_ring[thread_index]);
+		thread->ports[i].tx_ring = &(ih_list[i]->tx_ring[thread_index]);
+		thread->ports[i].mtu_frame = ih_list[i]->mtu_frame;
+		thread->ports[i].budget = ih_list[i]->budget;
+	}
+
+	if(pthread_create(&thread->tid, NULL, process_interrupt,
+		thread) < 0){
+		perror("failed to create thread");
+		goto err_pthread_create;
+	}
+
+	return 0;
+
+err_pthread_create:
+	free(thread->ports);
+err_ixgbe_alloc_ports:
+	return -1;
+}
+
+static void ixgbe_destroy_thread(struct ixgbe_thread *thread)
+{
+	//pthread_kill();
+	//free(thread->ports);
 }
 
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
@@ -470,7 +479,8 @@ static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
 	return 0;
 }
 
-static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core)
+static struct ixgbe_handle *ixgbe_open(char *interface_name,
+	uint32_t num_core, int budget)
 {
 	struct uio_ixgbe_info_req req_info;
 	struct uio_ixgbe_up_req req_up;
@@ -483,7 +493,7 @@ static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core)
 		return NULL;
 	memset(ih, 0, sizeof(struct ixgbe_handle));
 
-	snprintf(filename, sizeof(filename), "/dev/%s", int_name);
+	snprintf(filename, sizeof(filename), "/dev/%s", interface_name);
 	ih->fd = open(filename, O_RDWR);
 	if (ih->fd < 0)
 		goto failed;
@@ -517,6 +527,8 @@ static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core)
 
 	ih->bar_size = req_up.info.mmio_size;
 	ih->promisc = 0;
+	ih->interface_name = interface_name;
+	ih->budget = budget;
 
 	return ih;
 
