@@ -27,7 +27,7 @@ static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
 static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
 	struct ixgbe_thread *thread, int num_ports,
 	int num_cores, int thread_index, struct ixgbe_buf *buf);
-static void ixgbe_destroy_thread(struct ixgbe_thread *thread);
+static void ixgbe_kill_thread(struct ixgbe_thread *thread);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
 static void ixgbe_release_descring(struct ixgbe_handle *ih);
@@ -139,7 +139,7 @@ err_ixgbe_set_signal:
 err_ixgbe_thread_create:
 err_ixgbe_alloc_buf:
 	for(i = 0; i < cores_assigned; i++){
-		ixgbe_destroy_thread(&threads[i]);
+		ixgbe_kill_thread(&threads[i]);
 		ixgbe_release_buf(ih_list[0], threads[i].buf);
 	}
 	free(threads);
@@ -222,10 +222,15 @@ err_ixgbe_alloc_ports:
 	return -1;
 }
 
-static void ixgbe_destroy_thread(struct ixgbe_thread *thread)
+static void ixgbe_kill_thread(struct ixgbe_thread *thread)
 {
-	//pthread_kill();
-	//free(thread->ports);
+	int ret;
+	ret = pthread_kill(thread->tid, SIGINT);
+	if(ret != 0)
+		perror("failed to kill thread");
+
+	free(thread->ports);
+	return;
 }
 
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
