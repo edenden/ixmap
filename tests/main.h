@@ -9,6 +9,21 @@
 	(void) (&_min1 == &_min2);		\
 	_min1 < _min2 ? _min1 : _min2; })
 
+/*
+ * microsecond values for various ITR rates shifted by 2 to fit itr register
+ * with the first 3 bits reserved 0
+ */
+#define IXGBE_MIN_RSC_ITR	24
+#define IXGBE_100K_ITR		40
+#define IXGBE_20K_ITR		200
+#define IXGBE_16K_ITR		248
+#define IXGBE_10K_ITR		400
+#define IXGBE_8K_ITR		500
+
+#define DMA_64BIT_MASK		0xffffffffffffffffULL
+#define DMA_BIT_MASK(n)		(((n) == 64) ? \
+				DMA_64BIT_MASK : ((1ULL<<(n))-1))
+
 /* General Registers */
 #define IXGBE_STATUS		0x00008
 
@@ -29,17 +44,6 @@
 				IXGBE_EIMS_LSC          | \
 				IXGBE_EIMS_TCP_TIMER    | \
 				IXGBE_EIMS_OTHER)
-
-/*
- * microsecond values for various ITR rates shifted by 2 to fit itr register
- * with the first 3 bits reserved 0
- */
-#define IXGBE_MIN_RSC_ITR	24
-#define IXGBE_100K_ITR		40
-#define IXGBE_20K_ITR		200
-#define IXGBE_16K_ITR		248
-#define IXGBE_10K_ITR		400
-#define IXGBE_8K_ITR		500
 
 /* MAC and PHY info */
 struct uio_ixgbe_info {

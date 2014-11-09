@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <net/ethernet.h>
+#include <time.h>
 
 #include "main.h"
 #include "driver.h"
@@ -58,19 +59,23 @@ static void ixgbe_setup_mtqc(struct ixgbe_handle *ih)
 static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
-        u64 tdba = ring->dma;
         int wait_loop = 10;
-        u32 txdctl = IXGBE_TXDCTL_ENABLE;
-        u8 reg_idx = ring->reg_idx;
+        uint32_t txdctl = IXGBE_TXDCTL_ENABLE;
+	struct timespec ts;
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = 1000000;
 
         /* disable queue to avoid issues while updating state */
         IXGBE_WRITE_REG(ih, IXGBE_TXDCTL(reg_idx), IXGBE_TXDCTL_SWFLSH);
         IXGBE_WRITE_FLUSH(ih);
 
-        IXGBE_WRITE_REG(ih, IXGBE_TDBAL(reg_idx), tdba & DMA_BIT_MASK(32));
-        IXGBE_WRITE_REG(ih, IXGBE_TDBAH(reg_idx), tdba >> 32);
+        IXGBE_WRITE_REG(ih, IXGBE_TDBAL(reg_idx),
+			ring->addr_dma & DMA_BIT_MASK(32));
+        IXGBE_WRITE_REG(ih, IXGBE_TDBAH(reg_idx),
+			ring->addr_dma >> 32);
         IXGBE_WRITE_REG(ih, IXGBE_TDLEN(reg_idx),
-                        ring->count * sizeof(union ixgbe_adv_tx_desc));
+			ring->count * sizeof(union ixgbe_adv_tx_desc));
 
         /* disable head writeback */
         IXGBE_WRITE_REG(ih, IXGBE_TDWBAH(reg_idx), 0);
@@ -107,7 +112,7 @@ static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 
         /* poll to verify queue is enabled */
         do {
-                msleep(1);
+		nanosleep(&ts, NULL);
                 txdctl = IXGBE_READ_REG(ih, IXGBE_TXDCTL(reg_idx));
         } while (--wait_loop && !(txdctl & IXGBE_TXDCTL_ENABLE));
         if (!wait_loop)

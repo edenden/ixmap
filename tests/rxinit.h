@@ -3,11 +3,34 @@
 #define VLAN_ETH_FRAME_LEN	1518
 #define MAXIMUM_ETHERNET_VLAN_SIZE \
 				(VLAN_ETH_FRAME_LEN + ETH_FCS_LEN)
+#define DMA_64BIT_MASK		0xffffffffffffffffULL
+#define DMA_BIT_MASK(n)		(((n) == 64) ? \
+				DMA_64BIT_MASK : ((1ULL<<(n))-1))
+#define IXGBE_MAX_RX_DESC_POLL	10
+
+/* Supported Rx Buffer Sizes */
+#define IXGBE_RXBUFFER_256       256  /* Used for skb receive header */
+#define IXGBE_RXBUFFER_2K       2048
+#define IXGBE_RXBUFFER_3K       3072
+#define IXGBE_RXBUFFER_4K       4096
+#define IXGBE_RXBUFFER_1536     1536
+#define IXGBE_RXBUFFER_7K       7168
+#define IXGBE_RXBUFFER_8K       8192
+#define IXGBE_RXBUFFER_15K      15360
+#define IXGBE_MAX_RXBUFFER      16384  /* largest size for single descriptor */
 
 /* Receive Registers */
+#define IXGBE_RDBAL(_i)		(0x01000 + ((_i) * 0x40))
+#define IXGBE_RDBAH(_i)		(0x01004 + ((_i) * 0x40))
+#define IXGBE_RDLEN(_i)		(0x01008 + ((_i) * 0x40)) 
+#define IXGBE_RDH(_i)		(0x01010 + ((_i) * 0x40))
+#define IXGBE_RDT(_i)		(0x01018 + ((_i) * 0x40))
+#define IXGBE_RXDCTL(_i)	(0x01028 + ((_i) * 0x40))
+#define IXGBE_SRRCTL(_i)	(0x02100 + ((_i) * 4))
 #define IXGBE_RDRXCTL		0x02F00
 #define IXGBE_RXCTRL		0x03000
 #define IXGBE_RSCDBU		0x03028
+#define IXGBE_HLREG0		0x04240
 #define IXGBE_MHADD		0x04268
 #define IXGBE_RXCSUM		0x05000
 #define IXGBE_RFCTL		0x05008
@@ -20,16 +43,27 @@
 #define IXGBE_PFDTXGSWC		0x08220
 #define IXGBE_VMOLR		0x0F000
 
+/* Receive Config masks */
+#define IXGBE_RXCTRL_RXEN	0x00000001 /* Enable Receiver */
+#define IXGBE_RXDCTL_ENABLE	0x02000000 /* Ena specific Rx Queue */
+
+/* SRRCTL bit definitions */
+#define IXGBE_SRRCTL_BSIZEPKT_SHIFT \
+				10 /* so many KBs */
+#define IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF \
+				0x02000000
+#define IXGBE_SRRCTL_DROP_EN	0x10000000
+
 /* RDRXCTL Bit Masks */
 #define IXGBE_RDRXCTL_CRCSTRIP	0x00000002 /* CRC Strip */
 #define IXGBE_RDRXCTL_RSCFRSTSIZE \
 				0x003E0000 /* RSC First packet size */
 
-/* Receive Config masks */
-#define IXGBE_RXCTRL_RXEN	0x00000001 /* Enable Receiver */
-
 /* RSCDBU Bit Masks */
 #define IXGBE_RSCDBU_RSCACKDIS	0x00000080
+
+/* HLREG0 Bit Masks */
+#define IXGBE_HLREG0_JUMBOEN	0x00000004 /* bit  2 */
 
 /* MHADD Bit Masks */
 #define IXGBE_MHADD_MFS_MASK	0xFFFF0000

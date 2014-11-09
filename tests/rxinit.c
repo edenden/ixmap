@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <net/ethernet.h>
+#include <time.h>
 
 #include "main.h"
 #include "driver.h"
@@ -224,8 +225,6 @@ static void ixgbe_setup_mrqc(struct ixgbe_handle *ih)
 
 static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 {
-        struct ixgbe_ring *rx_ring;
-        int i;
         uint32_t mhadd, hlreg0;
 
         /* adjust max frame to be at least the size of a standard frame */
@@ -243,17 +242,17 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 	/* MHADD will allow an extra 4 bytes past for vlan tagged frames */
 	ih->mtu_frame += VLAN_HLEN;
 
-        if(ih->mtu_frame <= MAXIMUM_ETHERNET_VLAN_SIZE)) {
+        if(ih->mtu_frame <= MAXIMUM_ETHERNET_VLAN_SIZE) {
                 ih->buf_size = MAXIMUM_ETHERNET_VLAN_SIZE;
         /*
          * Make best use of allocation by using all but 1K of a
          * power of 2 allocation that will be used for skb->head.
          */
-        } else if (max_frame <= IXGBE_RXBUFFER_3K) {
+        } else if (ih->mtu_frame <= IXGBE_RXBUFFER_3K) {
                 ih->buf_size = IXGBE_RXBUFFER_3K;
-        } else if (max_frame <= IXGBE_RXBUFFER_7K) {
+        } else if (ih->mtu_frame <= IXGBE_RXBUFFER_7K) {
                 ih->buf_size = IXGBE_RXBUFFER_7K;
-        } else if (max_frame <= IXGBE_RXBUFFER_15K) {
+        } else if (ih->mtu_frame <= IXGBE_RXBUFFER_15K) {
                 ih->buf_size = IXGBE_RXBUFFER_15K;
         } else {
                 ih->buf_size = IXGBE_MAX_RXBUFFER;
@@ -306,6 +305,10 @@ static void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
 {
 	int wait_loop = IXGBE_MAX_RX_DESC_POLL;
 	uint32_t rxdctl;
+	struct timespec ts;
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = 10000;
 
         rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
         rxdctl &= ~IXGBE_RXDCTL_ENABLE;
@@ -315,7 +318,7 @@ static void ixgbe_disable_rx_queue(struct ixgbe_handle *ih,
 
 	/* the hardware may take up to 100us to really disable the rx queue */
 	do {
-		udelay(10);
+		nanosleep(&ts, NULL);
 		rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
 	} while (--wait_loop && (rxdctl & IXGBE_RXDCTL_ENABLE));
 
@@ -331,12 +334,9 @@ static void ixgbe_configure_srrctl(struct ixgbe_handle *ih,
 {
 	uint32_t srrctl;
 
-        /* configure header buffer length, needed for RSC */
-        srrctl = IXGBE_RX_HDR_SIZE << IXGBE_SRRCTL_BSIZEHDRSIZE_SHIFT;
-
         /* configure the packet buffer length */
-        srrctl |= ALIGN(ih->buf_size, 1024) >>
-                  IXGBE_SRRCTL_BSIZEPKT_SHIFT;
+        srrctl = ALIGN(ih->buf_size, 1024) >>
+			IXGBE_SRRCTL_BSIZEPKT_SHIFT;
 
         /* configure descriptor type */
         srrctl |= IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF;
@@ -361,9 +361,13 @@ static void ixgbe_rx_desc_queue_enable(struct ixgbe_handle *ih,
 {
         int wait_loop = IXGBE_MAX_RX_DESC_POLL;
         uint32_t rxdctl;
+	struct timespec ts;
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = 1000000;
 
         do {
-                msleep(1);
+		nanosleep(&ts, NULL);
                 rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
         } while (--wait_loop && !(rxdctl & IXGBE_RXDCTL_ENABLE));
 
