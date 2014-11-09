@@ -107,7 +107,6 @@ struct ixgbe_handle {
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
 	int			budget;
-	struct uio_ixgbe_info	info;
 };
 
 /* Per port parameter each thread takes */

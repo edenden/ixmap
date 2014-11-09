@@ -482,48 +482,47 @@ static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
 static struct ixgbe_handle *ixgbe_open(char *interface_name,
 	uint32_t num_core, int budget)
 {
-	struct uio_ixgbe_info_req req_info;
-	struct uio_ixgbe_up_req req_up;
 	struct ixgbe_handle *ih;
 	char filename[FILENAME_SIZE];
-	int err;
+	struct uio_ixgbe_info_req req_info;
+	struct uio_ixgbe_up_req req_up;
 
 	ih = malloc(sizeof(struct ixgbe_handle));
 	if (!ih)
-		return NULL;
+		goto err_alloc_ih;
 	memset(ih, 0, sizeof(struct ixgbe_handle));
 
 	snprintf(filename, sizeof(filename), "/dev/%s", interface_name);
 	ih->fd = open(filename, O_RDWR);
 	if (ih->fd < 0)
-		goto failed;
+		goto err_open;
 
 	/* Get device information */
 	memset(&req_info, 0, sizeof(struct uio_ixgbe_info_req));
 	if(ioctl(ih->fd, UIO_IXGBE_INFO, (unsigned long)&req_info) < 0)
-		goto failed;
+		goto err_ioctl_info;
 
 	/* UP the device */
 	memset(&req_up, 0, sizeof(struct uio_ixgbe_up_req));
 
-	ih->num_interrupt_rate = min((uint16_t)IXGBE_8K_ITR, req_info.info.max_interrupt_rate);
+	ih->num_interrupt_rate =
+		min((uint16_t)IXGBE_8K_ITR, req_info.info.max_interrupt_rate);
 	req_up.info.num_interrupt_rate = ih->num_interrupt_rate;
 
-	ih->num_queues = min(req_info.info.max_rx_queues, req_info.info.max_tx_queues);
+	ih->num_queues =
+		min(req_info.info.max_rx_queues, req_info.info.max_tx_queues);
 	ih->num_queues = min(num_core, ih->num_queues);
 	req_up.info.num_rx_queues = ih->num_queues;
 	req_up.info.num_tx_queues = ih->num_queues;
 
 	if(ioctl(ih->fd, UIO_IXGBE_UP, (unsigned long)&req_up) < 0)
-		goto failed;
-
-	ih->info = req_up.info;
+		goto err_ioctl_up;
 
 	/* Map PCI config register space */
-	ih->bar = mmap(NULL, ih->info.mmio_size,
+	ih->bar = mmap(NULL, req_up.info.mmio_size,
 		PROT_READ | PROT_WRITE, MAP_SHARED, ih->fd, 0);
 	if(ih->bar == MAP_FAILED)
-		goto failed;
+		goto err_mmap;
 
 	ih->bar_size = req_up.info.mmio_size;
 	ih->promisc = 0;
@@ -532,13 +531,13 @@ static struct ixgbe_handle *ixgbe_open(char *interface_name,
 
 	return ih;
 
-failed:
-	err = errno;
-	if (ih->bar)
-		munmap(ih->bar, ih->bar_size);
+err_mmap:
+err_ioctl_up:
+err_ioctl_info:
 	close(ih->fd);
+err_open:
 	free(ih);
-	errno = err;
+err_alloc_ih:
 	return NULL;
 }
 
