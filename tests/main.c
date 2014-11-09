@@ -26,6 +26,7 @@ static int budget = 1024;
 static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
+static void ixgbe_release_descring(ixgbe_handle *ih);
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	uint32_t count, uint32_t buf_size);
 static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
@@ -47,6 +48,7 @@ int main(int argc, char **argv)
 	uint32_t num_ports = 2;
 	sigset_t sigset;
 	int ret = 0, i, signal;
+	int cores_assigned = 0, ports_assigned = 0;
 
 	ixgbe_interface_list = malloc(sizeof(char *) * num_ports);
 	if(!ixgbe_interface_list)
@@ -59,11 +61,10 @@ int main(int argc, char **argv)
 	if(!ih_list)
 		goto err_ih_list;
 
-	for(i = 0; i < num_ports; i++){
+	for(i = 0; i < num_ports; i++, ports_assigned++){
 		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores);
 		if(!ih_list[i]){
 			printf("failed to ixgbe_open count = %d\n", i);
-			num_ports = i;
 			goto err_ixgbe_open;
 		}
 
@@ -79,7 +80,6 @@ int main(int argc, char **argv)
 		if(ret < 0){
 			printf("failed to ixgbe_alloc_descring count = %d\n", i);
 			ixgbe_close(ih_list[i]);
-			num_ports = i;
 			goto err_ixgbe_alloc_descring;
 		}
 
@@ -104,14 +104,13 @@ int main(int argc, char **argv)
 		goto err_ixgbe_alloc_threads;
 	}
 
-	for(i = 0; i < num_cores; i++){
+	for(i = 0; i < num_cores; i++, cores_assigned++){
 		int j;
 
 		ixgbe_buf_list[i] =
 			ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
 		if(!ixgbe_buf_list[i]){
 			printf("failed to ixgbe_alloc_buf count = %d\n", i);
-			num_cores = i;
 			goto err_ixgbe_alloc_buf;
 		}
 
@@ -124,7 +123,6 @@ int main(int argc, char **argv)
 		if(!threads[i].ports){
 			printf("failed to allocate port for each thread\n");
 			free(ixgbe_buf_list[i]);
-			num_cores = i;
 			goto err_ixgbe_alloc_ports;
 		}
 
@@ -142,7 +140,6 @@ int main(int argc, char **argv)
 			perror("failed to create thread");
 			free(ixgbe_buf_list[i]);
 			free(threads[i].ports);
-			num_cores = i;
 			goto err_ixgbe_create_threads;
 		}
 	}
@@ -161,7 +158,7 @@ err_ixgbe_set_signal:
 err_ixgbe_create_threads:
 err_ixgbe_alloc_ports:
 err_ixgbe_alloc_buf:
-	for(i = 0; i < num_cores; i++){
+	for(i = 0; i < cores_assigned; i++){
 		pthread_kill();
 		free(threads[i].ports);
 		ixgbe_release_buf();
@@ -172,8 +169,8 @@ err_ixgbe_alloc_threads:
 err_ixgbe_buf_list:
 err_ixgbe_alloc_descring:
 err_ixgbe_open:
-	for(i = 0; i < num_ports; i++){
-		ixgbe_release_descring();
+	for(i = 0; i < ports_assigned; i++){
+		ixgbe_release_descring(ih_list[i]);
 		ixgbe_close(ih_list[i]);
 	}
 	free(ih_list);
@@ -214,36 +211,48 @@ static inline void ixgbe_irq_enable(struct ixgbe_handle *ih)
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc)
 {
-	int ret, i;
+	int ret, i, rx_assigned = 0, tx_assigned = 0;
+	int size_tx_desc, size_rx_desc;
 
 	ih->rx_ring = malloc(sizeof(struct ixgbe_ring) * ih->num_queues);
+	if(!ih->rx_ring)
+		goto err_alloc_rx_ring;
+
 	ih->tx_ring = malloc(sizeof(struct ixgbe_ring) * ih->num_queues);
+	if(!ih->tx_ring)
+		goto err_alloc_tx_ring;
+
+	size_rx_desc = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
+	size_tx_desc = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
+	if(size_rx_desc > huge_page_size
+	|| size_tx_desc > huge_page_size)
+		goto err_desc_size;
 
 	/* Rx descripter ring allocation */
-	for(i = 0; i < ih->num_queues; i++){
-		uint32_t size;
+	for(i = 0; i < ih->num_queues; i++, rx_assigned++){
 		void *addr_virtual;
 		uint64_t addr_dma;
 		int *slot_index;
 
-		size = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
-		if(size > huge_page_size){
-			printf("rx descripter size is larger than hugetlb\n");
-			return -1;
+		addr_virtual = mmap(NULL, size_rx_desc,
+			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+		if(addr_virtual == MAP_FAILED){
+			goto err_rx_mmap;
 		}
 
-		addr_virtual = mmap(NULL, size,
-			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
-		if(addr_virtual == MAP_FAILED)
-			return 1;
-
-		ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
-		if(ret < 0)
-			return -1;
+		ret = ixgbe_dma_map(ih,
+			addr_virtual, &addr_dma, size_rx_desc);
+		if(ret < 0){
+			munmap(addr_virtual, size_rx_desc);
+			goto err_rx_dma_map;
+		}
 
 		slot_index = malloc(sizeof(int) * num_rx_desc);
-		if(!slot_index)
-			return -1;
+		if(!slot_index){
+			ixgbe_dma_unmap(ih, addr_dma);
+			munmap(addr_virtual, size_rx_desc);
+			goto err_rx_alloc_slot_index;
+		}
 #ifdef DEBUG
 		for(int j = 0; j < num_rx_desc; j++)
 			slot_index[j] = -1;
@@ -259,30 +268,30 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	}
 
 	/* Tx descripter ring allocation */
-	for(i = 0; i < ih->num_queues; i++){
-		uint32_t size;
+	for(i = 0; i < ih->num_queues; i++, tx_assigned++){
 		void	*addr_virtual;
 		uint64_t addr_dma;
 		int *slot_index;
 
-		size = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
-		if(size > huge_page_size){
-			printf("tx descripter size is larger than hugetlb\n");
-			return -1;
+		addr_virtual = mmap(NULL, size_tx_desc,
+			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+		if(addr_virtual == MAP_FAILED){
+			goto err_tx_mmap;
 		}
 
-		addr_virtual = mmap(NULL, size,
-			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
-		if(addr_virtual == MAP_FAILED)
-			return 1;
-
-		ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
-		if(ret < 0)
-			return -1;
+		ret = ixgbe_dma_map(ih,
+			addr_virtual, &addr_dma, size_tx_desc);
+		if(ret < 0){
+			munmap(addr_virtual, size_tx_desc);
+			goto err_tx_dma_map;
+		}
 
 		slot_index = malloc(sizeof(int) * num_tx_desc);
-		if(!slot_index)
-			return -1;
+		if(!slot_index){
+			ixgbe_dma_unmap(ih, addr_dma);
+			munmap(addr_virtual, size_tx_desc);
+			goto err_tx_alloc_slot_index;
+		}
 #ifdef DEBUG
 		for(int j = 0; j < num_rx_desc; j++)
 			slot_index[j] = -1;
@@ -298,6 +307,61 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	}
 
 	return 0;
+
+err_tx_alloc_slot_index:
+err_tx_dma_map:
+err_tx_mmap:
+	for(i = 0; i < tx_assigned; i++){
+		free(ih->tx_ring[i].slot_index);
+		ixgbe_dma_unmap(ih, ih->tx_ring[i].addr_dma);
+		munmap(ih->tx_ring[i].addr_virtual,
+			sizeof(union ixgbe_adv_tx_desc) * ih->tx_ring[i].count);
+	}
+err_rx_alloc_slot_index:
+err_rx_dma_map:
+err_rx_mmap:
+	for(i = 0; i < rx_assigned; i++){
+		free(ih->rx_ring[i].slot_index);
+		ixgbe_dma_unmap(ih, ih->rx_ring[i].addr_dma);
+		munmap(ih->rx_ring[i].addr_virtual,
+			sizeof(union ixgbe_adv_rx_desc) * ih->rx_ring[i].count);
+	}
+err_desc_size:
+	free(ih->tx_ring);
+err_alloc_tx_ring:
+	free(ih->rx_ring);
+err_alloc_rx_ring:
+
+	return -1;
+}
+
+static void ixgbe_release_descring(ixgbe_handle *ih)
+{
+	int i, ret;
+
+	for(i = 0; i < ih->num_queues; i++){
+		free(ih->rx_ring[i].slot_index);
+
+		ret = ixgbe_dma_unmap(ih, ih->rx_ring[i].addr_dma);
+		if(ret < 0)
+			perror("failed to unmap descring");
+
+		munmap(ih->rx_ring[i].addr_virtual,
+			sizeof(union ixgbe_adv_rx_desc) * ih->rx_ring[i].count);
+	}
+
+	for(i = 0; i < ih->num_queues; i++){
+		free(ih->tx_ring[i].slot_index);
+
+		ret = ixgbe_dma_unmap(ih, ih->tx_ring[i].addr_dma);
+		if(ret < 0)
+			perror("failed to unmap descring");
+
+		munmap(ih->tx_ring[i].addr_virtual,
+			sizeof(union ixgbe_adv_tx_desc) * ih->tx_ring[i].count);
+	}
+
+	return;
 }
 
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
