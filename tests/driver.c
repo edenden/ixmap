@@ -47,7 +47,11 @@ void *process_interrupt(void *data)
 	int max_budget = 0;
 	uint32_t interrupt_count;
 
-	/* bulk array preparing */
+	/* Prepare TX/RX interrupt mask */
+	rx_qmask = 1 << thread->index;
+	tx_qmask = 1 << (thread->index + thread->num_threads);
+
+	/* Prepare bulk array */
 	for(i = 0; i < thread->num_ports; i++){
 		if(thread->ports[i].budget > max_budget){
 			max_budget = thread->ports[i].budget;
@@ -61,11 +65,7 @@ void *process_interrupt(void *data)
 	if(!bulk.size)
 		return NULL;
 
-	/* TX/RX interrupt mask preparing */
-	rx_qmask = 1 << thread->index;
-	tx_qmask = 1 << (thread->index + thread->num_threads);
-
-	/* TX/RX epoll preparing */
+	/* Prepare TX/RX epoll */
 	fd_ep = ixgbe_epoll_prepare(&irq_data_list,
 		thread->ports, thread->num_ports, thread->index);
 	if(fd_ep < 0)
