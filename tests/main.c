@@ -58,13 +58,16 @@ int main(int argc, char **argv)
 	ixgbe_interface_list[1] = "ixgbe3";
 
 	ih_list = malloc(sizeof(struct ixgbe_handle *) * num_ports);
-	if(!ih_list)
+	if(!ih_list){
+		ret = -1;
 		goto err_ih_list;
+	}
 
 	for(i = 0; i < num_ports; i++, ports_assigned++){
 		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores, budget);
 		if(!ih_list[i]){
 			printf("failed to ixgbe_open count = %d\n", i);
+			ret = -1;
 			goto err_ixgbe_open;
 		}
 
@@ -80,6 +83,7 @@ int main(int argc, char **argv)
 		if(ret < 0){
 			printf("failed to ixgbe_alloc_descring count = %d\n", i);
 			ixgbe_close(ih_list[i]);
+			ret = -1;
 			goto err_ixgbe_alloc_descring;
 		}
 
@@ -95,6 +99,7 @@ int main(int argc, char **argv)
 	threads = malloc(sizeof(struct ixgbe_thread) * num_cores);
 	if(!threads){
 		perror("malloc");
+		ret = -1;
 		goto err_ixgbe_alloc_threads;
 	}
 
@@ -104,6 +109,7 @@ int main(int argc, char **argv)
 		buf = ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
 		if(!buf){
 			printf("failed to ixgbe_alloc_buf count = %d\n", i);
+			ret = -1;
 			goto err_ixgbe_alloc_buf;
 		}
 
@@ -111,19 +117,23 @@ int main(int argc, char **argv)
 			num_ports, num_cores, i, buf);
 		if(ret != 0){
 			ixgbe_release_buf(ih_list[0], buf);
+			ret = -1;
 			goto err_ixgbe_thread_create;
 		}
 	}
 
 	ret = ixgbe_set_signal(&sigset);
-	if(ret != 0)
+	if(ret != 0){
+		ret = -1;
 		goto err_ixgbe_set_signal;
+	}
 
 	while(1){
 		if(sigwait(&sigset, &signal) == 0){
 			break;
 		}
 	}
+	ret = 0;
 
 err_ixgbe_set_signal:
 err_ixgbe_thread_create:
@@ -142,7 +152,6 @@ err_ixgbe_open:
 	}
 	free(ih_list);
 err_ih_list:
-
 	return ret;
 }
 
@@ -546,6 +555,8 @@ static void ixgbe_close(struct ixgbe_handle *ih)
 	munmap(ih->bar, ih->bar_size);
 	close(ih->fd);
 	free(ih);
+
+	return;
 }
 
 static int ixgbe_set_signal(sigset_t *sigset){
