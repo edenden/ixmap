@@ -166,6 +166,7 @@ err_ixgbe_alloc_buf:
 		free(threads[i].ports);
 		ixgbe_release_buf();
 	}
+	free(threads);
 err_ixgbe_alloc_threads:
 	free(ixgbe_buf_list);
 err_ixgbe_buf_list:
@@ -175,6 +176,7 @@ err_ixgbe_open:
 		ixgbe_release_descring();
 		ixgbe_close(ih_list[i]);
 	}
+	free(ih_list);
 err_ih_list:
 	free(ixgbe_interface_list);
 err_interface_list:
