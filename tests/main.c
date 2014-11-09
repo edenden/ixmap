@@ -11,6 +11,7 @@
 
 #include <net/ethernet.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "main.h"
 #include "driver.h"
@@ -26,13 +27,14 @@ static int budget = 1024;
 static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
-static void ixgbe_release_descring(ixgbe_handle *ih);
+static void ixgbe_release_descring(struct ixgbe_handle *ih);
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	uint32_t count, uint32_t buf_size);
-static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
-	uint64_t addr_dma);
+static void ixgbe_release_buf(struct ixgbe_handle *ih, struct ixgbe_buf *buf);
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
 	void *addr_virtual, uint64_t *addr_dma, uint32_t size);
+static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
+	uint64_t addr_dma);
 static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core);
 static void ixgbe_close(struct ixgbe_handle *ih);
 static int ixgbe_set_signal(sigset_t *sigset);
@@ -159,9 +161,9 @@ err_ixgbe_create_threads:
 err_ixgbe_alloc_ports:
 err_ixgbe_alloc_buf:
 	for(i = 0; i < cores_assigned; i++){
-		pthread_kill();
+		//pthread_kill();
 		free(threads[i].ports);
-		ixgbe_release_buf();
+		ixgbe_release_buf(ih_list[0], threads[i].buf);
 	}
 	free(threads);
 err_ixgbe_alloc_threads:
@@ -335,7 +337,7 @@ err_alloc_rx_ring:
 	return -1;
 }
 
-static void ixgbe_release_descring(ixgbe_handle *ih)
+static void ixgbe_release_descring(struct ixgbe_handle *ih)
 {
 	int i, ret;
 
@@ -375,28 +377,27 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	int ret, i;
 
 	buf = malloc(sizeof(struct ixgbe_buf));
-	if(!buf){
-		return NULL;
-	}
+	if(!buf)
+		goto err_alloc_buf;
 
 	size = buf_size * count;
 	if(size > huge_page_size){
 		printf("buffer size is larger than hugetlb\n");
-		return NULL;
-	}
+		goto err_buf_size;
+	} 
 
 	addr_virtual = mmap(NULL, size,
 			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
 	if(addr_virtual == MAP_FAILED)
-		return NULL;
+		goto err_mmap;
 
 	ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
 	if(ret < 0)
-		return NULL;
+		goto err_ixgbe_dma_map;
 
 	free_index = malloc(sizeof(int) * count);
 	if(!free_index)
-		return NULL;
+		goto err_alloc_free_index;
 
 	buf->addr_dma = addr_dma;
 	buf->addr_virtual = addr_virtual;
@@ -411,19 +412,32 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	}
 
 	return buf;
+
+err_alloc_free_index:
+	ixgbe_dma_unmap(ih, addr_dma);
+err_ixgbe_dma_map:
+	munmap(addr_virtual, size);
+err_mmap:
+err_buf_size:
+	free(buf);
+err_alloc_buf:
+	return NULL;
 }
 
-static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
-	uint64_t addr_dma)
-{
-	struct uio_ixgbe_unmap_req req_unmap;
+static void ixgbe_release_buf(struct ixgbe_handle *ih, struct ixgbe_buf *buf){
+	int ret;
 
-	req_unmap.addr_dma = addr_dma;
+	free(buf->free_index);
 
-	if(ioctl(ih->fd, UIO_IXGBE_UNMAP, (unsigned long)&req_unmap) < 0)
-		return -1;
+	ret = ixgbe_dma_unmap(ih, buf->addr_dma);
+	if(ret < 0)
+		perror("failed to unmap buf");
 
-	return 0;
+	munmap(buf->addr_virtual, buf->buf_size * buf->count);
+
+	free(buf);
+
+	return;
 }
 
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
@@ -440,6 +454,19 @@ static int ixgbe_dma_map(struct ixgbe_handle *ih,
 		return -1;
 
 	*addr_dma = req_map.addr_dma;
+	return 0;
+}
+
+static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
+	uint64_t addr_dma)
+{
+	struct uio_ixgbe_unmap_req req_unmap;
+
+	req_unmap.addr_dma = addr_dma;
+
+	if(ioctl(ih->fd, UIO_IXGBE_UNMAP, (unsigned long)&req_unmap) < 0)
+		return -1;
+
 	return 0;
 }
 
@@ -511,20 +538,22 @@ static void ixgbe_close(struct ixgbe_handle *ih)
 }
 
 static int ixgbe_set_signal(sigset_t *sigset){
-	sigemptyset(&sigset);
-	ret = sigaddset(&sigset, SIGHUP);
+	int ret;
+
+	sigemptyset(sigset);
+	ret = sigaddset(sigset, SIGHUP);
 	if(ret != 0)
 		return -1;
 
-	ret = sigaddset(&sigset, SIGINT);
+	ret = sigaddset(sigset, SIGINT);
 	if(ret != 0)
 		return -1;
 
-	ret = sigaddset(&sigset, SIGTERM);
+	ret = sigaddset(sigset, SIGTERM);
 	if(ret != 0)
 		return -1;
 
-	ret = sigprocmask(SIG_BLOCK, &sigset, NULL);
+	ret = sigprocmask(SIG_BLOCK, sigset, NULL);
 	if(ret != 0)
 		return -1;
 
