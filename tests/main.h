@@ -147,16 +147,16 @@ struct uio_ixgbe_up_req {
 	struct uio_ixgbe_info info;
 };
 
-#define UIO_IXGBE_DMAMAP _IOW('U', 210, int)
-struct uio_ixgbe_dmamap_req {
+#define UIO_IXGBE_MAP _IOW('U', 210, int)
+struct uio_ixgbe_map_req {
         uint64_t addr_virtual;
         uint64_t addr_dma;
         uint32_t size;
         uint16_t cache;
 };
 
-#define UIO_IXGBE_DMAUNMAP  _IOW('U', 211, int)
-struct uio_ixgbe_dmaunmap_req {
+#define UIO_IXGBE_UNMAP  _IOW('U', 211, int)
+struct uio_ixgbe_unmap_req {
         uint64_t addr_dma;
 };
 

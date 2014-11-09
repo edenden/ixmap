@@ -20,7 +20,6 @@
 static int buf_count = 1024;
 static char *ixgbe_interface0 = "ixgbe1";
 static char *ixgbe_interface1 = "ixgbe3";
-static int num_ports = 2;
 static int huge_page_size = 2 * 1024 * 1024;
 static int budget = 1024;
 
@@ -29,10 +28,13 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	uint32_t count, uint32_t buf_size);
+static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
+	uint64_t addr_dma);
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
 	void *addr_virtual, uint64_t *addr_dma, uint32_t size);
 static struct ixgbe_handle *ixgbe_open(char *int_name, uint32_t num_core);
 static void ixgbe_close(struct ixgbe_handle *ih);
+static int ixgbe_set_signal(sigset_t *sigset);
 
 int main(int argc, char **argv)
 {
@@ -42,25 +44,27 @@ int main(int argc, char **argv)
 	struct ixgbe_thread *threads;
 	uint32_t buf_size = 0;
 	uint32_t num_cores = 4;
-	int ret, i;
+	uint32_t num_ports = 2;
+	sigset_t sigset;
+	int ret = 0, i, signal;
 
 	ixgbe_interface_list = malloc(sizeof(char *) * num_ports);
 	if(!ixgbe_interface_list)
-		return -1;
+		goto err_interface_list;
 
 	ixgbe_interface_list[0] = ixgbe_interface0;
 	ixgbe_interface_list[1] = ixgbe_interface1;
 
 	ih_list = malloc(sizeof(struct ixgbe_handle *) * num_ports);
 	if(!ih_list)
-		return -1;
+		goto err_ih_list;
 
 	for(i = 0; i < num_ports; i++){
-
 		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores);
 		if(!ih_list[i]){
 			printf("failed to ixgbe_open count = %d\n", i);
-			return -1;
+			num_ports = i;
+			goto err_ixgbe_open;
 		}
 
 		/*
@@ -74,7 +78,9 @@ int main(int argc, char **argv)
 			IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
 		if(ret < 0){
 			printf("failed to ixgbe_alloc_descring count = %d\n", i);
-			return -1;
+			ixgbe_close(ih_list[i]);
+			num_ports = i;
+			goto err_ixgbe_alloc_descring;
 		}
 
 		ixgbe_configure_rx(ih_list[i]);
@@ -89,13 +95,13 @@ int main(int argc, char **argv)
 	ixgbe_buf_list = malloc(sizeof(struct ixgbe_buf *) * num_cores);
 	if(!ixgbe_buf_list){
 		perror("malloc");
-		return -1;
+		goto err_ixgbe_buf_list;
 	}
 
 	threads = malloc(sizeof(struct ixgbe_thread) * num_cores);
 	if(!threads){
 		perror("malloc");
-		return -1;
+		goto err_ixgbe_alloc_threads;
 	}
 
 	for(i = 0; i < num_cores; i++){
@@ -105,7 +111,8 @@ int main(int argc, char **argv)
 			ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
 		if(!ixgbe_buf_list[i]){
 			printf("failed to ixgbe_alloc_buf count = %d\n", i);
-			return -1;
+			num_cores = i;
+			goto err_ixgbe_alloc_buf;
 		}
 
 		threads[i].index = i;
@@ -116,7 +123,9 @@ int main(int argc, char **argv)
 		threads[i].ports = malloc(sizeof(struct ixgbe_port) * num_ports);
 		if(!threads[i].ports){
 			printf("failed to allocate port for each thread\n");
-			return -1;
+			free(ixgbe_buf_list[i]);
+			num_cores = i;
+			goto err_ixgbe_alloc_ports;
 		}
 
 		for(j = 0; j < num_ports; j++){
@@ -131,23 +140,46 @@ int main(int argc, char **argv)
 		if(pthread_create(&threads[i].tid,
 			NULL, process_interrupt, &threads[i]) < 0){
 			perror("failed to create thread");
-			return -1;
+			free(ixgbe_buf_list[i]);
+			free(threads[i].ports);
+			num_cores = i;
+			goto err_ixgbe_create_threads;
 		}
 	}
 
+	ret = ixgbe_set_signal(&sigset);
+	if(ret != 0)
+		goto err_ixgbe_set_signal;
+
 	while(1){
-		sleep(30);
+		if(sigwait(&sigset, &signal) == 0){
+			break;
+		}
 	}
 
+err_ixgbe_set_signal:
+err_ixgbe_create_threads:
+err_ixgbe_alloc_ports:
+err_ixgbe_alloc_buf:
 	for(i = 0; i < num_cores; i++){
-		/* TBD: release mapped DMA areas */
+		pthread_kill();
+		free(threads[i].ports);
+		ixgbe_release_buf();
 	}
-
+err_ixgbe_alloc_threads:
+	free(ixgbe_buf_list);
+err_ixgbe_buf_list:
+err_ixgbe_alloc_descring:
+err_ixgbe_open:
 	for(i = 0; i < num_ports; i++){
+		ixgbe_release_descring();
 		ixgbe_close(ih_list[i]);
 	}
+err_ih_list:
+	free(ixgbe_interface_list);
+err_interface_list:
 
-	return 0;
+	return ret;
 }
 
 void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask)
@@ -315,20 +347,33 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	return buf;
 }
 
+static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
+	uint64_t addr_dma)
+{
+	struct uio_ixgbe_unmap_req req_unmap;
+
+	req_unmap.addr_dma = addr_dma;
+
+	if(ioctl(ih->fd, UIO_IXGBE_UNMAP, (unsigned long)&req_unmap) < 0)
+		return -1;
+
+	return 0;
+}
+
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
 	void *addr_virtual, uint64_t *addr_dma, uint32_t size)
 {
-	struct uio_ixgbe_dmamap_req req_dmamap;
+	struct uio_ixgbe_map_req req_map;
 
-	req_dmamap.addr_virtual = (uint64_t)addr_virtual;
-	req_dmamap.addr_dma = 0;
-	req_dmamap.size = size;
-	req_dmamap.cache = IXGBE_DMA_CACHE_DISABLE;
+	req_map.addr_virtual = (uint64_t)addr_virtual;
+	req_map.addr_dma = 0;
+	req_map.size = size;
+	req_map.cache = IXGBE_DMA_CACHE_DISABLE;
 
-	if(ioctl(ih->fd, UIO_IXGBE_DMAMAP, (unsigned long)&req_dmamap) < 0)
+	if(ioctl(ih->fd, UIO_IXGBE_MAP, (unsigned long)&req_map) < 0)
 		return -1;
 
-	*addr_dma = req_dmamap.addr_dma;
+	*addr_dma = req_map.addr_dma;
 	return 0;
 }
 
@@ -397,4 +442,25 @@ static void ixgbe_close(struct ixgbe_handle *ih)
 	munmap(ih->bar, ih->bar_size);
 	close(ih->fd);
 	free(ih);
+}
+
+static int ixgbe_set_signal(sigset_t *sigset){
+	sigemptyset(&sigset);
+	ret = sigaddset(&sigset, SIGHUP);
+	if(ret != 0)
+		return -1;
+
+	ret = sigaddset(&sigset, SIGINT);
+	if(ret != 0)
+		return -1;
+
+	ret = sigaddset(&sigset, SIGTERM);
+	if(ret != 0)
+		return -1;
+
+	ret = sigprocmask(SIG_BLOCK, &sigset, NULL);
+	if(ret != 0)
+		return -1;
+
+	return 0;
 }

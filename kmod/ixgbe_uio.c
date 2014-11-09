@@ -25,8 +25,8 @@
 static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud);
 static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud);
 static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixgbe_info *info);
-static int uio_ixgbe_cmd_dmamap(struct uio_ixgbe_udapter *ud, void __user *argp);
-static int uio_ixgbe_cmd_dmaunmap(struct uio_ixgbe_udapter *ud, void __user *argp);
+static int uio_ixgbe_cmd_map(struct uio_ixgbe_udapter *ud, void __user *argp);
+static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud, void __user *argp);
 static void uio_ixgbe_reset(struct uio_ixgbe_udapter *ud);
 static irqreturn_t uio_ixgbe_interrupt(int irq, void *data);
 static ssize_t uio_ixgbe_read(struct file * file, char __user * buf,
@@ -1042,8 +1042,8 @@ out:
 	return err;
 }
 
-static int uio_ixgbe_cmd_dmamap(struct uio_ixgbe_udapter *ud, void __user *argp){
-	struct uio_ixgbe_dmamap_req req;
+static int uio_ixgbe_cmd_map(struct uio_ixgbe_udapter *ud, void __user *argp){
+	struct uio_ixgbe_map_req req;
 	uint64_t addr_dma;
 
 	if (copy_from_user(&req, argp, sizeof(req)))
@@ -1067,8 +1067,8 @@ static int uio_ixgbe_cmd_dmamap(struct uio_ixgbe_udapter *ud, void __user *argp)
 	return 0;
 }
 
-static int uio_ixgbe_cmd_dmaunmap(struct uio_ixgbe_udapter *ud, void __user *argp){
-	struct uio_ixgbe_dmaunmap_req req;
+static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud, void __user *argp){
+	struct uio_ixgbe_unmap_req req;
 	int ret;
 
 	if (copy_from_user(&req, argp, sizeof(req)))
@@ -1103,12 +1103,12 @@ static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		err = uio_ixgbe_cmd_up(ud, argp);
 		break;
 
-	case UIO_IXGBE_DMAMAP:
-		err = uio_ixgbe_cmd_dmamap(ud, argp);
+	case UIO_IXGBE_MAP:
+		err = uio_ixgbe_cmd_map(ud, argp);
 		break;
 
-	case UIO_IXGBE_DMAUNMAP:
-		err = uio_ixgbe_cmd_dmaunmap(ud, argp);
+	case UIO_IXGBE_UNMAP:
+		err = uio_ixgbe_cmd_unmap(ud, argp);
 		break;
 
 	case UIO_IXGBE_DOWN:
