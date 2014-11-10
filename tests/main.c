@@ -262,8 +262,8 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		uint64_t addr_dma;
 		int *slot_index;
 
-		addr_virtual = mmap(NULL, size_rx_desc,
-			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+		addr_virtual = mmap(NULL, size_rx_desc, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 		if(addr_virtual == MAP_FAILED){
 			goto err_rx_assign;
 		}
@@ -301,8 +301,8 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		uint64_t addr_dma;
 		int *slot_index;
 
-		addr_virtual = mmap(NULL, size_tx_desc,
-			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+		addr_virtual = mmap(NULL, size_tx_desc, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 		if(addr_virtual == MAP_FAILED){
 			goto err_tx_assign;
 		}
@@ -408,8 +408,8 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 		goto err_buf_size;
 	} 
 
-	addr_virtual = mmap(NULL, size,
-			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
+	addr_virtual = mmap(NULL, size, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 	if(addr_virtual == MAP_FAILED)
 		goto err_mmap;
 
