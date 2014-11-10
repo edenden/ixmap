@@ -79,8 +79,10 @@ void *process_interrupt(void *data)
 	/* Prepare TX-irq/RX-irq/signalfd in epoll */
 	fd_ep = ixgbe_epoll_prepare(&irq_data_list,
 		thread->ports, thread->num_ports, thread->index);
-	if(fd_ep < 0)
+	if(fd_ep < 0){
+		printf("failed to epoll prepare\n");
 		goto err_ixgbe_epoll_prepare;
+	}
 
 	/* Prepare initial RX buffer */
 	for(i = 0; i < thread->num_ports; i++){

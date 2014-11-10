@@ -1326,12 +1326,13 @@ static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma)
 
 	unsigned long start = vma->vm_start;
 	unsigned long size  = vma->vm_end - vma->vm_start;
-	unsigned long offset = vma->vm_pgoff * PAGE_SIZE;
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+	unsigned long pfn;
 
 	if (!ud)
 		return -ENODEV;
 
-	IXGBE_DBG("mmap ud %p start %lu size %lu\n", ud, start, size);
+	pr_info("mmap ud %p start %lu size %lu\n", ud, start, size);
 
 	/* Currently no area used except offset=0 for pci registers */
 	if(offset != 0)
@@ -1344,6 +1345,8 @@ static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma)
 	// We do not do partial mappings, sorry
 	if (area->size != size)
 		return -EOVERFLOW;
+
+	pfn = area->addr_dma >> PAGE_SHIFT;
 
 	switch (area->cache) {
 	case IXGBE_DMA_CACHE_DISABLE:
@@ -1361,8 +1364,7 @@ static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma)
 		break;
 	}
 
-	if (remap_pfn_range(vma, start, area->addr_dma,
-		size, vma->vm_page_prot))
+	if (remap_pfn_range(vma, start, pfn, size, vma->vm_page_prot))
 		return -EAGAIN;
 
 	vma->vm_ops = &uio_ixgbe_mmap_ops;
