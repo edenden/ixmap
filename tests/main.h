@@ -3,11 +3,17 @@
 
 #define FILENAME_SIZE 256
 
-#define min(x, y) ({			\
-	typeof(x) _min1 = (x);		\
-	typeof(y) _min2 = (y);		\
+#define min(x, y) ({				\
+	typeof(x) _min1 = (x);			\
+	typeof(y) _min2 = (y);			\
 	(void) (&_min1 == &_min2);		\
 	_min1 < _min2 ? _min1 : _min2; })
+
+#define max(x, y) ({				\
+	typeof(x) _max1 = (x);			\
+	typeof(y) _max2 = (y);			\
+	(void) (&_max1 == &_max2);		\
+	_max1 > _max2 ? _max1 : _max2; })
 
 /*
  * microsecond values for various ITR rates shifted by 2 to fit itr register
@@ -122,6 +128,7 @@ struct ixgbe_port {
 /* Per thread parameter each thread takes */
 struct ixgbe_thread {
 	pthread_t		tid;
+	pthread_t		ptid;
 	uint32_t		num_threads;
 	uint32_t		index;
 	uint32_t		num_ports;

@@ -7,9 +7,10 @@
 #include <stdint.h>
 #include <sys/ioctl.h>
 #include <sys/epoll.h>
-
 #include <net/ethernet.h>
 #include <pthread.h>
+#include <signal.h>
+#include <sys/signalfd.h>
 
 #include "main.h"
 #include "driver.h"
@@ -32,24 +33,34 @@ static inline uint64_t ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
 	int slot_index);
 static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
 	uint16_t slot_index);
-static int ixgbe_epoll_prepare(struct ixgbe_irq_data **irq_data_list,
+static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 	struct ixgbe_port *ports, uint32_t num_ports, uint32_t thread_index);
+static void ixgbe_epoll_destroy(struct ixgbe_irq_data *irq_data_list,
+	int fd_ep, int num_ports);
 static int epoll_add(int fd_ep, void *ptr, int fd);
+static int signalfd_create();
 
 void *process_interrupt(void *data)
 {
 	struct ixgbe_thread *thread = data;
-	struct epoll_event events[EPOLL_MAXEVENTS];
-	int fd_ep, i, ret, num_fd;
-	uint64_t tx_qmask, rx_qmask;
-	struct ixgbe_bulk bulk;
 	struct ixgbe_irq_data *irq_data_list, *irq_data;
+	struct ixgbe_bulk bulk;
+	struct epoll_event events[EPOLL_MAXEVENTS];
+	uint64_t tx_qmask, rx_qmask;
+	int read_size, fd_ep, i, ret, num_fd;
 	int max_budget = 0;
-	uint32_t interrupt_count;
+	uint8_t *read_buf;
 
 	/* Prepare TX/RX interrupt mask */
 	rx_qmask = 1 << thread->index;
 	tx_qmask = 1 << (thread->index + thread->num_threads);
+
+	/* Prepare read buffer */
+	read_size = max(sizeof(uint32_t),
+			sizeof(struct signalfd_siginfo));
+	read_buf = malloc(read_size);
+	if(!read_buf)
+		goto err_alloc_read_buf;
 
 	/* Prepare bulk array */
 	for(i = 0; i < thread->num_ports; i++){
@@ -60,16 +71,16 @@ void *process_interrupt(void *data)
 	bulk.count = 0;
 	bulk.slot_index = malloc(sizeof(int) * max_budget);
 	if(!bulk.slot_index)
-		return NULL;
+		goto err_bulk_slot_index;
 	bulk.size = malloc(sizeof(uint32_t) * max_budget);
 	if(!bulk.size)
-		return NULL;
+		goto err_bulk_size;
 
-	/* Prepare TX/RX epoll */
+	/* Prepare TX-irq/RX-irq/signalfd in epoll */
 	fd_ep = ixgbe_epoll_prepare(&irq_data_list,
 		thread->ports, thread->num_ports, thread->index);
 	if(fd_ep < 0)
-		return NULL;
+		goto err_ixgbe_epoll_prepare;
 
 	/* Prepare initial RX buffer */
 	for(i = 0; i < thread->num_ports; i++){
@@ -78,18 +89,17 @@ void *process_interrupt(void *data)
 
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
-		if(num_fd <= 0){
-			perror("epoll_wait");
-			break;
+		if(num_fd < 0){
+			continue;
 		}
 
 		for(i = 0; i < num_fd; i++){
 			irq_data = (struct ixgbe_irq_data *)events[i].data.ptr;
-			ret = read(irq_data->fd, &interrupt_count, sizeof(uint32_t));
+			ret = read(irq_data->fd, read_buf, read_size);
 			if(ret < 0)
 				continue;
 			
-			switch(irq_data->direction){
+			switch(irq_data->type){
 			case IXGBE_IRQ_RX:
 				/* Rx descripter cleaning */
 				ixgbe_rx_clean(thread->ports[irq_data->port_index].rx_ring,
@@ -113,12 +123,31 @@ void *process_interrupt(void *data)
 					tx_qmask);
 
 				break;
+			case IXGBE_SIGNAL:
+				goto out;
+				break;
 			default:
 				break;
 			}
 		}
 	}
 
+out:
+	ixgbe_epoll_destroy(irq_data_list,
+		fd_ep, thread->num_ports);
+	free(bulk.size);
+	free(bulk.slot_index);
+	free(read_buf);
+	return NULL;
+
+err_ixgbe_epoll_prepare:
+	free(bulk.size);
+err_bulk_size:
+	free(bulk.slot_index);
+err_bulk_slot_index:
+	free(read_buf);
+err_alloc_read_buf:
+	pthread_kill(thread->ptid, SIGINT);
 	return NULL;
 }
 
@@ -391,73 +420,147 @@ static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
 	return addr_virtual;
 }
 
-static int ixgbe_epoll_prepare(struct ixgbe_irq_data **irq_data_list,
+static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 	struct ixgbe_port *ports, uint32_t num_ports, uint32_t thread_index)
 {
 	char filename[FILENAME_SIZE];
-	struct ixgbe_irq_data *_irq_data_list;
+	struct ixgbe_irq_data *irq_data_list;
 	int fd_ep, i, ret;
+	int assigned_ports = 0;
 
 	/* epoll fd preparing */
 	fd_ep = epoll_create(EPOLL_MAXEVENTS);
 	if(fd_ep < 0){
 		perror("failed to make epoll fd");
-		return -1;
+		goto err_epoll_create;
 	}
 
 	/* TX/RX interrupt data preparing */
-	_irq_data_list =
-		malloc(sizeof(struct ixgbe_irq_data) * num_ports * 2);
-	if(!_irq_data_list)
-		return -1;
+	irq_data_list =
+		malloc(sizeof(struct ixgbe_irq_data) * num_ports * 2 + 1);
+	if(!irq_data_list)
+		goto err_alloc_irq_data_list;
 
-	for(i = 0; i < num_ports; i++){
+	for(i = 0; i < num_ports; i++, assigned_ports++){
 		/* Rx interrupt fd preparing */
 		snprintf(filename, sizeof(filename), "/dev/%s-intrx%d",
 			ports[i].interface_name, thread_index);
-		_irq_data_list[i].fd = open(filename, O_RDWR);
-		if(_irq_data_list[i].fd < 0)
-			return -1;
+		irq_data_list[i].fd = open(filename, O_RDWR);
+		if(irq_data_list[i].fd < 0)
+			goto err_assign_port;
 
-		_irq_data_list[i].direction = IXGBE_IRQ_RX;
-		_irq_data_list[i].port_index = i;
+		irq_data_list[i].type = IXGBE_IRQ_RX;
+		irq_data_list[i].port_index = i;
 
 		/* Tx interrupt fd preparing */
 		snprintf(filename, sizeof(filename), "/dev/%s-inttx%d",
 			ports[i].interface_name, thread_index);
-		_irq_data_list[i + num_ports].fd = open(filename, O_RDWR);
-		if(_irq_data_list[i + num_ports].fd < 0)
-			return -1;
-
-		_irq_data_list[i + num_ports].direction = IXGBE_IRQ_TX;
-		_irq_data_list[i + num_ports].port_index = i;
-
-		ret = epoll_add(fd_ep, &_irq_data_list[i],
-			_irq_data_list[i].fd);
-		if(ret != 0){
-			perror("failed to add fd in epoll");
-			return -1;
+		irq_data_list[i + num_ports].fd = open(filename, O_RDWR);
+		if(irq_data_list[i + num_ports].fd < 0){
+			close(irq_data_list[i].fd);
+			goto err_assign_port;
 		}
 
-		ret = epoll_add(fd_ep, &_irq_data_list[i + num_ports],
-			_irq_data_list[i + num_ports].fd);
-		if(ret != 0){
+		irq_data_list[i + num_ports].type = IXGBE_IRQ_TX;
+		irq_data_list[i + num_ports].port_index = i;
+
+		ret = epoll_add(fd_ep, &irq_data_list[i],
+			irq_data_list[i].fd);
+		if(ret < 0){
 			perror("failed to add fd in epoll");
-			return -1;
+			close(irq_data_list[i].fd);
+			close(irq_data_list[i + num_ports].fd);
+			goto err_assign_port;
+		}
+
+		ret = epoll_add(fd_ep, &irq_data_list[i + num_ports],
+			irq_data_list[i + num_ports].fd);
+		if(ret < 0){
+			perror("failed to add fd in epoll");
+			close(irq_data_list[i].fd);
+			close(irq_data_list[i + num_ports].fd);
+			goto err_assign_port;
 		}
 	}
 
-	*irq_data_list = _irq_data_list;
+	/* signalfd preparing */
+	irq_data_list[num_ports * 2].fd = signalfd_create();
+	if(irq_data_list[num_ports * 2].fd < 0){
+		perror("failed to open signalfd");
+		goto err_signalfd_create;
+        }
+	irq_data_list[num_ports * 2].type = IXGBE_SIGNAL;
+	irq_data_list[num_ports * 2].port_index = -1;
+
+	ret = epoll_add(fd_ep, &irq_data_list[num_ports * 2],
+		irq_data_list[num_ports * 2].fd);
+	if(ret < 0){
+		perror("failed to add fd in epoll");
+		goto err_epoll_add_signal_fd;
+	}
+
+	*_irq_data_list = irq_data_list;
 	return fd_ep;
+
+err_epoll_add_signal_fd:
+	close(irq_data_list[num_ports * 2].fd);
+err_signalfd_create:
+err_assign_port:
+	for(i = 0; i < assigned_ports; i++){
+		close(irq_data_list[i].fd);
+		close(irq_data_list[i + num_ports].fd);
+	}
+	free(irq_data_list);
+err_alloc_irq_data_list:
+	close(fd_ep);
+err_epoll_create:
+	return -1;
+}
+
+static void ixgbe_epoll_destroy(struct ixgbe_irq_data *irq_data_list,
+	int fd_ep, int num_ports)
+{
+	int i;
+
+	close(irq_data_list[num_ports * 2].fd);
+
+	for(i = 0; i < num_ports; i++){
+		close(irq_data_list[i].fd);
+		close(irq_data_list[i + num_ports].fd);
+	}
+
+	free(irq_data_list);
+	close(fd_ep);
+	return;
 }
 
 static int epoll_add(int fd_ep, void *ptr, int fd)
 {
 	struct epoll_event event;
+	int ret;
 
 	memset(&event, 0, sizeof(struct epoll_event));
 	event.events = EPOLLIN;
 	event.data.ptr = ptr;
-	return epoll_ctl(fd_ep, EPOLL_CTL_ADD, fd, &event);
+	ret = epoll_ctl(fd_ep, EPOLL_CTL_ADD, fd, &event);
+	if(ret < 0)
+		return -1;
+
+	return 0;
 }
 
+static int signalfd_create(){
+	sigset_t sigset;
+	int signal_fd;
+
+	sigemptyset(&sigset);
+	sigaddset(&sigset, SIGUSR1);
+
+	signal_fd = signalfd(-1, &sigset, 0);
+	if(signal_fd < 0){
+		perror("signalfd");
+		return -1;
+	}
+
+	return signal_fd;
+}

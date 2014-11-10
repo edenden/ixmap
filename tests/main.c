@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 		if(!ih_list[i]){
 			printf("failed to ixgbe_open count = %d\n", i);
 			ret = -1;
-			goto err_ixgbe_open;
+			goto err_assign_ports;
 		}
 
 		/*
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
 			printf("failed to ixgbe_alloc_descring count = %d\n", i);
 			ixgbe_close(ih_list[i]);
 			ret = -1;
-			goto err_ixgbe_alloc_descring;
+			goto err_assign_ports;
 		}
 
 		ixgbe_configure_rx(ih_list[i]);
@@ -103,6 +103,12 @@ int main(int argc, char **argv)
 		goto err_ixgbe_alloc_threads;
 	}
 
+	ret = ixgbe_set_signal(&sigset);
+	if(ret != 0){
+		ret = -1;
+		goto err_ixgbe_set_signal;
+	}
+
 	for(i = 0; i < num_cores; i++, cores_assigned++){
 		struct ixgbe_buf *buf;
 
@@ -110,7 +116,7 @@ int main(int argc, char **argv)
 		if(!buf){
 			printf("failed to ixgbe_alloc_buf count = %d\n", i);
 			ret = -1;
-			goto err_ixgbe_alloc_buf;
+			goto err_assign_cores;
 		}
 
 		ret = ixgbe_thread_create(ih_list, &threads[i],
@@ -118,14 +124,8 @@ int main(int argc, char **argv)
 		if(ret != 0){
 			ixgbe_release_buf(ih_list[0], buf);
 			ret = -1;
-			goto err_ixgbe_thread_create;
+			goto err_assign_cores;
 		}
-	}
-
-	ret = ixgbe_set_signal(&sigset);
-	if(ret != 0){
-		ret = -1;
-		goto err_ixgbe_set_signal;
 	}
 
 	while(1){
@@ -135,17 +135,15 @@ int main(int argc, char **argv)
 	}
 	ret = 0;
 
-err_ixgbe_set_signal:
-err_ixgbe_thread_create:
-err_ixgbe_alloc_buf:
+err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixgbe_kill_thread(&threads[i]);
 		ixgbe_release_buf(ih_list[0], threads[i].buf);
 	}
+err_ixgbe_set_signal:
 	free(threads);
 err_ixgbe_alloc_threads:
-err_ixgbe_alloc_descring:
-err_ixgbe_open:
+err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
 		ixgbe_release_descring(ih_list[i]);
 		ixgbe_close(ih_list[i]);
@@ -192,6 +190,7 @@ static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
 	thread->num_threads = num_cores;
 	thread->num_ports = num_ports;
 	thread->buf = buf;
+	thread->ptid = pthread_self();
 
 	thread->ports = malloc(sizeof(struct ixgbe_port) * num_ports);
 	if(!thread->ports){
@@ -225,9 +224,13 @@ err_ixgbe_alloc_ports:
 static void ixgbe_kill_thread(struct ixgbe_thread *thread)
 {
 	int ret;
-	ret = pthread_kill(thread->tid, SIGINT);
+	ret = pthread_kill(thread->tid, SIGUSR1);
 	if(ret != 0)
 		perror("failed to kill thread");
+
+	ret = pthread_join(thread->tid, NULL);
+	if(ret != 0)
+		perror("failed to join thread");
 
 	free(thread->ports);
 	return;
@@ -262,21 +265,21 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		addr_virtual = mmap(NULL, size_rx_desc,
 			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
 		if(addr_virtual == MAP_FAILED){
-			goto err_rx_mmap;
+			goto err_rx_assign;
 		}
 
 		ret = ixgbe_dma_map(ih,
 			addr_virtual, &addr_dma, size_rx_desc);
 		if(ret < 0){
 			munmap(addr_virtual, size_rx_desc);
-			goto err_rx_dma_map;
+			goto err_rx_assign;
 		}
 
 		slot_index = malloc(sizeof(int) * num_rx_desc);
 		if(!slot_index){
 			ixgbe_dma_unmap(ih, addr_dma);
 			munmap(addr_virtual, size_rx_desc);
-			goto err_rx_alloc_slot_index;
+			goto err_rx_assign;
 		}
 #ifdef DEBUG
 		for(int j = 0; j < num_rx_desc; j++)
@@ -301,21 +304,21 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		addr_virtual = mmap(NULL, size_tx_desc,
 			PROT_READ | PROT_WRITE, MAP_HUGETLB, 0, 0);
 		if(addr_virtual == MAP_FAILED){
-			goto err_tx_mmap;
+			goto err_tx_assign;
 		}
 
 		ret = ixgbe_dma_map(ih,
 			addr_virtual, &addr_dma, size_tx_desc);
 		if(ret < 0){
 			munmap(addr_virtual, size_tx_desc);
-			goto err_tx_dma_map;
+			goto err_tx_assign;
 		}
 
 		slot_index = malloc(sizeof(int) * num_tx_desc);
 		if(!slot_index){
 			ixgbe_dma_unmap(ih, addr_dma);
 			munmap(addr_virtual, size_tx_desc);
-			goto err_tx_alloc_slot_index;
+			goto err_tx_assign;
 		}
 #ifdef DEBUG
 		for(int j = 0; j < num_rx_desc; j++)
@@ -333,18 +336,14 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 
 	return 0;
 
-err_tx_alloc_slot_index:
-err_tx_dma_map:
-err_tx_mmap:
+err_tx_assign:
 	for(i = 0; i < tx_assigned; i++){
 		free(ih->tx_ring[i].slot_index);
 		ixgbe_dma_unmap(ih, ih->tx_ring[i].addr_dma);
 		munmap(ih->tx_ring[i].addr_virtual,
 			sizeof(union ixgbe_adv_tx_desc) * ih->tx_ring[i].count);
 	}
-err_rx_alloc_slot_index:
-err_rx_dma_map:
-err_rx_mmap:
+err_rx_assign:
 	for(i = 0; i < rx_assigned; i++){
 		free(ih->rx_ring[i].slot_index);
 		ixgbe_dma_unmap(ih, ih->rx_ring[i].addr_dma);
@@ -568,6 +567,10 @@ static int ixgbe_set_signal(sigset_t *sigset){
 	int ret;
 
 	sigemptyset(sigset);
+	ret = sigaddset(sigset, SIGUSR1);
+	if(ret != 0)
+		return -1;
+
 	ret = sigaddset(sigset, SIGHUP);
 	if(ret != 0)
 		return -1;

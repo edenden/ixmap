@@ -1,11 +1,14 @@
 #define EPOLL_MAXEVENTS 16
 
-#define IXGBE_IRQ_RX 0
-#define IXGBE_IRQ_TX 1
+enum {
+	IXGBE_IRQ_RX = 0,
+	IXGBE_IRQ_TX,
+	IXGBE_SIGNAL
+};
 
 struct ixgbe_irq_data {
 	int	fd;
-	int	direction;
+	int	type;
 	int	port_index;
 };
 
