@@ -123,7 +123,7 @@ int main(int argc, char **argv)
 		ret = ixgbe_thread_create(ih_list, &threads[i],
 			num_ports, num_cores, i, buf);
 		if(ret != 0){
-			printf("failed to ixgbe_thread_create count = %d", i);
+			printf("failed to ixgbe_thread_create count = %d\n", i);
 			ixgbe_release_buf(ih_list[0], buf);
 			ret = -1;
 			goto err_assign_cores;

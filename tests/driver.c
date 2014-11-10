@@ -448,8 +448,10 @@ static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 		snprintf(filename, sizeof(filename), "/dev/%s-intrx%d",
 			ports[i].interface_name, thread_index);
 		irq_data_list[i].fd = open(filename, O_RDWR);
-		if(irq_data_list[i].fd < 0)
+		if(irq_data_list[i].fd < 0){
+			printf("failed to open %s\n", filename);
 			goto err_assign_port;
+		}
 
 		irq_data_list[i].type = IXGBE_IRQ_RX;
 		irq_data_list[i].port_index = i;
@@ -459,6 +461,7 @@ static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 			ports[i].interface_name, thread_index);
 		irq_data_list[i + num_ports].fd = open(filename, O_RDWR);
 		if(irq_data_list[i + num_ports].fd < 0){
+			printf("failed to open %s\n", filename);
 			close(irq_data_list[i].fd);
 			goto err_assign_port;
 		}
