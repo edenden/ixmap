@@ -54,8 +54,8 @@ int main(int argc, char **argv)
 	int ret = 0, i, signal;
 	int cores_assigned = 0, ports_assigned = 0;
 
-	ixgbe_interface_list[0] = "ixgbe1";
-	ixgbe_interface_list[1] = "ixgbe3";
+	ixgbe_interface_list[0] = "ixgbe0";
+	ixgbe_interface_list[1] = "ixgbe2";
 
 	ih_list = malloc(sizeof(struct ixgbe_handle *) * num_ports);
 	if(!ih_list){
