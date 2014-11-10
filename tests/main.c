@@ -174,6 +174,12 @@ static inline void ixgbe_irq_enable(struct ixgbe_handle *ih)
 	uint32_t mask;
 
 	mask = (IXGBE_EIMS_ENABLE_MASK & ~IXGBE_EIMS_RTX_QUEUE);
+
+	/* XXX: Currently we don't support misc interrupts */
+	mask &= ~IXGBE_EIMS_LSC;
+	mask &= ~IXGBE_EIMS_TCP_TIMER;
+	mask &= ~IXGBE_EIMS_OTHER;
+
 	IXGBE_WRITE_REG(ih, IXGBE_EIMS, mask);
 
 	ixgbe_irq_enable_queues(ih, ~0);

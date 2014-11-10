@@ -92,6 +92,7 @@ void *process_interrupt(void *data)
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
 		if(num_fd < 0){
+			perror("epoll error");
 			continue;
 		}
 
@@ -104,21 +105,27 @@ void *process_interrupt(void *data)
 			switch(irq_data->type){
 			case IXGBE_IRQ_RX:
 				/* Rx descripter cleaning */
+printf("Rx descripter cleaning\n");
 				ixgbe_rx_clean(thread->ports[irq_data->port_index].rx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget,
 					&bulk);
+printf("ixgbe_rx_clean completed\n");
 				ixgbe_rx_alloc(thread->ports[irq_data->port_index].rx_ring,
 					thread->buf);
+printf("ixgbe_rx_alloc completed\n");
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					rx_qmask);
+printf("ixgbe_irq_enable_queues completed\n");
 
 				/* XXX: Following is 2ports specific code */
 				ixgbe_tx_xmit(thread->ports[!irq_data->port_index].tx_ring,
 					thread->buf, &bulk);
+printf("ixgbe_tx_xmit completed\n");
 
 				break;
 			case IXGBE_IRQ_TX:
 				/* Tx descripter cleaning */
+printf("Tx descripter cleaning\n");
 				ixgbe_tx_clean(thread->ports[irq_data->port_index].tx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget);
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
@@ -205,13 +212,14 @@ static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
 {
 	uint32_t cmd_type;
 	unsigned int total_xmit = 0;
-	uint16_t unused_count = min(bulk->count, ixgbe_desc_unused(tx_ring));
+	uint16_t unused_count;
 	int i;
 
 	/* set type for advanced descriptor with frame checksum insertion */
 	cmd_type = IXGBE_ADVTXD_DTYP_DATA |
 			IXGBE_ADVTXD_DCMD_DEXT |
 			IXGBE_ADVTXD_DCMD_IFCS;
+	unused_count = min(bulk->count, ixgbe_desc_unused(tx_ring));
 
 	do{
 		union ixgbe_adv_tx_desc *tx_desc;
@@ -282,8 +290,9 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 
 		rx_desc = IXGBE_RX_DESC(rx_ring, rx_ring->next_to_clean);
 
-		if (!ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_DD))
+		if (!ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_DD)){
 			break;
+		}
 
 		/*
 		 * This memory barrier is needed to keep us from reading
@@ -445,11 +454,11 @@ static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 
 	for(i = 0; i < num_ports; i++, assigned_ports++){
 		/* Rx interrupt fd preparing */
-		snprintf(filename, sizeof(filename), "/dev/%s-intrx%d",
+		snprintf(filename, sizeof(filename), "/dev/%s-irqrx%d",
 			ports[i].interface_name, thread_index);
 		irq_data_list[i].fd = open(filename, O_RDWR);
 		if(irq_data_list[i].fd < 0){
-			printf("failed to open %s\n", filename);
+			perror("failed to open");
 			goto err_assign_port;
 		}
 
@@ -457,11 +466,11 @@ static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 		irq_data_list[i].port_index = i;
 
 		/* Tx interrupt fd preparing */
-		snprintf(filename, sizeof(filename), "/dev/%s-inttx%d",
+		snprintf(filename, sizeof(filename), "/dev/%s-irqtx%d",
 			ports[i].interface_name, thread_index);
 		irq_data_list[i + num_ports].fd = open(filename, O_RDWR);
 		if(irq_data_list[i + num_ports].fd < 0){
-			printf("failed to open %s\n", filename);
+			perror("failed to open");
 			close(irq_data_list[i].fd);
 			goto err_assign_port;
 		}

@@ -499,6 +499,12 @@ typedef u32 ixgbe_link_speed;
 #define IXGBE_PBACL(_i) (((_i) == 0) ? (0x11068) : (0x110C0 + ((_i) * 4)))
 #define IXGBE_GPIE	      0x00898
 
+/* Extended Interrupt Cause Read */
+#define IXGBE_EICR_RTX_QUEUE	0x0000FFFF /* RTx Queue Interrupt */
+
+/* Extended Interrupt Mask Set */
+#define IXGBE_EIMS_RTX_QUEUE	IXGBE_EICR_RTX_QUEUE /* RTx Queue Interrupt */
+
 /* Interrupt clear mask */
 #define IXGBE_IRQ_CLEAR_MASK    0xFFFFFFFF
 
