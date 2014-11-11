@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 	for(i = 0; i < num_ports; i++, ports_assigned++){
 		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores, budget);
 		if(!ih_list[i]){
-			printf("failed to ixgbe_open count = %d\n", i);
+			printf("failed to ixgbe_open, idx = %d\n", i);
 			ret = -1;
 			goto err_assign_ports;
 		}
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 		ret = ixgbe_alloc_descring(ih_list[i],
 			IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
 		if(ret < 0){
-			printf("failed to ixgbe_alloc_descring count = %d\n", i);
+			printf("failed to ixgbe_alloc_descring, idx = %d\n", i);
 			ixgbe_close(ih_list[i]);
 			ret = -1;
 			goto err_assign_ports;
@@ -115,7 +115,8 @@ int main(int argc, char **argv)
 
 		buf = ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
 		if(!buf){
-			printf("failed to ixgbe_alloc_buf count = %d\n", i);
+			printf("failed to ixgbe_alloc_buf, idx = %d\n", i);
+			printf("probably iommu is not enabled?\n");
 			ret = -1;
 			goto err_assign_cores;
 		}
@@ -123,7 +124,7 @@ int main(int argc, char **argv)
 		ret = ixgbe_thread_create(ih_list, &threads[i],
 			num_ports, num_cores, i, buf);
 		if(ret != 0){
-			printf("failed to ixgbe_thread_create count = %d\n", i);
+			printf("failed to ixgbe_thread_create, idx = %d\n", i);
 			ixgbe_release_buf(ih_list[0], buf);
 			ret = -1;
 			goto err_assign_cores;
