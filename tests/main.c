@@ -82,6 +82,7 @@ int main(int argc, char **argv)
 			IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
 		if(ret < 0){
 			printf("failed to ixgbe_alloc_descring, idx = %d\n", i);
+			printf("please decrease descripter or enable iommu\n");
 			ixgbe_close(ih_list[i]);
 			ret = -1;
 			goto err_assign_ports;
@@ -116,7 +117,7 @@ int main(int argc, char **argv)
 		buf = ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
 		if(!buf){
 			printf("failed to ixgbe_alloc_buf, idx = %d\n", i);
-			printf("probably iommu is not enabled?\n");
+			printf("please decrease buffer or enable iommu\n");
 			ret = -1;
 			goto err_assign_cores;
 		}
