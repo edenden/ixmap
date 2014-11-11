@@ -156,6 +156,7 @@ err_bulk_size:
 err_bulk_slot_index:
 	free(read_buf);
 err_alloc_read_buf:
+	printf("thread execution failed\n");
 	pthread_kill(thread->ptid, SIGINT);
 	return NULL;
 }
@@ -448,7 +449,7 @@ static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 
 	/* TX/RX interrupt data preparing */
 	irq_data_list =
-		malloc(sizeof(struct ixgbe_irq_data) * num_ports * 2 + 1);
+		malloc(sizeof(struct ixgbe_irq_data) * (num_ports * 2 + 1));
 	if(!irq_data_list)
 		goto err_alloc_irq_data_list;
 
