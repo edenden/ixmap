@@ -78,8 +78,8 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	struct pci_dev *pdev = ud->pdev;
 	struct page **pages;
 	struct sg_table *sgt;
-	unsigned long user_start, user_end;
-	unsigned int ret, i, npages, user_offset;
+	unsigned long user_start, user_end, user_offset;
+	unsigned int ret, i, npages;
 	dma_addr_t addr_dma;
 	
 	user_start = addr_virtual & PAGE_MASK;
