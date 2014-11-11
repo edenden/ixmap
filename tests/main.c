@@ -18,7 +18,7 @@
 #include "rxinit.h"
 #include "txinit.h"
 
-static int buf_count = 1024;
+static int buf_count = 4096;
 static char *ixgbe_interface_list[2];
 static int huge_page_size = 2 * 1024 * 1024;
 static int budget = 1024;
@@ -35,9 +35,9 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	uint32_t count, uint32_t buf_size);
 static void ixgbe_release_buf(struct ixgbe_handle *ih, struct ixgbe_buf *buf);
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
-	void *addr_virtual, uint64_t *addr_dma, uint32_t size);
+	void *addr_virtual, unsigned long *addr_dma, unsigned long size);
 static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
-	uint64_t addr_dma);
+	unsigned long addr_dma);
 static struct ixgbe_handle *ixgbe_open(char *interface_name,
 	uint32_t num_core, int budget);
 static void ixgbe_close(struct ixgbe_handle *ih);
@@ -248,7 +248,7 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc)
 {
 	int ret, i, rx_assigned = 0, tx_assigned = 0;
-	int size_tx_desc, size_rx_desc;
+	unsigned long size_tx_desc, size_rx_desc;
 
 	ih->rx_ring = malloc(sizeof(struct ixgbe_ring) * ih->num_queues);
 	if(!ih->rx_ring)
@@ -267,7 +267,7 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	/* Rx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++, rx_assigned++){
 		void *addr_virtual;
-		uint64_t addr_dma;
+		unsigned long addr_dma;
 		int *slot_index;
 
 		addr_virtual = mmap(NULL, size_rx_desc, PROT_READ | PROT_WRITE,
@@ -306,7 +306,7 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	/* Tx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++, tx_assigned++){
 		void	*addr_virtual;
-		uint64_t addr_dma;
+		unsigned long addr_dma;
 		int *slot_index;
 
 		addr_virtual = mmap(NULL, size_tx_desc, PROT_READ | PROT_WRITE,
@@ -400,9 +400,8 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	uint32_t count, uint32_t buf_size)
 {
 	struct ixgbe_buf *buf;
-	uint32_t size;
 	void	*addr_virtual;
-	uint64_t addr_dma;
+	unsigned long addr_dma, size;
 	int *free_index;
 	int ret, i;
 
@@ -411,10 +410,12 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 		goto err_alloc_buf;
 
 	size = buf_size * count;
+/*
 	if(size > huge_page_size){
 		printf("buffer size is larger than hugetlb\n");
 		goto err_buf_size;
 	} 
+*/
 
 	addr_virtual = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
@@ -471,11 +472,11 @@ static void ixgbe_release_buf(struct ixgbe_handle *ih, struct ixgbe_buf *buf){
 }
 
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
-	void *addr_virtual, uint64_t *addr_dma, uint32_t size)
+	void *addr_virtual, unsigned long *addr_dma, unsigned long size)
 {
 	struct uio_ixgbe_map_req req_map;
 
-	req_map.addr_virtual = (uint64_t)addr_virtual;
+	req_map.addr_virtual = (unsigned long)addr_virtual;
 	req_map.addr_dma = 0;
 	req_map.size = size;
 	req_map.cache = IXGBE_DMA_CACHE_DISABLE;
@@ -488,7 +489,7 @@ static int ixgbe_dma_map(struct ixgbe_handle *ih,
 }
 
 static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
-	uint64_t addr_dma)
+	unsigned long addr_dma)
 {
 	struct uio_ixgbe_unmap_req req_unmap;
 

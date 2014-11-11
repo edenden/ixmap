@@ -272,15 +272,18 @@ static void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	uint8_t reg_idx, struct ixgbe_ring *ring)
 {
 	uint32_t rxdctl;
+	uint64_t addr_dma;
+
+	addr_dma = (uint64_t)ring->addr_dma;
 
 	/* disable queue to avoid issues while updating state */
 	rxdctl = IXGBE_READ_REG(ih, IXGBE_RXDCTL(reg_idx));
 	ixgbe_disable_rx_queue(ih, reg_idx, ring);
 
 	IXGBE_WRITE_REG(ih, IXGBE_RDBAL(reg_idx),
-		ring->addr_dma & DMA_BIT_MASK(32));
+		addr_dma & DMA_BIT_MASK(32));
 	IXGBE_WRITE_REG(ih, IXGBE_RDBAH(reg_idx),
-		ring->addr_dma >> 32);
+		addr_dma >> 32);
 	IXGBE_WRITE_REG(ih, IXGBE_RDLEN(reg_idx),
 		ring->count * sizeof(union ixgbe_adv_rx_desc));
 

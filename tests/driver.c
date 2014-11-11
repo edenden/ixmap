@@ -29,7 +29,7 @@ static inline int ixgbe_slot_detach(struct ixgbe_ring *ring,
 	uint16_t desc_index);
 static inline void ixgbe_slot_release(struct ixgbe_buf *buf,
 	int slot_index);
-static inline uint64_t ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
+static inline unsigned long ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
 	int slot_index);
 static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
 	uint16_t slot_index);
@@ -183,7 +183,7 @@ static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf)
 			break;
 
 		ixgbe_slot_attach(rx_ring, rx_ring->next_to_use, slot_index);
-		addr_dma = ixgbe_slot_addr_dma(buf, slot_index);
+		addr_dma = (uint64_t)ixgbe_slot_addr_dma(buf, slot_index);
 
 		rx_desc->read.pkt_addr = htole64(addr_dma);
 		rx_desc->read.hdr_addr = 0;
@@ -240,7 +240,7 @@ static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
 
 		ixgbe_slot_attach(tx_ring, tx_ring->next_to_use, slot_index);
 
-		addr_dma = ixgbe_slot_addr_dma(buf, slot_index);
+		addr_dma = (uint64_t)ixgbe_slot_addr_dma(buf, slot_index);
 		tx_desc->read.buffer_addr = htole64(addr_dma);
 
 		cmd_type |= size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS;
@@ -414,10 +414,10 @@ static inline void ixgbe_slot_release(struct ixgbe_buf *buf,
 	return;
 }
 
-static inline uint64_t ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
+static inline unsigned long ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
 	int slot_index)
 {
-	uint64_t addr_dma;
+	unsigned long addr_dma;
 
 	addr_dma = buf->addr_dma + (buf->buf_size * slot_index);
 	return addr_dma;

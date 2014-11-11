@@ -61,8 +61,10 @@ static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 {
 	int wait_loop = 10;
 	uint32_t txdctl = IXGBE_TXDCTL_ENABLE;
+	uint64_t addr_dma;
 	struct timespec ts;
 
+	addr_dma = (uint64_t)ring->addr_dma;
 	ts.tv_sec = 0;
 	ts.tv_nsec = 1000000;
 
@@ -71,9 +73,9 @@ static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 	IXGBE_WRITE_FLUSH(ih);
 
 	IXGBE_WRITE_REG(ih, IXGBE_TDBAL(reg_idx),
-			ring->addr_dma & DMA_BIT_MASK(32));
+			addr_dma & DMA_BIT_MASK(32));
 	IXGBE_WRITE_REG(ih, IXGBE_TDBAH(reg_idx),
-			ring->addr_dma >> 32);
+			addr_dma >> 32);
 	IXGBE_WRITE_REG(ih, IXGBE_TDLEN(reg_idx),
 			ring->count * sizeof(union ixgbe_adv_tx_desc));
 

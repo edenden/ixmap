@@ -53,9 +53,8 @@
 
 /* MAC and PHY info */
 struct uio_ixgbe_info {
-	uint32_t	irq;
-	uint64_t	mmio_base;
-	uint32_t	mmio_size;
+	unsigned long	mmio_base;
+	unsigned long	mmio_size;
 
 	uint16_t	mac_type;
 	uint8_t		mac_addr[ETH_ALEN];
@@ -72,7 +71,7 @@ struct uio_ixgbe_info {
 
 struct ixgbe_ring {
 	void		*addr_virtual;
-	uint64_t	addr_dma;
+	unsigned long	addr_dma;
 	uint32_t	count;
 
 	uint8_t		*tail;
@@ -83,7 +82,7 @@ struct ixgbe_ring {
 
 struct ixgbe_buf {
 	void		*addr_virtual;
-	uint64_t	addr_dma;
+	unsigned long	addr_dma;
 	uint32_t	buf_size;
 	uint32_t	count;
 
@@ -100,15 +99,15 @@ struct ixgbe_bulk {
 struct ixgbe_handle {
  	int			fd;
 	void			*bar;
-	uint32_t		bar_size;
-	uint32_t		num_queues;
-	uint16_t		num_interrupt_rate;
+	unsigned long		bar_size;
 
 	char			*interface_name;
 	struct ixgbe_ring	*tx_ring;
 	struct ixgbe_ring	*rx_ring;
 	struct ixgbe_buf	*buf;
 
+	uint32_t		num_queues;
+	uint16_t		num_interrupt_rate;
 	uint32_t		promisc;
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
@@ -145,27 +144,27 @@ enum {
 
 /* Ioctl defines */
 
-#define UIO_IXGBE_INFO       _IOW('E', 201, int)
+#define UIO_IXGBE_INFO		_IOW('E', 201, int)
 struct uio_ixgbe_info_req {
 	struct uio_ixgbe_info info;
 };
 
-#define UIO_IXGBE_UP       _IOW('E', 202, int)
+#define UIO_IXGBE_UP		_IOW('E', 202, int)
 struct uio_ixgbe_up_req {
 	struct uio_ixgbe_info info;
 };
 
-#define UIO_IXGBE_MAP _IOW('U', 210, int)
+#define UIO_IXGBE_MAP		_IOW('U', 210, int)
 struct uio_ixgbe_map_req {
-        uint64_t addr_virtual;
-        uint64_t addr_dma;
-        uint32_t size;
-        uint16_t cache;
+        unsigned long addr_virtual;
+        unsigned long addr_dma;
+        unsigned long size;
+        uint8_t cache;
 };
 
-#define UIO_IXGBE_UNMAP  _IOW('U', 211, int)
+#define UIO_IXGBE_UNMAP		_IOW('U', 211, int)
 struct uio_ixgbe_unmap_req {
-        uint64_t addr_dma;
+        unsigned long addr_dma;
 };
 
 void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask);

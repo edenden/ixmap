@@ -77,9 +77,8 @@ struct ixgbe_irqdev {
 
 /* MAC and PHY info */
 struct uio_ixgbe_info {
-	uint32_t	irq;
-	uint64_t	mmio_base;
-	uint32_t	mmio_size;
+	unsigned long	mmio_base;
+	unsigned long	mmio_size;
 
 	uint16_t	mac_type;
 	uint8_t		mac_addr[ETH_ALEN];
@@ -125,15 +124,15 @@ struct uio_ixgbe_link_req {
 
 #define UIO_IXGBE_MAP _IOW('U', 210, int)
 struct uio_ixgbe_map_req {
-	uint64_t addr_virtual;
-	uint64_t addr_dma;
-	uint32_t size;
-	uint16_t cache;
+	unsigned long addr_virtual;
+	unsigned long addr_dma;
+	unsigned long size;
+	uint8_t cache;
 };
 
 #define UIO_IXGBE_UNMAP  _IOW('U', 211, int)
 struct uio_ixgbe_unmap_req {
-	uint64_t addr_dma;
+	unsigned long addr_dma;
 };
 
 u16 ixgbe_read_pci_cfg_word(struct ixgbe_hw *hw, u32 reg);

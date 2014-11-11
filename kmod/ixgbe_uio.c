@@ -998,7 +998,6 @@ static int uio_ixgbe_cmd_set_link(struct uio_ixgbe_udapter *ud, void __user *arg
 static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixgbe_info *info){
 	struct ixgbe_hw *hw = ud->hw;
 
-	info->irq       = ud->pdev->irq;
 	info->mmio_base = ud->iobase;
 	info->mmio_size = ud->iolen;
 
@@ -1046,7 +1045,7 @@ out:
 
 static int uio_ixgbe_cmd_map(struct uio_ixgbe_udapter *ud, void __user *argp){
 	struct uio_ixgbe_map_req req;
-	uint64_t addr_dma;
+	unsigned long addr_dma;
 
 	if (copy_from_user(&req, argp, sizeof(req)))
 		return -EFAULT;

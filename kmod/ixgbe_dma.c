@@ -23,7 +23,7 @@
 #include "ixgbe_dma.h"
 
 static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
-	uint64_t addr_dma, unsigned int size);
+	unsigned long addr_dma, unsigned long size);
 static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 	struct ixgbe_dma_area *area);
 
@@ -38,7 +38,7 @@ u8 __iomem *ixgbe_dma_map_iobase(struct uio_ixgbe_udapter *ud)
 {
 	struct list_head *where;
 	struct ixgbe_dma_area *area;
-	uint64_t addr_dma = ud->iobase;
+	unsigned long addr_dma = ud->iobase;
 	u8 __iomem *hw_addr;
 
 	hw_addr = ioremap(ud->iobase, ud->iolen);
@@ -71,14 +71,14 @@ err_ioremap:
 }
 
 dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
-		unsigned long addr_virtual, unsigned int size, unsigned int cache)
+		unsigned long addr_virtual, unsigned long size, uint8_t cache)
 {
 	struct ixgbe_dma_area *area;
 	struct list_head *where;
 	struct pci_dev *pdev = ud->pdev;
 	struct page **pages;
 	struct sg_table *sgt;
-	uint64_t user_start, user_end;
+	unsigned long user_start, user_end;
 	unsigned int ret, i, npages, user_offset;
 	dma_addr_t addr_dma;
 	
@@ -108,8 +108,10 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 
 	ret = dma_map_sg(&pdev->dev, sgt->sgl, sgt->nents, DMA_BIDIRECTIONAL);
 	if(!ret){
+		pr_err("ERR: failed to dma_map_sg\n");
 		goto err_dma_map_sg;
 	}else if(ret > 1){
+		pr_err("ERR: dma_map_sg returned more than single area\n");
 		goto err_dma_map_sg_not_contiguous;
 	}
 
@@ -156,7 +158,7 @@ err_alloc_pages:
 
 }
 
-int ixgbe_dma_unmap(struct uio_ixgbe_udapter *ud, uint64_t addr_dma)
+int ixgbe_dma_unmap(struct uio_ixgbe_udapter *ud, unsigned long addr_dma)
 {
 	struct ixgbe_dma_area *area;
 
@@ -183,11 +185,9 @@ void ixgbe_dma_unmap_all(struct uio_ixgbe_udapter *ud)
 }
 
 struct ixgbe_dma_area *ixgbe_dma_area_lookup(struct uio_ixgbe_udapter *ud,
-	uint64_t addr_dma)
+	unsigned long addr_dma)
 {
 	struct ixgbe_dma_area *area;
-
-	IXGBE_DBG("area lookup. addr_dma %llu\n", addr_dma);
 
 	list_for_each_entry(area, &ud->areas, list) {
 		if (area->addr_dma == addr_dma)
@@ -198,26 +198,23 @@ struct ixgbe_dma_area *ixgbe_dma_area_lookup(struct uio_ixgbe_udapter *ud,
 }
 
 static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
-	uint64_t addr_dma, unsigned int size)
+	unsigned long addr_dma, unsigned long size)
 {
 	unsigned long start_new, end_new;
 	unsigned long start_area, end_area;
 	struct ixgbe_dma_area *area;
 	struct list_head *last;
 
+	pr_info("add area: dmaaddr = %p size = %lu\n",
+		(void *)addr_dma, size);
+
 	start_new = addr_dma;
 	end_new   = start_new + size;
-
-	IXGBE_DBG("adding area. context %p start %lu end %lu\n", ud, start_new, end_new);
-
 	last  = &ud->areas;
 
 	list_for_each_entry(area, &ud->areas, list) {
 		start_area = area->addr_dma;
 		end_area   = start_area + area->size;
-
-		IXGBE_DBG("checking area. context %p start %lu end %lu\n",
-			ud, start_area, end_area);
 
 		/* Since the list is sorted we know at this point that
 		 * new area goes before this one. */
@@ -246,6 +243,9 @@ static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 	struct page **pages;
 	struct sg_table *sgt;
 	unsigned int i, npages;
+
+	pr_info("delete area: dmaaddr = %p size = %lu\n",
+		(void *)area->addr_dma, area->size);
 
 	if (atomic_dec_and_test(&area->refcount)){
 		if(area->addr_dma == ud->iobase){
