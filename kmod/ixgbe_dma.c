@@ -78,6 +78,7 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	struct pci_dev *pdev = ud->pdev;
 	struct page **pages;
 	struct sg_table *sgt;
+	struct scatterlist *sg;
 	unsigned long user_start, user_end, user_offset;
 	unsigned int ret, i, npages;
 	dma_addr_t addr_dma;
@@ -110,9 +111,14 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	if(!ret){
 		pr_err("ERR: failed to dma_map_sg\n");
 		goto err_dma_map_sg;
-	}else if(ret > 1){
-		pr_err("ERR: dma_map_sg returned more than single area\n");
-		goto err_dma_map_sg_not_contiguous;
+	}
+
+	for_each_sg(sgt->sgl, sg, ret, i) {
+		if(sg_next(sg) &&
+		sg_dma_address(sg) + sg_dma_len(sg) != sg_dma_address(sg_next(sg))){
+			pr_err("ERR: non-contiguous dma area\n");
+			goto err_dma_map_sg_not_contiguous;
+		}
 	}
 
 	addr_dma = sg_dma_address(&sgt->sgl[0]);
