@@ -28,10 +28,10 @@ static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 	struct ixgbe_dma_area *area);
 
 #if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0) )
-static int sg_alloc_table_from_pages(struct sg_table *sgt,
-        struct page **pages, unsigned int n_pages,
-        unsigned long offset, unsigned long size,
-        gfp_t gfp_mask);
+int sg_alloc_table_from_pages(struct sg_table *sgt,
+	struct page **pages, unsigned int n_pages,
+	unsigned long offset, unsigned long size,
+	gfp_t gfp_mask);
 #endif /* < 3.6.0 */
 
 u8 __iomem *ixgbe_dma_map_iobase(struct uio_ixgbe_udapter *ud)
@@ -79,13 +79,17 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	struct page **pages;
 	struct sg_table *sgt;
 	struct scatterlist *sg;
-	unsigned long user_start, user_end, user_offset;
+	unsigned long user_start, user_end;
 	unsigned int ret, i, npages;
 	dma_addr_t addr_dma;
 	
 	user_start = addr_virtual & PAGE_MASK;
 	user_end = PAGE_ALIGN(addr_virtual + size);
 	npages = (user_end - user_start) >> PAGE_SHIFT;
+
+	if(addr_virtual & ~PAGE_MASK)
+		goto err_not_pagealign;
+
 	pages = kzalloc(sizeof(struct pages *) * npages, GFP_KERNEL);
 	if(!pages)
 		goto err_alloc_pages;
@@ -101,13 +105,17 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	if(!sgt)
 		goto err_alloc_sgt;
 
-	user_offset = addr_virtual & ~PAGE_MASK;
-	ret = sg_alloc_table_from_pages(sgt, pages, npages,
-			user_offset, size, GFP_KERNEL);
+//	ret = sg_alloc_table_from_pages(sgt, pages, npages, 0,
+//			npages << PAGE_SHIFT, GFP_KERNEL);
+	ret = sg_alloc_table(sgt, npages, GFP_KERNEL);
 	if(ret < 0)
 		goto err_alloc_sgt_from_pages;
+//
+	for_each_sg(sgt->sgl, sg, npages, i)
+		sg_set_page(sg, pages[i], PAGE_SIZE, 0);
+//
 
-	ret = dma_map_sg(&pdev->dev, sgt->sgl, sgt->nents, DMA_BIDIRECTIONAL);
+	ret = dma_map_sg(&pdev->dev, sgt->sgl, sgt->orig_nents, DMA_BIDIRECTIONAL);
 	if(!ret){
 		pr_err("ERR: failed to dma_map_sg\n");
 		goto err_dma_map_sg;
@@ -160,6 +168,7 @@ err_alloc_sgt:
 err_get_user_pages:
 	kfree(pages);
 err_alloc_pages:
+err_not_pagealign:
 	return 0;
 
 }
@@ -278,7 +287,7 @@ static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 }
 
 #if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0) )
-static int sg_alloc_table_from_pages(struct sg_table *sgt,
+int sg_alloc_table_from_pages(struct sg_table *sgt,
 	struct page **pages, unsigned int n_pages,
 	unsigned long offset, unsigned long size,
 	gfp_t gfp_mask)
@@ -292,7 +301,7 @@ static int sg_alloc_table_from_pages(struct sg_table *sgt,
 	/* compute number of contiguous chunks */
 	chunks = 1;
 	for (i = 1; i < n_pages; ++i)
-		if (pages[i] != pages[i - 1] + 1)
+		if (page_to_pfn(pages[i]) != page_to_pfn(pages[i - 1]) + 1)
 			++chunks;
 
 	ret = sg_alloc_table(sgt, chunks, gfp_mask);
@@ -305,9 +314,10 @@ static int sg_alloc_table_from_pages(struct sg_table *sgt,
 		unsigned long chunk_size;
 		unsigned int j;
 
-		/* looking for the end of the current chunk */
+		/* look for the end of the current chunk */
 		for (j = cur_page + 1; j < n_pages; ++j)
-			if (pages[j] != pages[j - 1] + 1)
+			if (page_to_pfn(pages[j]) !=
+				page_to_pfn(pages[j - 1]) + 1)
 				break;
 
 		chunk_size = ((j - cur_page) << PAGE_SHIFT) - offset;
