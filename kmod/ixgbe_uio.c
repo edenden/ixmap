@@ -543,7 +543,7 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud){
 }
 
 static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
-	int vector, vector_num, queue_idx, err;
+	int vector = 0, vector_num, queue_idx, err;
 	struct ixgbe_hw *hw = ud->hw;
 	struct msix_entry *entry;
 	struct ixgbe_irqdev *irqdev;
@@ -576,9 +576,8 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 	}
 	ud->num_q_vectors = vector_num;
 	
-	vector = 0;
-
-	for(queue_idx = 0; queue_idx < ud->num_rx_queues; queue_idx++){
+	for(queue_idx = 0, vector = 0; queue_idx < ud->num_rx_queues;
+	queue_idx++, vector++){
 		entry = &ud->msix_entries[vector];
 
 		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
@@ -621,11 +620,10 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 		/* set RX queue interrupt */
 		uio_ixgbe_set_ivar(ud, 0, queue_idx, vector);
 		uio_ixgbe_write_eitr(ud, vector);
-
-		vector++;
 	}
 
-	for(queue_idx = 0; queue_idx < ud->num_tx_queues; queue_idx++){
+	for(queue_idx = 0; queue_idx < ud->num_tx_queues;
+	queue_idx++, vector++){
 		entry = &ud->msix_entries[vector];
 
 		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
@@ -668,8 +666,6 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 		/* set TX queue interrupt */
 		uio_ixgbe_set_ivar(ud, 1, queue_idx, vector);
 		uio_ixgbe_write_eitr(ud, vector);
-
-		vector++;
 	}
 
 	return 0;
