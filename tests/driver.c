@@ -15,9 +15,10 @@
 #include "main.h"
 #include "driver.h"
 
-static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf);
-static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
-	struct ixgbe_buf *buf, struct ixgbe_bulk *bulk);
+static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
+	int port_index);
+static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
+	int port_index, struct ixgbe_bulk *bulk);
 static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 	int budget, struct ixgbe_bulk *bulk);
 static void ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
@@ -30,7 +31,7 @@ static inline int ixgbe_slot_detach(struct ixgbe_ring *ring,
 static inline void ixgbe_slot_release(struct ixgbe_buf *buf,
 	int slot_index);
 static inline unsigned long ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
-	int slot_index);
+	int slot_index, int port_index);
 static inline void *ixgbe_slot_addr_virt(struct ixgbe_buf *buf,
 	uint16_t slot_index);
 static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
@@ -86,7 +87,7 @@ void *process_interrupt(void *data)
 
 	/* Prepare initial RX buffer */
 	for(i = 0; i < thread->num_ports; i++){
-		ixgbe_rx_alloc(thread->ports[i].rx_ring, thread->buf);
+		ixgbe_rx_alloc(thread->ports[i].rx_ring, thread->buf, i);
 	}
 
 	while(1){
@@ -111,7 +112,7 @@ printf("Rx descripter cleaning\n");
 					&bulk);
 printf("ixgbe_rx_clean completed\n");
 				ixgbe_rx_alloc(thread->ports[irq_data->port_index].rx_ring,
-					thread->buf);
+					thread->buf, irq_data->port_index);
 printf("ixgbe_rx_alloc completed\n");
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					rx_qmask);
@@ -119,7 +120,7 @@ printf("ixgbe_irq_enable_queues completed\n");
 
 				/* XXX: Following is 2ports specific code */
 				ixgbe_tx_xmit(thread->ports[!irq_data->port_index].tx_ring,
-					thread->buf, &bulk);
+					thread->buf, irq_data->port_index, &bulk);
 printf("ixgbe_tx_xmit completed\n");
 
 				break;
@@ -161,7 +162,8 @@ err_alloc_read_buf:
 	return NULL;
 }
 
-static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf)
+static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
+	int port_index)
 {
 	unsigned int total_allocated = 0;
 	uint16_t max_allocation;
@@ -183,7 +185,8 @@ static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf)
 			break;
 
 		ixgbe_slot_attach(rx_ring, rx_ring->next_to_use, slot_index);
-		addr_dma = (uint64_t)ixgbe_slot_addr_dma(buf, slot_index);
+		addr_dma = (uint64_t)ixgbe_slot_addr_dma(buf,
+				slot_index, port_index);
 
 		rx_desc->read.pkt_addr = htole64(addr_dma);
 		rx_desc->read.hdr_addr = 0;
@@ -208,8 +211,8 @@ static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf)
 	}
 }
 
-static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
-	struct ixgbe_buf *buf, struct ixgbe_bulk *bulk)
+static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
+	int port_index, struct ixgbe_bulk *bulk)
 {
 	uint32_t cmd_type;
 	unsigned int total_xmit = 0;
@@ -240,7 +243,8 @@ static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring,
 
 		ixgbe_slot_attach(tx_ring, tx_ring->next_to_use, slot_index);
 
-		addr_dma = (uint64_t)ixgbe_slot_addr_dma(buf, slot_index);
+		addr_dma = (uint64_t)ixgbe_slot_addr_dma(buf,
+					slot_index, port_index);
 		tx_desc->read.buffer_addr = htole64(addr_dma);
 
 		cmd_type |= size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS;
@@ -415,11 +419,11 @@ static inline void ixgbe_slot_release(struct ixgbe_buf *buf,
 }
 
 static inline unsigned long ixgbe_slot_addr_dma(struct ixgbe_buf *buf,
-	int slot_index)
+	int slot_index, int port_index)
 {
 	unsigned long addr_dma;
 
-	addr_dma = buf->addr_dma + (buf->buf_size * slot_index);
+	addr_dma = buf->addr_dma[port_index] + (buf->buf_size * slot_index);
 	return addr_dma;
 }
 

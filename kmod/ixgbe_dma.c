@@ -211,8 +211,8 @@ static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
 	struct ixgbe_dma_area *area;
 	struct list_head *last;
 
-	pr_info("add area: dmaaddr = %p size = %lu\n",
-		(void *)addr_dma, size);
+	pr_info("add area: start = %p end = %p size = %lu\n",
+		(void *)addr_dma, (void *)(addr_dma + size), size);
 
 	start_new = addr_dma;
 	end_new   = start_new + size;
@@ -250,8 +250,8 @@ static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 	struct sg_table *sgt;
 	unsigned int i, npages;
 
-	pr_info("delete area: dmaaddr = %p size = %lu\n",
-		(void *)area->addr_dma, area->size);
+	pr_info("delete area: start = %p end = %p size = %lu\n",
+		(void *)area->addr_dma, (void *)(area->addr_dma + area->size), area->size);
 
 	if (atomic_dec_and_test(&area->refcount)){
 		if(area->addr_dma == ud->iobase){

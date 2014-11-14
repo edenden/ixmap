@@ -82,7 +82,7 @@ struct ixgbe_ring {
 
 struct ixgbe_buf {
 	void		*addr_virtual;
-	unsigned long	addr_dma;
+	unsigned long	*addr_dma;
 	uint32_t	buf_size;
 	uint32_t	count;
 

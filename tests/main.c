@@ -31,9 +31,10 @@ static void ixgbe_kill_thread(struct ixgbe_thread *thread);
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
 static void ixgbe_release_descring(struct ixgbe_handle *ih);
-static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
-	uint32_t count, uint32_t buf_size);
-static void ixgbe_release_buf(struct ixgbe_handle *ih, struct ixgbe_buf *buf);
+static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
+	int num_ports, uint32_t count, uint32_t buf_size);
+static void ixgbe_release_buf(struct ixgbe_handle **ih_list,
+	int num_ports, struct ixgbe_buf *buf);
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
 	void *addr_virtual, unsigned long *addr_dma, unsigned long size);
 static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
@@ -114,7 +115,8 @@ int main(int argc, char **argv)
 	for(i = 0; i < num_cores; i++, cores_assigned++){
 		struct ixgbe_buf *buf;
 
-		buf = ixgbe_alloc_buf(ih_list[0], buf_count, buf_size);
+		buf = ixgbe_alloc_buf(ih_list, num_ports,
+			buf_count, buf_size);
 		if(!buf){
 			printf("failed to ixgbe_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
@@ -126,7 +128,7 @@ int main(int argc, char **argv)
 			num_ports, num_cores, i, buf);
 		if(ret != 0){
 			printf("failed to ixgbe_thread_create, idx = %d\n", i);
-			ixgbe_release_buf(ih_list[0], buf);
+			ixgbe_release_buf(ih_list, num_ports, buf);
 			ret = -1;
 			goto err_assign_cores;
 		}
@@ -142,7 +144,7 @@ int main(int argc, char **argv)
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixgbe_kill_thread(&threads[i]);
-		ixgbe_release_buf(ih_list[0], threads[i].buf);
+		ixgbe_release_buf(ih_list, num_ports, threads[i].buf);
 	}
 err_ixgbe_set_signal:
 	free(threads);
@@ -398,18 +400,22 @@ static void ixgbe_release_descring(struct ixgbe_handle *ih)
 	return;
 }
 
-static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
-	uint32_t count, uint32_t buf_size)
+static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
+	int num_ports, uint32_t count, uint32_t buf_size)
 {
 	struct ixgbe_buf *buf;
 	void	*addr_virtual;
 	unsigned long addr_dma, size;
 	int *free_index;
-	int ret, i;
+	int ret, i, mapped_ports = 0;
 
 	buf = malloc(sizeof(struct ixgbe_buf));
 	if(!buf)
 		goto err_alloc_buf;
+
+	buf->addr_dma = malloc(sizeof(unsigned long) * num_ports);
+	if(!buf->addr_dma)
+		goto err_alloc_buf_addr_dma;
 
 	size = buf_size * count;
 /*
@@ -424,15 +430,18 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	if(addr_virtual == MAP_FAILED)
 		goto err_mmap;
 
-	ret = ixgbe_dma_map(ih, addr_virtual, &addr_dma, size);
-	if(ret < 0)
-		goto err_ixgbe_dma_map;
+	for(i = 0; i < num_ports; i++, mapped_ports++){
+		ret = ixgbe_dma_map(ih_list[i], addr_virtual, &addr_dma, size);
+		if(ret < 0)
+			goto err_ixgbe_dma_map;
+
+		buf->addr_dma[i] = addr_dma;
+	}
 
 	free_index = malloc(sizeof(int) * count);
 	if(!free_index)
 		goto err_alloc_free_index;
 
-	buf->addr_dma = addr_dma;
 	buf->addr_virtual = addr_virtual;
 	buf->buf_size = buf_size;
 	buf->count = count;
@@ -447,34 +456,43 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle *ih,
 	return buf;
 
 err_alloc_free_index:
-	ixgbe_dma_unmap(ih, addr_dma);
 err_ixgbe_dma_map:
+	for(i = 0; i < mapped_ports; i++){
+		ixgbe_dma_unmap(ih_list[i], buf->addr_dma[i]);
+	}
 	munmap(addr_virtual, size);
 err_mmap:
 err_buf_size:
+	free(buf->addr_dma);
+err_alloc_buf_addr_dma:
 	free(buf);
 err_alloc_buf:
 	return NULL;
 }
 
-static void ixgbe_release_buf(struct ixgbe_handle *ih, struct ixgbe_buf *buf){
-	int ret;
+static void ixgbe_release_buf(struct ixgbe_handle **ih_list,
+	int num_ports, struct ixgbe_buf *buf)
+{
+	int i, ret;
 
 	free(buf->free_index);
 
-	ret = ixgbe_dma_unmap(ih, buf->addr_dma);
-	if(ret < 0)
-		perror("failed to unmap buf");
+	for(i = 0; i < num_ports; i++){
+		ret = ixgbe_dma_unmap(ih_list[i], buf->addr_dma[i]);
+		if(ret < 0)
+			perror("failed to unmap buf");
+	}
 
 	munmap(buf->addr_virtual, buf->buf_size * buf->count);
 
+	free(buf->addr_dma);
 	free(buf);
 
 	return;
 }
 
-static int ixgbe_dma_map(struct ixgbe_handle *ih,
-	void *addr_virtual, unsigned long *addr_dma, unsigned long size)
+static int ixgbe_dma_map(struct ixgbe_handle *ih, void *addr_virtual,
+	unsigned long *addr_dma, unsigned long size)
 {
 	struct uio_ixgbe_map_req req_map;
 

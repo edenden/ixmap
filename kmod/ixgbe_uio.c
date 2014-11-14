@@ -1088,8 +1088,6 @@ static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long a
 	void __user * argp = (void __user *) arg;
 	int err;
 
-	IXGBE_DBG("ioctl cmd=%d arg=%lu ud=%p\n", cmd, arg, ud);
-
 	if(!ud)
 		return -EBADFD;
 
