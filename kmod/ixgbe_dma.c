@@ -15,6 +15,7 @@
 #include <linux/scatterlist.h>
 #include <linux/sched.h>
 #include <asm/io.h>
+#include <linux/dma_remapping.h>
 
 #include <linux/version.h>
 
@@ -79,16 +80,14 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	struct page **pages;
 	struct sg_table *sgt;
 	struct scatterlist *sg;
-	unsigned long user_start, user_end;
+	unsigned long user_start, user_end, user_offset;
 	unsigned int ret, i, npages;
 	dma_addr_t addr_dma;
-	
+
 	user_start = addr_virtual & PAGE_MASK;
 	user_end = PAGE_ALIGN(addr_virtual + size);
+	user_offset = addr_virtual & ~PAGE_MASK;
 	npages = (user_end - user_start) >> PAGE_SHIFT;
-
-	if(addr_virtual & ~PAGE_MASK)
-		goto err_not_pagealign;
 
 	pages = kzalloc(sizeof(struct pages *) * npages, GFP_KERNEL);
 	if(!pages)
@@ -105,17 +104,32 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	if(!sgt)
 		goto err_alloc_sgt;
 
-//	ret = sg_alloc_table_from_pages(sgt, pages, npages, 0,
-//			npages << PAGE_SHIFT, GFP_KERNEL);
-	ret = sg_alloc_table(sgt, npages, GFP_KERNEL);
-	if(ret < 0)
-		goto err_alloc_sgt_from_pages;
-//
-	for_each_sg(sgt->sgl, sg, npages, i)
-		sg_set_page(sg, pages[i], PAGE_SIZE, 0);
-//
+	/*
+	 * Workaround for the problem that Intel IOMMU driver seems not to support
+	 * mapping of sg_table returned by sg_alloc_table_from_pages() when we use
+	 * HugeTLB pages taken from userspace. Is this our BUG?
+	 * 
+	 * Output when we were in for the problem:
+	 * kernel: [ 2892.897731] DRHD: handling fault status reg 3
+	 * kernel: [ 2892.897750] DMAR:[DMA Read] Request device [04:00.0] fault addr fde00000
+	 * kernel: [ 2892.897751] DMAR:[fault reason 12] non-zero reserved fields in PTE
+	 */
+	if(intel_iommu_enabled){
+		ret = sg_alloc_table(sgt, npages, GFP_KERNEL);
+		if(ret < 0)
+			goto err_alloc_sgt_from_pages;
 
-	ret = dma_map_sg(&pdev->dev, sgt->sgl, sgt->orig_nents, DMA_BIDIRECTIONAL);
+		for_each_sg(sgt->sgl, sg, npages, i)
+			sg_set_page(sg, pages[i], PAGE_SIZE, 0);
+	}else{
+		ret = sg_alloc_table_from_pages(sgt, pages, npages,
+			user_offset, npages << PAGE_SHIFT, GFP_KERNEL);
+		if(ret < 0)
+			goto err_alloc_sgt_from_pages;
+	}
+
+	ret = dma_map_sg(&pdev->dev, sgt->sgl, sgt->orig_nents,
+		DMA_BIDIRECTIONAL);
 	if(!ret){
 		pr_err("ERR: failed to dma_map_sg\n");
 		goto err_dma_map_sg;
@@ -129,7 +143,7 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 		}
 	}
 
-	addr_dma = sg_dma_address(&sgt->sgl[0]);
+	addr_dma = sg_dma_address(sgt->sgl);
         where = ixgbe_dma_area_whereto(ud, addr_dma, size);
         if (!where)
 		goto err_area_whereto;
@@ -168,9 +182,7 @@ err_alloc_sgt:
 err_get_user_pages:
 	kfree(pages);
 err_alloc_pages:
-err_not_pagealign:
 	return 0;
-
 }
 
 int ixgbe_dma_unmap(struct uio_ixgbe_udapter *ud, unsigned long addr_dma)
