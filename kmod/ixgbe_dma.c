@@ -28,7 +28,7 @@ static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 	struct ixgbe_dma_area *area);
 
 #if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0) )
-int sg_alloc_table_from_pages(struct sg_table *sgt,
+static int sg_alloc_table_from_pages(struct sg_table *sgt,
 	struct page **pages, unsigned int n_pages,
 	unsigned long offset, unsigned long size,
 	gfp_t gfp_mask);
@@ -287,7 +287,7 @@ static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 }
 
 #if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0) )
-int sg_alloc_table_from_pages(struct sg_table *sgt,
+static int sg_alloc_table_from_pages(struct sg_table *sgt,
 	struct page **pages, unsigned int n_pages,
 	unsigned long offset, unsigned long size,
 	gfp_t gfp_mask)
