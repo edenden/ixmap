@@ -69,6 +69,8 @@ void *process_interrupt(void *data)
 	int max_budget = 0;
 	uint8_t *read_buf;
 
+	ixgbe_print("thread %d started\n", thread->index);
+
 	/* Prepare TX/RX interrupt mask */
 	rx_qmask = 1 << thread->index;
 	tx_qmask = 1 << (thread->index + thread->num_threads);
@@ -164,6 +166,7 @@ out:
 	free(bulk.size);
 	free(bulk.slot_index);
 	free(read_buf);
+	ixgbe_print("thread %d stopped\n", thread->index);
 	return NULL;
 
 err_ixgbe_epoll_prepare:

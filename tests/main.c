@@ -78,6 +78,9 @@ int main(int argc, char **argv)
 		 */
 		// ih_list[i]->mtu_frame = mtu_frame;
 
+		/* Configuration of promiscuous mode is supported */
+		ih_list[i]->promisc = 1;
+
 		ret = ixgbe_alloc_descring(ih_list[i],
 			IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
 		if(ret < 0){
