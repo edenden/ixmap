@@ -287,6 +287,10 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		unsigned long addr_dma;
 		int *slot_index;
 
+		/*
+		 * XXX: We don't support NUMA-aware memory allocation in userspace.
+		 * To support, mbind() or set_mempolicy() will be useful.
+		 */
 		addr_virtual = mmap(NULL, size_rx_desc, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 		if(addr_virtual == MAP_FAILED){
@@ -322,6 +326,10 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		unsigned long addr_dma;
 		int *slot_index;
 
+		/*
+		 * XXX: We don't support NUMA-aware memory allocation in userspace.
+		 * To support, mbind() or set_mempolicy() will be useful.
+		 */
 		addr_virtual = mmap(NULL, size_tx_desc, PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 		if(addr_virtual == MAP_FAILED){
@@ -422,6 +430,10 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
 
 	size = buf_size * count;
 
+	/*
+	 * XXX: We don't support NUMA-aware memory allocation in userspace.
+	 * To support, mbind() or set_mempolicy() will be useful.
+	 */
 	addr_virtual = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 	if(addr_virtual == MAP_FAILED)
