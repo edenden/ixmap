@@ -125,7 +125,8 @@ void *process_interrupt(void *data)
 			switch(irq_data->type){
 			case IXGBE_IRQ_RX:
 				/* Rx descripter cleaning */
-				ixgbe_print("Rx: descripter cleaning start\n");
+				ixgbe_print("Rx: descripter cleaning on thread %d\n",
+					thread->index);
 				ixgbe_rx_clean(thread->ports[irq_data->port_index].rx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget,
 					&bulk);
@@ -135,7 +136,8 @@ void *process_interrupt(void *data)
 					rx_qmask);
 				ixgbe_print("Rx: descripter cleaning completed\n\n");
 
-				ixgbe_print("Tx: xmit start\n");
+				ixgbe_print("Tx: xmit start on thread %d\n",
+					thread->index);
 				/* XXX: Following is 2ports specific code */
 				ixgbe_tx_xmit(thread->ports[!irq_data->port_index].tx_ring,
 					thread->buf, irq_data->port_index, &bulk);
@@ -143,7 +145,8 @@ void *process_interrupt(void *data)
 				break;
 			case IXGBE_IRQ_TX:
 				/* Tx descripter cleaning */
-				ixgbe_print("Tx: descripter cleaning start\n");
+				ixgbe_print("Tx: descripter cleaning on thread %d\n",
+					thread->index);
 				ixgbe_tx_clean(thread->ports[irq_data->port_index].tx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget);
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
