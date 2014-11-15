@@ -31,8 +31,7 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
 static void ixgbe_release_descring(struct ixgbe_handle *ih);
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
-	int num_ports, int num_cores, int thread_index,
-	uint32_t count, uint32_t buf_size);
+	int num_ports, uint32_t count, uint32_t buf_size);
 static void ixgbe_release_buf(struct ixgbe_handle **ih_list,
 	int num_ports, struct ixgbe_buf *buf);
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
@@ -119,7 +118,7 @@ int main(int argc, char **argv)
 		struct ixgbe_buf *buf;
 
 		buf = ixgbe_alloc_buf(ih_list, num_ports,
-			num_cores, i, buf_count, buf_size);
+			buf_count, buf_size);
 		if(!buf){
 			printf("failed to ixgbe_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
@@ -405,8 +404,7 @@ static void ixgbe_release_descring(struct ixgbe_handle *ih)
 }
 
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
-	int num_ports, int num_cores, int thread_index,
-	uint32_t count, uint32_t buf_size)
+	int num_ports, uint32_t count, uint32_t buf_size)
 {
 	struct ixgbe_buf *buf;
 	void	*addr_virtual;

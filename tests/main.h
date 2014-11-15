@@ -5,11 +5,6 @@
 
 #define FILENAME_SIZE 256
 
-#ifndef MPOL_F_RELATIVE_NODES
-#define MPOL_F_RELATIVE_NODES (1 << 14)
-#define MPOL_F_STATIC_NODES   (1 << 15)
-#endif
-
 #define min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
 	typeof(y) _min2 = (y);			\
