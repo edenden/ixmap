@@ -41,44 +41,22 @@ static void ixgbe_epoll_destroy(struct ixgbe_irq_data *irq_data_list,
 static int epoll_add(int fd_ep, void *ptr, int fd);
 static int signalfd_create();
 
-
-#include "txinit.h"
-static void txq_dump(struct ixgbe_handle *ih, struct ixgbe_ring *tx_ring)
+#ifdef DEBUG
+static void dump_packet(void *buffer)
 {
-        uint32_t txdctl, tdbal, tdbah, tdlen, tdh, tdt;
-	union ixgbe_adv_tx_desc *tx_desc;
-	static uint32_t count = 0;
+	struct ether_header *eth;
+	eth = (struct ether_header *)buffer;
 
-        printf("txq%d: -- dump start -- \n", 0);
-
-        txdctl = IXGBE_READ_REG(ih, IXGBE_TXDCTL(0));
-        tdbal  = IXGBE_READ_REG(ih, IXGBE_TDBAL(0));
-        tdbah  = IXGBE_READ_REG(ih, IXGBE_TDBAH(0));
-        tdlen  = IXGBE_READ_REG(ih, IXGBE_TDLEN(0));
-        tdh    = IXGBE_READ_REG(ih, IXGBE_TDH(0));
-        tdt    = IXGBE_READ_REG(ih, IXGBE_TDT(0));
-
-	if(count != tdh){
-		/* research fail reason of count*/
-		tx_desc = IXGBE_TX_DESC(tx_ring, count);
-		if(!(tx_desc->wb.status & htole32(IXGBE_TXD_STAT_DD))){
-			printf("STAT_DD of descripter %d is not set! status = %x\n",
-				count, tx_desc->wb.status);
-			printf("address = %p, size = %d\n",
-				(void *)le64toh(tx_desc->read.buffer_addr),
-				0xFFFF & le32toh(tx_desc->read.cmd_type_len));
-		}else{
-			printf("IXGBE_TXD_STAT_DD is set!!!\n");
-		}
-		count = tdh;
-	}
-
-        printf("txq%u: regs: txdctl 0x%x tdbal 0x%x tdbah 0x%x tdlen %u tdh %u tdt %u\n",
-		0, txdctl, tdbal, tdbah, tdlen, tdh, tdt);
-	printf("next_to_use = %d\n", tx_ring->next_to_use);
-        printf("txq%u: -- dump end -- \n\n", 0);
+	printf("\tsrc %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
+		eth->ether_shost[0], eth->ether_shost[1], eth->ether_shost[2],
+		eth->ether_shost[3], eth->ether_shost[4], eth->ether_shost[5]);
+	printf("\tdst %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
+		eth->ether_dhost[0], eth->ether_dhost[1], eth->ether_dhost[2],
+		eth->ether_dhost[3], eth->ether_dhost[4], eth->ether_dhost[5]);
+	printf("\ttype 0x%x\n", eth->ether_type);
+	return;
 }
-
+#endif
 
 void *process_interrupt(void *data)
 {
@@ -145,31 +123,30 @@ void *process_interrupt(void *data)
 			switch(irq_data->type){
 			case IXGBE_IRQ_RX:
 				/* Rx descripter cleaning */
-printf("Rx descripter cleaning\n");
+				ixgbe_print("Rx: descripter cleaning start\n");
 				ixgbe_rx_clean(thread->ports[irq_data->port_index].rx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget,
 					&bulk);
-printf("ixgbe_rx_clean completed = %d\n", bulk.count);
 				ixgbe_rx_alloc(thread->ports[irq_data->port_index].rx_ring,
 					thread->buf, irq_data->port_index);
-printf("ixgbe_rx_alloc completed\n");
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					rx_qmask);
-printf("ixgbe_irq_enable_queues completed\n");
+				ixgbe_print("Rx: descripter cleaning completed\n\n");
 
+				ixgbe_print("Tx: xmit start\n");
 				/* XXX: Following is 2ports specific code */
 				ixgbe_tx_xmit(thread->ports[!irq_data->port_index].tx_ring,
 					thread->buf, irq_data->port_index, &bulk);
-printf("ixgbe_tx_xmit completed\n");
-txq_dump(thread->ports[0].ih, thread->ports[0].tx_ring);
+				ixgbe_print("Tx: xmit completed\n\n");
 				break;
 			case IXGBE_IRQ_TX:
 				/* Tx descripter cleaning */
-printf("Tx descripter cleaning\n");
+				ixgbe_print("Tx: descripter cleaning start\n");
 				ixgbe_tx_clean(thread->ports[irq_data->port_index].tx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget);
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					tx_qmask);
+				ixgbe_print("Tx: descripter cleaning completed\n\n");
 
 				break;
 			case IXGBE_SIGNAL:
@@ -258,6 +235,10 @@ static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 	uint32_t tx_flags;
 	int i;
 
+	/* Nothing to do */
+	if(!bulk->count)
+		return;
+
 	/* set type for advanced descriptor with frame checksum insertion */
 	tx_flags = IXGBE_ADVTXD_DTYP_DATA | IXGBE_ADVTXD_DCMD_DEXT
 			| IXGBE_ADVTXD_DCMD_IFCS;
@@ -282,10 +263,11 @@ static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 		ixgbe_slot_attach(tx_ring, tx_ring->next_to_use, slot_index);
 		addr_dma = (uint64_t)ixgbe_slot_addr_dma(buf,
 					slot_index, port_index);
+		ixgbe_print("Tx: packet sending DMAaddr = %p size = %d\n",
+			(void *)addr_dma, size);
 
-printf("packet sending size = %d\n", size);
 		cmd_type = size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS | tx_flags;
-		olinfo_status = 0;
+		olinfo_status = size << IXGBE_ADVTXD_PAYLEN_SHIFT;
 
 		tx_desc->read.buffer_addr = htole64(addr_dma);
 		tx_desc->read.cmd_type_len = htole32(cmd_type);
@@ -350,7 +332,11 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 		bulk->slot_index[total_rx_packets] = slot_index;
 		bulk->size[total_rx_packets] =
 			le16toh(rx_desc->wb.upper.length);
-printf("packet received size = %d\n", bulk->size[total_rx_packets]);
+		ixgbe_print("Rx: packet received size = %d\n",
+			bulk->size[total_rx_packets]);
+#ifdef DEBUG
+		dump_packet(ixgbe_slot_addr_virt(buf, slot_index));
+#endif
 
 		//packet = ixgbe_slot_addr_virt(buf, slot_index);
 

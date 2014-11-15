@@ -1,3 +1,5 @@
+#define DEBUG
+
 #define ALIGN(x,a)		__ALIGN_MASK(x,(typeof(x))(a)-1)
 #define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
 
@@ -14,6 +16,17 @@
 	typeof(y) _max2 = (y);			\
 	(void) (&_max1 == &_max2);		\
 	_max1 > _max2 ? _max1 : _max2; })
+
+#define CONFIG_X86_L1_CACHE_SHIFT \
+				(6)
+#define L1_CACHE_SHIFT		(CONFIG_X86_L1_CACHE_SHIFT)
+#define L1_CACHE_BYTES		(1 << L1_CACHE_SHIFT)
+
+#ifdef DEBUG
+#define ixgbe_print(args...) printf("ixgbe: " args)
+#else
+#define ixgbe_print(args...)
+#endif
 
 /*
  * microsecond values for various ITR rates shifted by 2 to fit itr register

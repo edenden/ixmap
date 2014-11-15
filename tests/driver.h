@@ -50,6 +50,8 @@ struct ixgbe_irq_data {
 #define IXGBE_ADVTXD_DTYP_DATA	0x00300000 /* Adv Data Descriptor */
 #define IXGBE_ADVTXD_DCMD_IFCS	IXGBE_TXD_CMD_IFCS /* Insert FCS */
 #define IXGBE_ADVTXD_DCMD_DEXT	IXGBE_TXD_CMD_DEXT /* Desc ext 1=Adv */
+#define IXGBE_ADVTXD_PAYLEN_SHIFT \
+				14 /* Adv desc PAYLEN shift */
 
 /* Receive Descriptor - Advanced */
 union ixgbe_adv_rx_desc {

@@ -242,22 +242,14 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 	/* MHADD will allow an extra 4 bytes past for vlan tagged frames */
 	ih->mtu_frame += VLAN_HLEN;
 
-	if(ih->mtu_frame <= MAXIMUM_ETHERNET_VLAN_SIZE) {
-		ih->buf_size = MAXIMUM_ETHERNET_VLAN_SIZE;
 	/*
-	 * Make best use of allocation by using all but 1K of a
-	 * power of 2 allocation that will be used for skb->head.
+	 * XXX: Currently we consider only CPU L1 cache line alignment.
+	 * Do we have to take care about DMA or other requirement?
 	 */
-	} else if (ih->mtu_frame <= IXGBE_RXBUFFER_3K) {
-		ih->buf_size = IXGBE_RXBUFFER_3K;
-	} else if (ih->mtu_frame <= IXGBE_RXBUFFER_7K) {
-		ih->buf_size = IXGBE_RXBUFFER_7K;
-	} else if (ih->mtu_frame <= IXGBE_RXBUFFER_15K) {
-		ih->buf_size = IXGBE_RXBUFFER_15K;
-	} else {
-		ih->buf_size = IXGBE_MAX_RXBUFFER;
-	}
-ih->buf_size = 4096;
+	ih->buf_size = ALIGN(ih->mtu_frame, L1_CACHE_BYTES);
+	if(ih->buf_size > IXGBE_MAX_RXBUFFER)
+		ih->buf_size = (IXGBE_MAX_RXBUFFER >> L1_CACHE_SHIFT)
+				<< L1_CACHE_SHIFT;
 
 	hlreg0 = IXGBE_READ_REG(ih, IXGBE_HLREG0);
 	/* set jumbo enable since MHADD.MFS is keeping size locked at

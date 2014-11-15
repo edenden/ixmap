@@ -20,7 +20,6 @@
 
 static int buf_count = 4096;
 static char *ixgbe_interface_list[2];
-static int huge_page_size = 2 * 1024 * 1024;
 static int budget = 1024;
 
 static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
@@ -264,9 +263,6 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 
 	size_rx_desc = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
 	size_tx_desc = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
-	if(size_rx_desc > huge_page_size
-	|| size_tx_desc > huge_page_size)
-		goto err_desc_size;
 
 	/* Rx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++, rx_assigned++){
@@ -294,7 +290,8 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 			goto err_rx_assign;
 		}
 #ifdef DEBUG
-		for(int j = 0; j < num_rx_desc; j++)
+		int j;
+		for(j = 0; j < num_rx_desc; j++)
 			slot_index[j] = -1;
 #endif
 
@@ -333,7 +330,8 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 			goto err_tx_assign;
 		}
 #ifdef DEBUG
-		for(int j = 0; j < num_rx_desc; j++)
+		int j;
+		for(j = 0; j < num_rx_desc; j++)
 			slot_index[j] = -1;
 #endif
 
@@ -362,7 +360,6 @@ err_rx_assign:
 		munmap(ih->rx_ring[i].addr_virtual,
 			sizeof(union ixgbe_adv_rx_desc) * ih->rx_ring[i].count);
 	}
-err_desc_size:
 	free(ih->tx_ring);
 err_alloc_tx_ring:
 	free(ih->rx_ring);
@@ -418,12 +415,6 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
 		goto err_alloc_buf_addr_dma;
 
 	size = buf_size * count;
-/*
-	if(size > huge_page_size){
-		printf("buffer size is larger than hugetlb\n");
-		goto err_buf_size;
-	} 
-*/
 
 	addr_virtual = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
@@ -462,7 +453,6 @@ err_ixgbe_dma_map:
 	}
 	munmap(addr_virtual, size);
 err_mmap:
-err_buf_size:
 	free(buf->addr_dma);
 err_alloc_buf_addr_dma:
 	free(buf);

@@ -9,14 +9,6 @@
 #define IXGBE_MAX_RX_DESC_POLL	10
 
 /* Supported Rx Buffer Sizes */
-#define IXGBE_RXBUFFER_256       256  /* Used for skb receive header */
-#define IXGBE_RXBUFFER_2K       2048
-#define IXGBE_RXBUFFER_3K       3072
-#define IXGBE_RXBUFFER_4K       4096
-#define IXGBE_RXBUFFER_1536     1536
-#define IXGBE_RXBUFFER_7K       7168
-#define IXGBE_RXBUFFER_8K       8192
-#define IXGBE_RXBUFFER_15K      15360
 #define IXGBE_MAX_RXBUFFER      16384  /* largest size for single descriptor */
 
 /* Receive Registers */
