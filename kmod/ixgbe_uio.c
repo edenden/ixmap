@@ -169,7 +169,8 @@ static struct uio_ixgbe_udapter *uio_ixgbe_udapter_alloc(void)
 	return ud;
 }
 
-static void uio_ixgbe_release_hw_control(struct uio_ixgbe_udapter *ud){
+static void uio_ixgbe_release_hw_control(struct uio_ixgbe_udapter *ud)
+{
 	struct ixgbe_hw *hw = ud->hw;
 	u32 ctrl_ext;
 
@@ -179,7 +180,8 @@ static void uio_ixgbe_release_hw_control(struct uio_ixgbe_udapter *ud){
 			ctrl_ext & ~IXGBE_CTRL_EXT_DRV_LOAD);
 }
 
-static void uio_ixgbe_take_hw_control(struct uio_ixgbe_udapter *ud){
+static void uio_ixgbe_take_hw_control(struct uio_ixgbe_udapter *ud)
+{
 	struct ixgbe_hw *hw = ud->hw;
 	u32 ctrl_ext;
 
@@ -189,7 +191,8 @@ static void uio_ixgbe_take_hw_control(struct uio_ixgbe_udapter *ud){
 			ctrl_ext | IXGBE_CTRL_EXT_DRV_LOAD);
 }
 
-static int uio_ixgbe_sw_init(struct uio_ixgbe_udapter *ud){
+static int uio_ixgbe_sw_init(struct uio_ixgbe_udapter *ud)
+{
 	struct ixgbe_hw *hw = ud->hw;
 	struct pci_dev *pdev = ud->pdev;
 
@@ -207,7 +210,8 @@ static int uio_ixgbe_sw_init(struct uio_ixgbe_udapter *ud){
 	return 0;
 }
 
-static int uio_ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
+static int uio_ixgbe_probe(struct pci_dev *pdev,
+	const struct pci_device_id *ent)
 {
 	struct uio_ixgbe_udapter *ud;
 	struct ixgbe_hw *hw;
@@ -424,7 +428,8 @@ err_dma:
 	return err;
 }
 
-static void uio_ixgbe_remove(struct pci_dev *pdev){
+static void uio_ixgbe_remove(struct pci_dev *pdev)
+{
 	struct uio_ixgbe_udapter *ud = pci_get_drvdata(pdev);
 
 	if(ud->up){
@@ -482,7 +487,8 @@ static irqreturn_t uio_ixgbe_interrupt(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-void uio_ixgbe_write_eitr(struct uio_ixgbe_udapter *ud, int vector){
+void uio_ixgbe_write_eitr(struct uio_ixgbe_udapter *ud, int vector)
+{
 	struct ixgbe_hw *hw = ud->hw;
 	u32 itr_reg = ud->num_interrupt_rate & IXGBE_MAX_EITR;
 
@@ -494,7 +500,9 @@ void uio_ixgbe_write_eitr(struct uio_ixgbe_udapter *ud, int vector){
 	IXGBE_WRITE_REG(hw, IXGBE_EITR(vector), itr_reg);
 }
 
-static void uio_ixgbe_set_ivar(struct uio_ixgbe_udapter *ud, s8 direction, u8 queue, u8 msix_vector){
+static void uio_ixgbe_set_ivar(struct uio_ixgbe_udapter *ud,
+	s8 direction, u8 queue, u8 msix_vector)
+{
 	u32 ivar, index;
 	struct ixgbe_hw *hw = ud->hw;
 
@@ -507,12 +515,14 @@ static void uio_ixgbe_set_ivar(struct uio_ixgbe_udapter *ud, s8 direction, u8 qu
 	IXGBE_WRITE_REG(hw, IXGBE_IVAR(queue >> 1), ivar);
 }
 
-static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud){
+static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud)
+{
 	struct ixgbe_irqdev *irqdev, *next;
 	int i = 0;
 
 	list_for_each_entry_safe(irqdev, next, &ud->irqdev_rx, list) {
 		list_del(&irqdev->list);
+		irq_set_affinity_hint(irqdev->msix_entry->vector, NULL);
 		free_irq(irqdev->msix_entry->vector, irqdev);
 		misc_deregister(&irqdev->miscdev);
 		wake_up_interruptible(&irqdev->read_wait);
@@ -523,6 +533,7 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud){
 
 	list_for_each_entry_safe(irqdev, next, &ud->irqdev_tx, list) {
 		list_del(&irqdev->list);
+		irq_set_affinity_hint(irqdev->msix_entry->vector, NULL);
 		free_irq(irqdev->msix_entry->vector, irqdev);
 		misc_deregister(&irqdev->miscdev);
 		wake_up_interruptible(&irqdev->read_wait);
@@ -542,12 +553,14 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud){
 	return;
 }
 
-static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
-	int vector = 0, vector_num, queue_idx, err;
+static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud)
+{
+	int vector = 0, vector_num, queue_idx, node, err;
 	struct ixgbe_hw *hw = ud->hw;
 	struct msix_entry *entry;
 	struct ixgbe_irqdev *irqdev;
 	char *irqdev_name;
+	cpumask_t affinity_mask;
 
 	vector_num = ud->num_rx_queues + ud->num_tx_queues;
 	if(vector_num > hw->mac.max_msix_vectors){
@@ -580,7 +593,15 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 	queue_idx++, vector++){
 		entry = &ud->msix_entries[vector];
 
-		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
+		if(cpu_online(queue_idx)){
+			cpumask_set_cpu(queue_idx, &affinity_mask);
+			node = cpu_to_node(queue_idx);
+		}else{
+			goto err_not_online_cpu;
+		}
+
+		irqdev = kzalloc_node(sizeof(struct ixgbe_irqdev),
+			GFP_KERNEL, node);
 		if(!irqdev){
 			goto err_allocate_irqdev;
 		}
@@ -603,13 +624,11 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 
 		irqdev->ud = ud;
 		irqdev->msix_entry = entry;
+		irqdev->affinity_mask = affinity_mask;
 		atomic_set(&irqdev->refcount, 1);
 		atomic_set(&irqdev->count_interrupt, 0);
 		sema_init(&irqdev->sem, 1);
 		init_waitqueue_head(&irqdev->read_wait);
-
-		list_add(&irqdev->list, &ud->irqdev_rx);
-		IXGBE_INFO("irq device registered as %s\n", irqdev->miscdev.name);
 
 		err = request_irq(entry->vector, &uio_ixgbe_interrupt,
 				0, pci_name(ud->pdev), irqdev);
@@ -617,16 +636,29 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 			goto err_request_irq;
 		}
 
+		irq_set_affinity_hint(entry->vector, &irqdev->affinity_mask);
+
 		/* set RX queue interrupt */
 		uio_ixgbe_set_ivar(ud, 0, queue_idx, vector);
 		uio_ixgbe_write_eitr(ud, vector);
+
+		list_add(&irqdev->list, &ud->irqdev_rx);
+		pr_info("irq device registered as %s\n", irqdev->miscdev.name);
 	}
 
 	for(queue_idx = 0; queue_idx < ud->num_tx_queues;
 	queue_idx++, vector++){
 		entry = &ud->msix_entries[vector];
 
-		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
+		if(cpu_online(queue_idx)){
+			cpumask_set_cpu(queue_idx, &affinity_mask);
+			node = cpu_to_node(queue_idx);
+		}else{
+			goto err_not_online_cpu;
+		}
+
+		irqdev = kzalloc_node(sizeof(struct ixgbe_irqdev),
+			GFP_KERNEL, node);
 		if(!irqdev){
 			goto err_allocate_irqdev;
 		}
@@ -649,13 +681,11 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 
 		irqdev->ud = ud;
 		irqdev->msix_entry = entry;
+		irqdev->affinity_mask = affinity_mask;
 		atomic_set(&irqdev->refcount, 1);
 		atomic_set(&irqdev->count_interrupt, 0);
 		sema_init(&irqdev->sem, 1);
 		init_waitqueue_head(&irqdev->read_wait);
-
-		list_add(&irqdev->list, &ud->irqdev_tx);
-		IXGBE_INFO("irq device registered as %s\n", irqdev->miscdev.name);
 
 		err = request_irq(entry->vector, &uio_ixgbe_interrupt,
 			0, pci_name(ud->pdev), irqdev);
@@ -663,9 +693,14 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud){
 			goto err_request_irq;
 		}
 
+		irq_set_affinity_hint(entry->vector, &irqdev->affinity_mask);
+
 		/* set TX queue interrupt */
 		uio_ixgbe_set_ivar(ud, 1, queue_idx, vector);
 		uio_ixgbe_write_eitr(ud, vector);
+
+		list_add(&irqdev->list, &ud->irqdev_tx);
+		pr_info("irq device registered as %s\n", irqdev->miscdev.name);
 	}
 
 	return 0;
@@ -677,6 +712,7 @@ err_misc_register:
 err_allocate_irqdev_name:
 	kfree(irqdev);
 err_allocate_irqdev:
+err_not_online_cpu:
 	uio_ixgbe_free_msix(ud);
 	return -1;
 
@@ -689,7 +725,8 @@ err_num_msix_vectors:
 	return -1;
 }
 
-static void uio_ixgbe_setup_gpie(struct uio_ixgbe_udapter *ud){
+static void uio_ixgbe_setup_gpie(struct uio_ixgbe_udapter *ud)
+{
 	struct ixgbe_hw *hw = ud->hw;
 	uint32_t eiac, gpie;
 
@@ -711,7 +748,8 @@ static void uio_ixgbe_setup_gpie(struct uio_ixgbe_udapter *ud){
 	return;
 }
 
-static int uio_ixgbe_up(struct uio_ixgbe_udapter *ud){
+static int uio_ixgbe_up(struct uio_ixgbe_udapter *ud)
+{
 	struct ixgbe_hw *hw = ud->hw;
 
 	uio_ixgbe_take_hw_control(ud);
@@ -745,9 +783,10 @@ static int uio_ixgbe_up(struct uio_ixgbe_udapter *ud){
 	return 0;
 }
 
-static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp){
+static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp)
+{
 	struct uio_ixgbe_up_req req;
-	int err = 0;
+	int err = 0, num_cores = 0, cpu_id;
 
 	if(ud->removed){
 		return -ENODEV;
@@ -766,11 +805,15 @@ static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp){
 		return -EINVAL;
 	}
 
-	if(req.info.num_rx_queues > IXGBE_MAX_RSS_INDICES){
+	for_each_online_cpu(cpu_id){
+		num_cores++;
+	}
+
+	if(req.info.num_rx_queues > min(IXGBE_MAX_RSS_INDICES, num_cores)){
 		return -EINVAL;
 	}
 
-	if(req.info.num_tx_queues > IXGBE_MAX_RSS_INDICES){
+	if(req.info.num_tx_queues > min(IXGBE_MAX_RSS_INDICES, num_cores)){
 		return -EINVAL;
 	}
 
@@ -798,7 +841,8 @@ err_up_complete:
 	return err;
 }
 
-static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud){
+static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud)
+{
 	struct ixgbe_hw *hw = ud->hw;
 	int vector;
 
@@ -841,7 +885,9 @@ static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud){
 	return 0;
 }
 
-static int uio_ixgbe_cmd_down(struct uio_ixgbe_udapter *ud, unsigned long arg){
+static int uio_ixgbe_cmd_down(struct uio_ixgbe_udapter *ud,
+	unsigned long arg)
+{
 	if(ud->removed){
 		return -ENODEV;
 	}
@@ -886,7 +932,9 @@ static void uio_ixgbe_reset(struct uio_ixgbe_udapter *ud)
 	return;
 }
 
-static int uio_ixgbe_cmd_reset(struct uio_ixgbe_udapter *ud, unsigned long arg){
+static int uio_ixgbe_cmd_reset(struct uio_ixgbe_udapter *ud,
+	unsigned long arg)
+{
 	if (ud->removed){
 		return -ENODEV;
 	}
@@ -902,7 +950,9 @@ static int uio_ixgbe_cmd_reset(struct uio_ixgbe_udapter *ud, unsigned long arg){
 }
 
 
-static int uio_ixgbe_cmd_check_link(struct uio_ixgbe_udapter *ud, void __user *argp){
+static int uio_ixgbe_cmd_check_link(struct uio_ixgbe_udapter *ud,
+	void __user *argp)
+{
 	struct ixgbe_hw *hw = ud->hw;
 	struct uio_ixgbe_link_req req;
 	int err = 0, flush = 0;
@@ -955,7 +1005,8 @@ static int uio_ixgbe_cmd_check_link(struct uio_ixgbe_udapter *ud, void __user *a
 	return err;
 }
 
-static int uio_ixgbe_cmd_get_link(struct uio_ixgbe_udapter *ud, void __user *argp)
+static int uio_ixgbe_cmd_get_link(struct uio_ixgbe_udapter *ud,
+	void __user *argp)
 {
 	struct uio_ixgbe_link_req req;
 	int err = 0;
@@ -971,7 +1022,8 @@ static int uio_ixgbe_cmd_get_link(struct uio_ixgbe_udapter *ud, void __user *arg
 	return err;
 }
 
-static int uio_ixgbe_cmd_set_link(struct uio_ixgbe_udapter *ud, void __user *argp)
+static int uio_ixgbe_cmd_set_link(struct uio_ixgbe_udapter *ud,
+	void __user *argp)
 {
 	struct uio_ixgbe_link_req req;
 
@@ -991,8 +1043,11 @@ static int uio_ixgbe_cmd_set_link(struct uio_ixgbe_udapter *ud, void __user *arg
 	return 0;
 }
 
-static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixgbe_info *info){
+static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud,
+	struct uio_ixgbe_info *info)
+{
 	struct ixgbe_hw *hw = ud->hw;
+	int num_cores = 0, cpu_id;
 
 	info->mmio_base = ud->iobase;
 	info->mmio_size = ud->iolen;
@@ -1008,13 +1063,17 @@ static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixg
 	info->num_tx_queues = ud->num_tx_queues;
 
 	/* Currently we support only RX/TX RSS mode */
-	info->max_rx_queues = IXGBE_MAX_RSS_INDICES;
-	info->max_tx_queues = IXGBE_MAX_RSS_INDICES;
+	for_each_online_cpu(cpu_id){
+		num_cores++;
+	}
+	info->max_rx_queues = min(IXGBE_MAX_RSS_INDICES, num_cores);
+	info->max_tx_queues = min(IXGBE_MAX_RSS_INDICES, num_cores);
 
 	info->max_msix_vectors = hw->mac.max_msix_vectors;
 }
 
-static int uio_ixgbe_cmd_info(struct uio_ixgbe_udapter *ud, void __user *argp)
+static int uio_ixgbe_cmd_info(struct uio_ixgbe_udapter *ud,
+	void __user *argp)
 {
 	struct uio_ixgbe_info_req req;
 	int err;
@@ -1039,7 +1098,9 @@ out:
 	return err;
 }
 
-static int uio_ixgbe_cmd_map(struct uio_ixgbe_udapter *ud, void __user *argp){
+static int uio_ixgbe_cmd_map(struct uio_ixgbe_udapter *ud,
+	void __user *argp)
+{
 	struct uio_ixgbe_map_req req;
 	unsigned long addr_dma;
 
@@ -1064,7 +1125,9 @@ static int uio_ixgbe_cmd_map(struct uio_ixgbe_udapter *ud, void __user *argp){
 	return 0;
 }
 
-static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud, void __user *argp){
+static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud,
+	void __user *argp)
+{
 	struct uio_ixgbe_unmap_req req;
 	int ret;
 
@@ -1078,64 +1141,6 @@ static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud, void __user *argp){
 	return 0;
 }
 
-static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	struct uio_ixgbe_udapter *ud = file->private_data;
-	void __user * argp = (void __user *) arg;
-	int err;
-
-	if(!ud)
-		return -EBADFD;
-
-	down(&ud->sem);
-
-	switch (cmd) {
-	case UIO_IXGBE_INFO:
-		err = uio_ixgbe_cmd_info(ud, argp);
-		break;
-
-	case UIO_IXGBE_UP:
-		err = uio_ixgbe_cmd_up(ud, argp);
-		break;
-
-	case UIO_IXGBE_MAP:
-		err = uio_ixgbe_cmd_map(ud, argp);
-		break;
-
-	case UIO_IXGBE_UNMAP:
-		err = uio_ixgbe_cmd_unmap(ud, argp);
-		break;
-
-	case UIO_IXGBE_DOWN:
-		err = uio_ixgbe_cmd_down(ud, arg);
-		break;
-
-	case UIO_IXGBE_RESET:
-		err = uio_ixgbe_cmd_reset(ud, arg);
-		break;
-
-	case UIO_IXGBE_CHECK_LINK:
-		err = uio_ixgbe_cmd_check_link(ud, argp);
-		break;
-
-	case UIO_IXGBE_SET_LINK:
-		err = uio_ixgbe_cmd_set_link(ud, argp);
-		break;
-
-	case UIO_IXGBE_GET_LINK:
-		err = uio_ixgbe_cmd_get_link(ud, argp);
-		break;
-
-	default:
-		err = -EINVAL;
-		break;
-	};
-
-	up(&ud->sem);
-
-	return err;
-}
-
 static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait)
 {
 	uint32_t count_interrupt;
@@ -1145,7 +1150,6 @@ static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait)
 		return -EBADFD;
 
 	count_interrupt = atomic_read(&irqdev->count_interrupt);
-	IXGBE_DBG("poll count_interrupt=0x%x\n", count_interrupt);
 
 	poll_wait(file, &irqdev->read_wait, wait);
 	if (count_interrupt)
@@ -1364,6 +1368,64 @@ static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma)
 
 	vma->vm_ops = &uio_ixgbe_mmap_ops;
 	return 0;
+}
+
+static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct uio_ixgbe_udapter *ud = file->private_data;
+	void __user * argp = (void __user *) arg;
+	int err;
+
+	if(!ud)
+		return -EBADFD;
+
+	down(&ud->sem);
+
+	switch (cmd) {
+	case UIO_IXGBE_INFO:
+		err = uio_ixgbe_cmd_info(ud, argp);
+		break;
+
+	case UIO_IXGBE_UP:
+		err = uio_ixgbe_cmd_up(ud, argp);
+		break;
+
+	case UIO_IXGBE_MAP:
+		err = uio_ixgbe_cmd_map(ud, argp);
+		break;
+
+	case UIO_IXGBE_UNMAP:
+		err = uio_ixgbe_cmd_unmap(ud, argp);
+		break;
+
+	case UIO_IXGBE_DOWN:
+		err = uio_ixgbe_cmd_down(ud, arg);
+		break;
+
+	case UIO_IXGBE_RESET:
+		err = uio_ixgbe_cmd_reset(ud, arg);
+		break;
+
+	case UIO_IXGBE_CHECK_LINK:
+		err = uio_ixgbe_cmd_check_link(ud, argp);
+		break;
+
+	case UIO_IXGBE_SET_LINK:
+		err = uio_ixgbe_cmd_set_link(ud, argp);
+		break;
+
+	case UIO_IXGBE_GET_LINK:
+		err = uio_ixgbe_cmd_get_link(ud, argp);
+		break;
+
+	default:
+		err = -EINVAL;
+		break;
+	};
+
+	up(&ud->sem);
+
+	return err;
 }
 
 static struct pci_error_handlers uio_ixgbe_err_handler = {
