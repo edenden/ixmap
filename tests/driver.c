@@ -8,9 +8,9 @@
 #include <sys/ioctl.h>
 #include <sys/epoll.h>
 #include <net/ethernet.h>
-#include <pthread.h>
 #include <signal.h>
 #include <sys/signalfd.h>
+#include <pthread.h>
 
 #include "main.h"
 #include "driver.h"

@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -Wall
 LDFLAGS =
 TARGET = ixgbe
-LIBS = pthread
+LIBS = -lpthread
 OBJECTS = main.o driver.o rxinit.o txinit.o
 
 .SUFFIXES: .c .o
@@ -14,7 +14,7 @@ OBJECTS = main.o driver.o rxinit.o txinit.o
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(LDFLAGS) -o $@ $^ -l $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 	
 .c.o:
 	$(CC) $(CFLAGS) -c $<

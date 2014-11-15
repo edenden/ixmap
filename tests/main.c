@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -8,10 +9,9 @@
 #include <endian.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-
 #include <net/ethernet.h>
-#include <pthread.h>
 #include <signal.h>
+#include <pthread.h>
 
 #include "main.h"
 #include "driver.h"
@@ -31,7 +31,8 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
 static void ixgbe_release_descring(struct ixgbe_handle *ih);
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
-	int num_ports, uint32_t count, uint32_t buf_size);
+	int num_ports, int num_cores, int thread_index,
+	uint32_t count, uint32_t buf_size);
 static void ixgbe_release_buf(struct ixgbe_handle **ih_list,
 	int num_ports, struct ixgbe_buf *buf);
 static int ixgbe_dma_map(struct ixgbe_handle *ih,
@@ -118,7 +119,7 @@ int main(int argc, char **argv)
 		struct ixgbe_buf *buf;
 
 		buf = ixgbe_alloc_buf(ih_list, num_ports,
-			buf_count, buf_size);
+			num_cores, i, buf_count, buf_size);
 		if(!buf){
 			printf("failed to ixgbe_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
@@ -198,7 +199,8 @@ static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
 	struct ixgbe_thread *thread, int num_ports,
 	int num_cores, int thread_index, struct ixgbe_buf *buf)
 {
-	int i;
+	cpu_set_t cpuset;
+	int i, ret;
 
 	thread->index = thread_index;
 	thread->num_threads = num_cores;
@@ -221,17 +223,30 @@ static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
 		thread->ports[i].budget = ih_list[i]->budget;
 	}
 
-	if(pthread_create(&thread->tid, NULL, process_interrupt,
-		thread) < 0){
+	ret = pthread_create(&thread->tid, NULL, process_interrupt, thread);
+	if(ret < 0){
 		perror("failed to create thread");
 		goto err_pthread_create;
 	}
+
+	CPU_ZERO(&cpuset);
+	CPU_SET(thread_index, &cpuset);
+	ret = pthread_setaffinity_np(thread->tid, sizeof(cpu_set_t), &cpuset);
+	if(ret < 0){
+		perror("failed to set affinity");
+		goto err_set_affinity;
+	}
+	
 
 	return 0;
 
 err_pthread_create:
 	free(thread->ports);
 err_ixgbe_alloc_ports:
+	return -1;
+
+err_set_affinity:
+	ixgbe_kill_thread(thread);
 	return -1;
 }
 
@@ -343,15 +358,13 @@ err_tx_assign:
 	for(i = 0; i < tx_assigned; i++){
 		free(ih->tx_ring[i].slot_index);
 		ixgbe_dma_unmap(ih, ih->tx_ring[i].addr_dma);
-		munmap(ih->tx_ring[i].addr_virtual,
-			sizeof(union ixgbe_adv_tx_desc) * ih->tx_ring[i].count);
+		munmap(ih->tx_ring[i].addr_virtual, size_tx_desc);
 	}
 err_rx_assign:
 	for(i = 0; i < rx_assigned; i++){
 		free(ih->rx_ring[i].slot_index);
 		ixgbe_dma_unmap(ih, ih->rx_ring[i].addr_dma);
-		munmap(ih->rx_ring[i].addr_virtual,
-			sizeof(union ixgbe_adv_rx_desc) * ih->rx_ring[i].count);
+		munmap(ih->rx_ring[i].addr_virtual, size_rx_desc);
 	}
 	free(ih->tx_ring);
 err_alloc_tx_ring:
@@ -364,6 +377,7 @@ err_alloc_rx_ring:
 static void ixgbe_release_descring(struct ixgbe_handle *ih)
 {
 	int i, ret;
+	unsigned long size_rx_desc, size_tx_desc;
 
 	for(i = 0; i < ih->num_queues; i++){
 		free(ih->rx_ring[i].slot_index);
@@ -372,8 +386,8 @@ static void ixgbe_release_descring(struct ixgbe_handle *ih)
 		if(ret < 0)
 			perror("failed to unmap descring");
 
-		munmap(ih->rx_ring[i].addr_virtual,
-			sizeof(union ixgbe_adv_rx_desc) * ih->rx_ring[i].count);
+		size_rx_desc = sizeof(union ixgbe_adv_rx_desc) * ih->rx_ring[i].count;
+		munmap(ih->rx_ring[i].addr_virtual, size_rx_desc);
 	}
 
 	for(i = 0; i < ih->num_queues; i++){
@@ -383,15 +397,16 @@ static void ixgbe_release_descring(struct ixgbe_handle *ih)
 		if(ret < 0)
 			perror("failed to unmap descring");
 
-		munmap(ih->tx_ring[i].addr_virtual,
-			sizeof(union ixgbe_adv_tx_desc) * ih->tx_ring[i].count);
+		size_tx_desc = sizeof(union ixgbe_adv_tx_desc) * ih->tx_ring[i].count;
+		munmap(ih->tx_ring[i].addr_virtual, size_tx_desc);
 	}
 
 	return;
 }
 
 static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
-	int num_ports, uint32_t count, uint32_t buf_size)
+	int num_ports, int num_cores, int thread_index,
+	uint32_t count, uint32_t buf_size)
 {
 	struct ixgbe_buf *buf;
 	void	*addr_virtual;
@@ -457,6 +472,7 @@ static void ixgbe_release_buf(struct ixgbe_handle **ih_list,
 	int num_ports, struct ixgbe_buf *buf)
 {
 	int i, ret;
+	unsigned long size;
 
 	free(buf->free_index);
 
@@ -466,8 +482,8 @@ static void ixgbe_release_buf(struct ixgbe_handle **ih_list,
 			perror("failed to unmap buf");
 	}
 
-	munmap(buf->addr_virtual, buf->buf_size * buf->count);
-
+	size = buf->buf_size * buf->count;
+	munmap(buf->addr_virtual, size);
 	free(buf->addr_dma);
 	free(buf);
 
