@@ -97,10 +97,10 @@ static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 	 * to or less than the number of on chip descriptors, which is
 	 * currently 40.
 	 */
-//	if(ih->num_interrupt_rate < 8)
+	if(ih->num_interrupt_rate < 8)
 		txdctl |= (1 << 16);    /* WTHRESH = 1 */
-//	else
-//		txdctl |= (8 << 16);    /* WTHRESH = 8 */
+	else
+		txdctl |= (8 << 16);    /* WTHRESH = 8 */
 
 	/*
 	 * Setting PTHRESH to 32 both improves performance
