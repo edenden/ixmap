@@ -406,11 +406,6 @@ static inline int ixgbe_slot_assign(struct ixgbe_buf *buf)
 		goto out;
 
 	slot_index = buf->free_index[buf->free_count - 1];
-#ifdef DEBUG
-	if(slot_index < 0)
-		printf("BUG: assigned slot index is invalid\n");
-	buf->free_index[buf->free_count - 1] = -1;
-#endif
 	buf->free_count--;
 	
 out:
@@ -430,11 +425,6 @@ static inline int ixgbe_slot_detach(struct ixgbe_ring *ring,
 	int slot_index;
 
 	slot_index = ring->slot_index[desc_index];
-#ifdef DEBUG
-	if(slot_index < 0)
-		printf("BUG: retrieved slot index is invalid\n");
-	ring->slot_index[desc_index] = -1;
-#endif
 	return slot_index;
 }
 

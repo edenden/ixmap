@@ -292,11 +292,6 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 			munmap(addr_virtual, size_rx_desc);
 			goto err_rx_assign;
 		}
-#ifdef DEBUG
-		int j;
-		for(j = 0; j < num_rx_desc; j++)
-			slot_index[j] = -1;
-#endif
 
 		ih->rx_ring[i].addr_dma = addr_dma;
 		ih->rx_ring[i].addr_virtual = addr_virtual;
@@ -332,11 +327,6 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 			munmap(addr_virtual, size_tx_desc);
 			goto err_tx_assign;
 		}
-#ifdef DEBUG
-		int j;
-		for(j = 0; j < num_rx_desc; j++)
-			slot_index[j] = -1;
-#endif
 
 		ih->tx_ring[i].addr_dma = addr_dma;
 		ih->tx_ring[i].addr_virtual = addr_virtual;
