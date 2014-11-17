@@ -14,6 +14,7 @@
 #include <linux/pci.h>
 #include <linux/sched.h>
 #include <asm/io.h>
+#include <linux/interrupt.h>
 
 #include "ixgbe_uio.h"
 #include "ixgbe_type.h"
@@ -476,13 +477,12 @@ static irqreturn_t uio_ixgbe_interrupt(int irq, void *data)
 {
 	struct ixgbe_irqdev *irqdev = data;
 
-	atomic_inc(&irqdev->count_interrupt);
-
 	/* 
 	 * We setup EIAM such that interrupts are auto-masked (disabled).
 	 * User-space will re-enable them.
 	 */
 
+	atomic_inc(&irqdev->count_interrupt);
 	wake_up_interruptible(&irqdev->read_wait);
 	return IRQ_HANDLED;
 }
@@ -522,10 +522,9 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud)
 
 	list_for_each_entry_safe(irqdev, next, &ud->irqdev_rx, list) {
 		list_del(&irqdev->list);
-		irq_set_affinity_hint(irqdev->msix_entry->vector, NULL);
 		free_irq(irqdev->msix_entry->vector, irqdev);
-		misc_deregister(&irqdev->miscdev);
 		wake_up_interruptible(&irqdev->read_wait);
+		misc_deregister(&irqdev->miscdev);
 		kfree(irqdev->miscdev.name);
 		kfree(irqdev);
 		i++;
@@ -533,10 +532,9 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud)
 
 	list_for_each_entry_safe(irqdev, next, &ud->irqdev_tx, list) {
 		list_del(&irqdev->list);
-		irq_set_affinity_hint(irqdev->msix_entry->vector, NULL);
 		free_irq(irqdev->msix_entry->vector, irqdev);
-		misc_deregister(&irqdev->miscdev);
 		wake_up_interruptible(&irqdev->read_wait);
+		misc_deregister(&irqdev->miscdev);
 		kfree(irqdev->miscdev.name);
 		kfree(irqdev);
 		i++;
@@ -555,12 +553,11 @@ static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud)
 
 static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud)
 {
-	int vector = 0, vector_num, queue_idx, node, err;
+	int vector = 0, vector_num, queue_idx, err;
 	struct ixgbe_hw *hw = ud->hw;
 	struct msix_entry *entry;
 	struct ixgbe_irqdev *irqdev;
 	char *irqdev_name;
-	cpumask_t affinity_mask;
 
 	vector_num = ud->num_rx_queues + ud->num_tx_queues;
 	if(vector_num > hw->mac.max_msix_vectors){
@@ -593,15 +590,8 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud)
 	queue_idx++, vector++){
 		entry = &ud->msix_entries[vector];
 
-		if(cpu_online(queue_idx)){
-			cpumask_set_cpu(queue_idx, &affinity_mask);
-			node = cpu_to_node(queue_idx);
-		}else{
-			goto err_not_online_cpu;
-		}
-
-		irqdev = kzalloc_node(sizeof(struct ixgbe_irqdev),
-			GFP_KERNEL, node);
+		/* XXX: To support NUMA-aware allocation, use kzalloc_node() */
+		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
 		if(!irqdev){
 			goto err_allocate_irqdev;
 		}
@@ -616,27 +606,24 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud)
 		irqdev->miscdev.minor = MISC_DYNAMIC_MINOR;
 		irqdev->miscdev.name = irqdev_name;
 		irqdev->miscdev.fops = &ixgbe_fops_irq;
+		irqdev->ud = ud;
+		irqdev->msix_entry = entry;
+		atomic_set(&irqdev->refcount, 1);
+		atomic_set(&irqdev->count_interrupt, 0);
+		sema_init(&irqdev->sem, 1);
+		init_waitqueue_head(&irqdev->read_wait);
+
 		err = misc_register(&irqdev->miscdev);
 		if (err) {
 			pr_err("failed to register irq device\n");
 			goto err_misc_register;
 		}
 
-		irqdev->ud = ud;
-		irqdev->msix_entry = entry;
-		irqdev->affinity_mask = affinity_mask;
-		atomic_set(&irqdev->refcount, 1);
-		atomic_set(&irqdev->count_interrupt, 0);
-		sema_init(&irqdev->sem, 1);
-		init_waitqueue_head(&irqdev->read_wait);
-
 		err = request_irq(entry->vector, &uio_ixgbe_interrupt,
 				0, pci_name(ud->pdev), irqdev);
 		if(err){
 			goto err_request_irq;
 		}
-
-		irq_set_affinity_hint(entry->vector, &irqdev->affinity_mask);
 
 		/* set RX queue interrupt */
 		uio_ixgbe_set_ivar(ud, 0, queue_idx, vector);
@@ -650,15 +637,8 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud)
 	queue_idx++, vector++){
 		entry = &ud->msix_entries[vector];
 
-		if(cpu_online(queue_idx)){
-			cpumask_set_cpu(queue_idx, &affinity_mask);
-			node = cpu_to_node(queue_idx);
-		}else{
-			goto err_not_online_cpu;
-		}
-
-		irqdev = kzalloc_node(sizeof(struct ixgbe_irqdev),
-			GFP_KERNEL, node);
+		/* XXX: To support NUMA-aware allocation, use kzalloc_node() */
+		irqdev = kzalloc(sizeof(struct ixgbe_irqdev), GFP_KERNEL);
 		if(!irqdev){
 			goto err_allocate_irqdev;
 		}
@@ -673,27 +653,24 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud)
 		irqdev->miscdev.minor = MISC_DYNAMIC_MINOR;
 		irqdev->miscdev.name = irqdev_name;
 		irqdev->miscdev.fops = &ixgbe_fops_irq;
+		irqdev->ud = ud;
+		irqdev->msix_entry = entry;
+		atomic_set(&irqdev->refcount, 1);
+		atomic_set(&irqdev->count_interrupt, 0);
+		sema_init(&irqdev->sem, 1);
+		init_waitqueue_head(&irqdev->read_wait);
+
 		err = misc_register(&irqdev->miscdev);
 		if (err) {
 			pr_err("failed to register irq device\n");
 			goto err_misc_register;
 		}
 
-		irqdev->ud = ud;
-		irqdev->msix_entry = entry;
-		irqdev->affinity_mask = affinity_mask;
-		atomic_set(&irqdev->refcount, 1);
-		atomic_set(&irqdev->count_interrupt, 0);
-		sema_init(&irqdev->sem, 1);
-		init_waitqueue_head(&irqdev->read_wait);
-
 		err = request_irq(entry->vector, &uio_ixgbe_interrupt,
 			0, pci_name(ud->pdev), irqdev);
 		if(err){
 			goto err_request_irq;
 		}
-
-		irq_set_affinity_hint(entry->vector, &irqdev->affinity_mask);
 
 		/* set TX queue interrupt */
 		uio_ixgbe_set_ivar(ud, 1, queue_idx, vector);
@@ -706,13 +683,13 @@ static int uio_ixgbe_configure_msix(struct uio_ixgbe_udapter *ud)
 	return 0;
 
 err_request_irq:
+	wake_up_interruptible(&irqdev->read_wait);
 	misc_deregister(&irqdev->miscdev);
 err_misc_register:
 	kfree(irqdev->miscdev.name);
 err_allocate_irqdev_name:
 	kfree(irqdev);
 err_allocate_irqdev:
-err_not_online_cpu:
 	uio_ixgbe_free_msix(ud);
 	return -1;
 
@@ -786,7 +763,7 @@ static int uio_ixgbe_up(struct uio_ixgbe_udapter *ud)
 static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp)
 {
 	struct uio_ixgbe_up_req req;
-	int err = 0, num_cores = 0, cpu_id;
+	int err = 0;
 
 	if(ud->removed){
 		return -ENODEV;
@@ -805,15 +782,11 @@ static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp)
 		return -EINVAL;
 	}
 
-	for_each_online_cpu(cpu_id){
-		num_cores++;
-	}
-
-	if(req.info.num_rx_queues > min(IXGBE_MAX_RSS_INDICES, num_cores)){
+	if(req.info.num_rx_queues > IXGBE_MAX_RSS_INDICES){
 		return -EINVAL;
 	}
 
-	if(req.info.num_tx_queues > min(IXGBE_MAX_RSS_INDICES, num_cores)){
+	if(req.info.num_tx_queues > IXGBE_MAX_RSS_INDICES){
 		return -EINVAL;
 	}
 
@@ -1047,7 +1020,6 @@ static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud,
 	struct uio_ixgbe_info *info)
 {
 	struct ixgbe_hw *hw = ud->hw;
-	int num_cores = 0, cpu_id;
 
 	info->mmio_base = ud->iobase;
 	info->mmio_size = ud->iolen;
@@ -1063,11 +1035,8 @@ static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud,
 	info->num_tx_queues = ud->num_tx_queues;
 
 	/* Currently we support only RX/TX RSS mode */
-	for_each_online_cpu(cpu_id){
-		num_cores++;
-	}
-	info->max_rx_queues = min(IXGBE_MAX_RSS_INDICES, num_cores);
-	info->max_tx_queues = min(IXGBE_MAX_RSS_INDICES, num_cores);
+	info->max_rx_queues = IXGBE_MAX_RSS_INDICES;
+	info->max_tx_queues = IXGBE_MAX_RSS_INDICES;
 
 	info->max_msix_vectors = hw->mac.max_msix_vectors;
 }
@@ -1143,17 +1112,20 @@ static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud,
 
 static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait)
 {
+	struct ixgbe_irqdev *irqdev;
+	unsigned int mask = 0;
 	uint32_t count_interrupt;
-	unsigned int mask = POLLOUT | POLLWRNORM;
-	struct ixgbe_irqdev *irqdev = file->private_data;
+
+	irqdev = file->private_data;
 	if (!irqdev)
 		return -EBADFD;
 
-	count_interrupt = atomic_read(&irqdev->count_interrupt);
-
 	poll_wait(file, &irqdev->read_wait, wait);
+
+	count_interrupt = atomic_read(&irqdev->count_interrupt);
 	if (count_interrupt)
 		mask |= POLLIN | POLLRDNORM;
+	mask |= POLLOUT | POLLWRNORM;
 
 	return mask;
 }
@@ -1161,11 +1133,12 @@ static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait)
 static ssize_t ixgbe_read_irq(struct file * file, char __user * buf,
 			    size_t count, loff_t *pos)
 {
-	struct ixgbe_irqdev *irqdev = file->private_data;
+	struct ixgbe_irqdev *irqdev;
 	DECLARE_WAITQUEUE(wait, current);
 	uint32_t count_interrupt;
 	int err;
 
+	irqdev = file->private_data;
 	if (!irqdev)
 		return -EBADFD;
 
@@ -1175,8 +1148,8 @@ static ssize_t ixgbe_read_irq(struct file * file, char __user * buf,
 	add_wait_queue(&irqdev->read_wait, &wait);
 	while (count) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		count_interrupt = atomic_xchg(&irqdev->count_interrupt, 0);
 
+		count_interrupt = atomic_xchg(&irqdev->count_interrupt, 0);
 		if (!count_interrupt) {
 			if (file->f_flags & O_NONBLOCK) {
 				err = -EAGAIN;

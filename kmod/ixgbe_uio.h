@@ -73,7 +73,6 @@ struct ixgbe_irqdev {
 	struct msix_entry		*msix_entry;
 	wait_queue_head_t		read_wait;
 	atomic_t			count_interrupt;
-	cpumask_t			affinity_mask;
 };
 
 /* MAC and PHY info */
