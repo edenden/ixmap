@@ -557,25 +557,25 @@ static struct ixgbe_handle *ixgbe_open(char *interface_name,
 	memset(&req_up, 0, sizeof(struct uio_ixgbe_up_req));
 
 	ih->num_interrupt_rate =
-		min((uint16_t)IXGBE_8K_ITR, req_info.info.max_interrupt_rate);
-	req_up.info.num_interrupt_rate = ih->num_interrupt_rate;
+		min((uint16_t)IXGBE_8K_ITR, req_info.max_interrupt_rate);
+	req_up.num_interrupt_rate = ih->num_interrupt_rate;
 
 	ih->num_queues =
-		min(req_info.info.max_rx_queues, req_info.info.max_tx_queues);
+		min(req_info.max_rx_queues, req_info.max_tx_queues);
 	ih->num_queues = min(num_core, ih->num_queues);
-	req_up.info.num_rx_queues = ih->num_queues;
-	req_up.info.num_tx_queues = ih->num_queues;
+	req_up.num_rx_queues = ih->num_queues;
+	req_up.num_tx_queues = ih->num_queues;
 
 	if(ioctl(ih->fd, UIO_IXGBE_UP, (unsigned long)&req_up) < 0)
 		goto err_ioctl_up;
 
 	/* Map PCI config register space */
-	ih->bar = mmap(NULL, req_up.info.mmio_size,
+	ih->bar = mmap(NULL, req_info.mmio_size,
 		PROT_READ | PROT_WRITE, MAP_SHARED, ih->fd, 0);
 	if(ih->bar == MAP_FAILED)
 		goto err_mmap;
 
-	ih->bar_size = req_up.info.mmio_size;
+	ih->bar_size = req_info.mmio_size;
 	ih->promisc = 0;
 	ih->interface_name = interface_name;
 	ih->budget = budget;

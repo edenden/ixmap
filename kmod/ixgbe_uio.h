@@ -75,8 +75,11 @@ struct ixgbe_irqdev {
 	atomic_t			count_interrupt;
 };
 
+/* Ioctl defines */
+
+#define UIO_IXGBE_INFO		_IOW('E', 201, int)
 /* MAC and PHY info */
-struct uio_ixgbe_info {
+struct uio_ixgbe_info_req {
 	unsigned long	mmio_base;
 	unsigned long	mmio_size;
 
@@ -93,23 +96,18 @@ struct uio_ixgbe_info {
 	uint32_t	max_msix_vectors;
 };
 
-/* Ioctl defines */
-
-#define UIO_IXGBE_INFO       _IOW('E', 201, int)
-struct uio_ixgbe_info_req {
-	struct uio_ixgbe_info info;
-};
-
-#define UIO_IXGBE_UP       _IOW('E', 202, int)
+#define UIO_IXGBE_UP		_IOW('E', 202, int)
 struct uio_ixgbe_up_req {
-	struct uio_ixgbe_info info;
+	uint16_t		num_interrupt_rate;
+	uint32_t		num_rx_queues;
+	uint32_t		num_tx_queues;
 };
 
-#define UIO_IXGBE_DOWN      _IOW('E', 203, int)
-#define UIO_IXGBE_RESET      _IOW('E', 204, int)
-#define UIO_IXGBE_CHECK_LINK _IOW('E', 205, int)
-#define UIO_IXGBE_GET_LINK   _IOW('E', 206, int)
-#define UIO_IXGBE_SET_LINK   _IOW('E', 207, int)
+#define UIO_IXGBE_DOWN		_IOW('E', 203, int)
+#define UIO_IXGBE_RESET		_IOW('E', 204, int)
+#define UIO_IXGBE_CHECK_LINK	_IOW('E', 205, int)
+#define UIO_IXGBE_GET_LINK	_IOW('E', 206, int)
+#define UIO_IXGBE_SET_LINK	_IOW('E', 207, int)
 
 struct uio_ixgbe_link_req {
 	uint16_t  speed;
@@ -122,7 +120,7 @@ struct uio_ixgbe_link_req {
 			   * after link state changed */
 };
 
-#define UIO_IXGBE_MAP _IOW('U', 210, int)
+#define UIO_IXGBE_MAP		_IOW('U', 210, int)
 struct uio_ixgbe_map_req {
 	unsigned long addr_virtual;
 	unsigned long addr_dma;
@@ -130,9 +128,15 @@ struct uio_ixgbe_map_req {
 	uint8_t cache;
 };
 
-#define UIO_IXGBE_UNMAP  _IOW('U', 211, int)
+#define UIO_IXGBE_UNMAP		_IOW('U', 211, int)
 struct uio_ixgbe_unmap_req {
 	unsigned long addr_dma;
+};
+
+#define UIO_IRQ_INFO		_IOW('E', 201, int)
+struct uio_irq_info_req {
+	uint32_t	vector;
+	uint16_t	entry;
 };
 
 u16 ixgbe_read_pci_cfg_word(struct ixgbe_hw *hw, u32 reg);

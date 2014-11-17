@@ -64,24 +64,6 @@
 				IXGBE_EIMS_TCP_TIMER    | \
 				IXGBE_EIMS_OTHER)
 
-/* MAC and PHY info */
-struct uio_ixgbe_info {
-	unsigned long	mmio_base;
-	unsigned long	mmio_size;
-
-	uint16_t	mac_type;
-	uint8_t		mac_addr[ETH_ALEN];
-	uint16_t	phy_type;
-
-	uint16_t	max_interrupt_rate;
-	uint16_t	num_interrupt_rate;
-	uint32_t        num_rx_queues;
-	uint32_t        num_tx_queues;
-	uint32_t        max_rx_queues;
-	uint32_t        max_tx_queues;
-	uint32_t        max_msix_vectors;
-};
-
 struct ixgbe_ring {
 	void		*addr_virtual;
 	unsigned long	addr_dma;
@@ -158,13 +140,29 @@ enum {
 /* Ioctl defines */
 
 #define UIO_IXGBE_INFO		_IOW('E', 201, int)
+/* MAC and PHY info */
 struct uio_ixgbe_info_req {
-	struct uio_ixgbe_info info;
+	unsigned long	mmio_base;
+	unsigned long	mmio_size;
+
+	uint16_t	mac_type;
+	uint8_t		mac_addr[ETH_ALEN];
+	uint16_t	phy_type;
+
+	uint16_t	max_interrupt_rate;
+	uint16_t	num_interrupt_rate;
+	uint32_t	num_rx_queues;
+	uint32_t	num_tx_queues;
+	uint32_t	max_rx_queues;
+	uint32_t	max_tx_queues;
+	uint32_t	max_msix_vectors;
 };
 
 #define UIO_IXGBE_UP		_IOW('E', 202, int)
 struct uio_ixgbe_up_req {
-	struct uio_ixgbe_info info;
+	uint16_t		num_interrupt_rate;
+	uint32_t		num_rx_queues;
+	uint32_t		num_tx_queues;
 };
 
 #define UIO_IXGBE_MAP		_IOW('U', 210, int)
@@ -178,6 +176,12 @@ struct uio_ixgbe_map_req {
 #define UIO_IXGBE_UNMAP		_IOW('U', 211, int)
 struct uio_ixgbe_unmap_req {
         unsigned long addr_dma;
+};
+
+#define UIO_IRQ_INFO		_IOW('E', 201, int)
+struct uio_irq_info_req {
+	uint32_t	vector;
+	uint16_t	entry;
 };
 
 void ixgbe_irq_enable_queues(struct ixgbe_handle *ih, uint64_t qmask);

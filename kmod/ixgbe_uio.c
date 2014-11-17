@@ -24,7 +24,6 @@
 
 static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud);
 static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud);
-static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud, struct uio_ixgbe_info *info);
 static int uio_ixgbe_cmd_map(struct uio_ixgbe_udapter *ud, void __user *argp);
 static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud, void __user *argp);
 static void uio_ixgbe_reset(struct uio_ixgbe_udapter *ud);
@@ -36,8 +35,11 @@ static ssize_t uio_ixgbe_write(struct file * file, const char __user * buf,
 static int uio_ixgbe_open(struct inode *inode, struct file * file);
 static int uio_ixgbe_close(struct inode *inode, struct file *file);
 static int uio_ixgbe_mmap(struct file *file, struct vm_area_struct *vma);
+static int uio_irq_cmd_info(struct ixgbe_irqdev *irqdev,
+	void __user *argp);
 static long uio_ixgbe_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
-
+static long uio_irq_ioctl(struct file *file,
+	unsigned int cmd, unsigned long arg);
 static ssize_t ixgbe_read_irq(struct file * file, char __user * buf,
 	size_t count, loff_t *pos);
 static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait);
@@ -70,6 +72,7 @@ static struct file_operations ixgbe_fops_irq = {
 	.open    = ixgbe_open_irq,
 	.release = ixgbe_close_irq,
 	.poll	 = ixgbe_poll_irq,
+	.unlocked_ioctl = uio_irq_ioctl,
 };
 
 static DEFINE_PCI_DEVICE_TABLE(uio_ixgbe_pci_tbl) = {
@@ -777,31 +780,24 @@ static int uio_ixgbe_cmd_up(struct uio_ixgbe_udapter *ud, void __user *argp)
 
 	IXGBE_DBG("open req\n");
 
-	if(req.info.num_interrupt_rate > IXGBE_MAX_EITR){
+	if(req.num_interrupt_rate > IXGBE_MAX_EITR){
 		return -EINVAL;
 	}
 
-	if(req.info.num_rx_queues > IXGBE_MAX_RSS_INDICES){
+	if(req.num_rx_queues > IXGBE_MAX_RSS_INDICES){
 		return -EINVAL;
 	}
 
-	if(req.info.num_tx_queues > IXGBE_MAX_RSS_INDICES){
+	if(req.num_tx_queues > IXGBE_MAX_RSS_INDICES){
 		return -EINVAL;
 	}
 
-	ud->num_interrupt_rate = req.info.num_interrupt_rate;
-	ud->num_rx_queues = req.info.num_rx_queues;
-	ud->num_tx_queues = req.info.num_tx_queues;
+	ud->num_interrupt_rate = req.num_interrupt_rate;
+	ud->num_rx_queues = req.num_rx_queues;
+	ud->num_tx_queues = req.num_tx_queues;
 
 	err = uio_ixgbe_up(ud);
 	if (err){
-		goto err_up_complete;
-	}
-
-	uio_ixgbe_populate_info(ud, &req.info);
-
-	if (copy_to_user(argp, &req, sizeof(req))) {
-		err = -EFAULT;
 		goto err_up_complete;
 	}
 
@@ -1015,46 +1011,36 @@ static int uio_ixgbe_cmd_set_link(struct uio_ixgbe_udapter *ud,
 	return 0;
 }
 
-static void uio_ixgbe_populate_info(struct uio_ixgbe_udapter *ud,
-	struct uio_ixgbe_info *info)
-{
-	struct ixgbe_hw *hw = ud->hw;
-
-	info->mmio_base = ud->iobase;
-	info->mmio_size = ud->iolen;
-
-	memcpy(info->mac_addr, hw->mac.perm_addr, ETH_ALEN);
-	info->mac_type = hw->mac.type;
-	info->phy_type = hw->phy.type;
-
-	info->num_interrupt_rate = ud->num_interrupt_rate;
-	info->max_interrupt_rate = IXGBE_MAX_EITR;
-
-	info->num_rx_queues = ud->num_rx_queues;
-	info->num_tx_queues = ud->num_tx_queues;
-
-	/* Currently we support only RX/TX RSS mode */
-	info->max_rx_queues = IXGBE_MAX_RSS_INDICES;
-	info->max_tx_queues = IXGBE_MAX_RSS_INDICES;
-
-	info->max_msix_vectors = hw->mac.max_msix_vectors;
-}
-
 static int uio_ixgbe_cmd_info(struct uio_ixgbe_udapter *ud,
 	void __user *argp)
 {
 	struct uio_ixgbe_info_req req;
-	int err;
+	struct ixgbe_hw *hw = ud->hw;
+	int err = 0;
 
 	if (copy_from_user(&req, argp, sizeof(req)))
 		return -EFAULT;
 
-	IXGBE_DBG("info req ctx=%p\n", ud);
-
 	down(&dev_sem);
 
-	err = 0;
-	uio_ixgbe_populate_info(ud, &req.info);
+	req.mmio_base = ud->iobase;
+	req.mmio_size = ud->iolen;
+
+	memcpy(req.mac_addr, hw->mac.perm_addr, ETH_ALEN);
+	req.mac_type = hw->mac.type;
+	req.phy_type = hw->phy.type;
+
+	req.num_interrupt_rate = ud->num_interrupt_rate;
+	req.max_interrupt_rate = IXGBE_MAX_EITR;
+
+	req.num_rx_queues = ud->num_rx_queues;
+	req.num_tx_queues = ud->num_tx_queues;
+
+	/* Currently we support only RX/TX RSS mode */
+	req.max_rx_queues = IXGBE_MAX_RSS_INDICES;
+	req.max_tx_queues = IXGBE_MAX_RSS_INDICES;
+
+	req.max_msix_vectors = hw->mac.max_msix_vectors;
 
 	if (copy_to_user(argp, &req, sizeof(req))) {
 		err = -EFAULT;
@@ -1107,6 +1093,25 @@ static int uio_ixgbe_cmd_unmap(struct uio_ixgbe_udapter *ud,
 		return ret;
 
 	return 0;
+}
+
+static int uio_irq_cmd_info(struct ixgbe_irqdev *irqdev,
+	void __user *argp)
+{
+	struct uio_irq_info_req req;
+	int err;
+
+	if (copy_from_user(&req, argp, sizeof(req)))
+		return -EFAULT;
+
+	req.vector = irqdev->msix_entry->vector;
+	req.entry = irqdev->msix_entry->entry;
+
+	if (copy_to_user(argp, &req, sizeof(req))) {
+		return -EFAULT;
+	}
+
+	return err;
 }
 
 static unsigned int ixgbe_poll_irq(struct file *file, poll_table *wait)
@@ -1215,6 +1220,32 @@ static int ixgbe_close_irq(struct inode *inode, struct file *file)
 
 	ixgbe_irqdev_put(irqdev);
 	return 0;
+}
+
+static long uio_irq_ioctl(struct file *file,
+	unsigned int cmd, unsigned long arg)
+{
+	struct ixgbe_irqdev *irqdev = file->private_data;
+	void __user * argp = (void __user *) arg;
+	int err;
+
+	if(!irqdev)
+		return -EBADFD;
+
+	down(&irqdev->sem);
+
+	switch (cmd) {
+	case UIO_IRQ_INFO:
+		err = uio_irq_cmd_info(irqdev, argp);
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	};
+
+	up(&irqdev->sem);
+
+	return err;
 }
 
 static ssize_t uio_ixgbe_read(struct file * file, char __user * buf,
