@@ -1018,9 +1018,6 @@ static int uio_ixgbe_cmd_info(struct uio_ixgbe_udapter *ud,
 	struct ixgbe_hw *hw = ud->hw;
 	int err = 0;
 
-	if (copy_from_user(&req, argp, sizeof(req)))
-		return -EFAULT;
-
 	down(&dev_sem);
 
 	req.mmio_base = ud->iobase;
@@ -1099,10 +1096,7 @@ static int uio_irq_cmd_info(struct ixgbe_irqdev *irqdev,
 	void __user *argp)
 {
 	struct uio_irq_info_req req;
-	int err;
-
-	if (copy_from_user(&req, argp, sizeof(req)))
-		return -EFAULT;
+	int err = 0;
 
 	req.vector = irqdev->msix_entry->vector;
 	req.entry = irqdev->msix_entry->entry;

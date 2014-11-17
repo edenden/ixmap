@@ -39,6 +39,8 @@ static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 static void ixgbe_epoll_destroy(struct ixgbe_irq_data *irq_data_list,
 	int fd_ep, int num_ports);
 static int epoll_add(int fd_ep, void *ptr, int fd);
+static int ixgbe_irq_setmask(struct ixgbe_irq_data *irq_data_list,
+	int num_ports, int thread_index);
 static int signalfd_create();
 
 #ifdef DEBUG
@@ -102,6 +104,14 @@ void *process_interrupt(void *data)
 	if(fd_ep < 0){
 		printf("failed to epoll prepare\n");
 		goto err_ixgbe_epoll_prepare;
+	}
+
+	/* Set interrupt masks */
+	ret = ixgbe_irq_setmask(irq_data_list,
+		thread->num_ports, thread->index);
+	if(ret < 0){
+		printf("failed to set irq affinity mask\n");
+		goto err_ixgbe_irq_setmask;
 	}
 
 	/* Prepare initial RX buffer */
@@ -172,6 +182,9 @@ out:
 	ixgbe_print("thread %d stopped\n", thread->index);
 	return NULL;
 
+err_ixgbe_irq_setmask:
+	ixgbe_epoll_destroy(irq_data_list,
+		fd_ep, thread->num_ports);
 err_ixgbe_epoll_prepare:
 	free(bulk.size);
 err_bulk_size:
@@ -590,6 +603,50 @@ static int epoll_add(int fd_ep, void *ptr, int fd)
 	return 0;
 }
 
+static int ixgbe_irq_setmask(struct ixgbe_irq_data *irq_data_list,
+	int num_ports, int thread_index)
+{
+	struct uio_irq_info_req req_info;
+	FILE *file;
+	char filename[FILENAME_SIZE];
+	uint32_t mask_low, mask_high;
+	int i, ret;
+
+	mask_low = thread_index <= 31 ? 1 << thread_index : 0;
+	mask_high = thread_index <= 31 ? 0 : 1 << (thread_index - 31);
+
+	for(i = 0; i < num_ports * 2; i++){
+		ret = ioctl(irq_data_list[i].fd, UIO_IRQ_INFO,
+			(unsigned long)&req_info);
+		if(ret < 0){
+			printf("failed to UIO_IRQ_INFO\n");
+			goto err_set_affinity;
+		}
+
+		snprintf(filename, sizeof(filename),
+			"/proc/irq/%d/smp_affinity", req_info.vector);
+		file = fopen(filename, "w");
+		if(!file){
+			printf("failed to open smp_affinity\n");
+			goto err_set_affinity;
+		}
+
+		ret = fprintf(file, "%08x,%08x", mask_high, mask_low);
+printf("%08x,%08x\n", mask_high, mask_low);
+		if(ret < 0){
+			fclose(file);
+			goto err_set_affinity;
+		}
+
+		fclose(file);
+	}
+
+	return 0;
+
+err_set_affinity:
+	return -1;
+}
+
 static int signalfd_create(){
 	sigset_t sigset;
 	int signal_fd;
@@ -605,3 +662,4 @@ static int signalfd_create(){
 
 	return signal_fd;
 }
+
