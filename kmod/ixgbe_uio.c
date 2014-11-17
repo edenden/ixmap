@@ -14,7 +14,6 @@
 #include <linux/pci.h>
 #include <linux/sched.h>
 #include <asm/io.h>
-#include <linux/interrupt.h>
 
 #include "ixgbe_uio.h"
 #include "ixgbe_type.h"
