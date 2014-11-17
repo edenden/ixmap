@@ -631,8 +631,8 @@ static int ixgbe_irq_setmask(struct ixgbe_irq_data *irq_data_list,
 			goto err_set_affinity;
 		}
 
+		ixgbe_print("irq affinity mask: %08x,%08x\n", mask_high, mask_low);
 		ret = fprintf(file, "%08x,%08x", mask_high, mask_low);
-printf("%08x,%08x\n", mask_high, mask_low);
 		if(ret < 0){
 			fclose(file);
 			goto err_set_affinity;
