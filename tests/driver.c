@@ -341,6 +341,10 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 		void *packet;
 #endif
 
+		if(unlikely(rx_ring->next_to_clean == rx_ring->next_to_use)){
+			break;
+		}
+
 		rx_desc = IXGBE_RX_DESC(rx_ring, rx_ring->next_to_clean);
 
 		if (!ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_DD)){
@@ -379,7 +383,6 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 		dump_packet(packet);
 #endif
 
-		rx_desc->wb.upper.status_error = 0;
 		next_to_clean = rx_ring->next_to_clean + 1;
 		rx_ring->next_to_clean = 
 			(next_to_clean < rx_ring->count) ? next_to_clean : 0;
@@ -403,6 +406,10 @@ static void ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 		uint16_t next_to_clean;
 		int slot_index;
 
+		if(unlikely(tx_ring->next_to_clean == tx_ring->next_to_use)){
+			break;
+		}
+
 		tx_desc = IXGBE_TX_DESC(tx_ring, tx_ring->next_to_clean);
 
 		if (!(tx_desc->wb.status & htole32(IXGBE_TXD_STAT_DD)))
@@ -412,7 +419,6 @@ static void ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 		slot_index = ixgbe_slot_detach(tx_ring, tx_ring->next_to_clean);
 		ixgbe_slot_release(buf, slot_index);
 
-		tx_desc->wb.status = 0;
 		next_to_clean = tx_ring->next_to_clean + 1;
 		tx_ring->next_to_clean =
 			(next_to_clean < tx_ring->count) ? next_to_clean : 0;
