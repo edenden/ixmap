@@ -140,17 +140,18 @@ void *process_interrupt(void *data)
 				ixgbe_rx_clean(thread->ports[irq_data->port_index].rx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget,
 					&bulk);
+				ixgbe_print("Rx: descripter cleaning completed\n\n");
+
 				ixgbe_rx_alloc(thread->ports[irq_data->port_index].rx_ring,
 					thread->buf, irq_data->port_index);
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					rx_qmask);
-				ixgbe_print("Rx: descripter cleaning completed\n\n");
 
 				ixgbe_print("Tx: xmit start on thread %d\n",
 					thread->index);
 				/* XXX: Following is 2ports specific code */
 				ixgbe_tx_xmit(thread->ports[!irq_data->port_index].tx_ring,
-					thread->buf, irq_data->port_index, &bulk);
+					thread->buf, !irq_data->port_index, &bulk);
 				ixgbe_print("Tx: xmit completed\n\n");
 				break;
 			case IXGBE_IRQ_TX:
@@ -159,9 +160,14 @@ void *process_interrupt(void *data)
 					thread->index);
 				ixgbe_tx_clean(thread->ports[irq_data->port_index].tx_ring,
 					thread->buf, thread->ports[irq_data->port_index].budget);
+				ixgbe_print("Tx: descripter cleaning completed\n\n");
+
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					tx_qmask);
-				ixgbe_print("Tx: descripter cleaning completed\n\n");
+
+				/* XXX: Following is 2ports specific code */
+				ixgbe_rx_alloc(thread->ports[!irq_data->port_index].rx_ring,
+					thread->buf, !irq_data->port_index);
 
 				break;
 			case IXGBE_SIGNAL:
@@ -331,7 +337,9 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 		union ixgbe_adv_rx_desc *rx_desc;
 		uint16_t next_to_clean;
 		int slot_index;
-		//void *packet;
+#ifdef DEBUG
+		void *packet;
+#endif
 
 		rx_desc = IXGBE_RX_DESC(rx_ring, rx_ring->next_to_clean);
 
@@ -346,21 +354,6 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 		 */
 		rmb();
 
-		/* retrieve a buffer address from the ring */
-		slot_index = ixgbe_slot_detach(rx_ring, rx_ring->next_to_clean);
-		bulk->slot_index[total_rx_packets] = slot_index;
-		bulk->size[total_rx_packets] =
-			le16toh(rx_desc->wb.upper.length);
-		ixgbe_print("Rx: packet received size = %d\n",
-			bulk->size[total_rx_packets]);
-#ifdef DEBUG
-		dump_packet(ixgbe_slot_addr_virt(buf, slot_index));
-#endif
-
-		//packet = ixgbe_slot_addr_virt(buf, slot_index);
-
-		/* XXX: Should we prefetch the packet buffer ? */
-
 		/*
 		 * Confirm: We have not to check IXGBE_RXD_STAT_EOP here
 		 * because we have skipped to enable(= disabled) hardware RSC.
@@ -372,6 +365,21 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 			printf("frame error detected\n");
 		}
 
+		/* retrieve a buffer address from the ring */
+		slot_index = ixgbe_slot_detach(rx_ring, rx_ring->next_to_clean);
+		bulk->slot_index[total_rx_packets] = slot_index;
+		bulk->size[total_rx_packets] =
+			le16toh(rx_desc->wb.upper.length);
+		ixgbe_print("Rx: packet received size = %d\n",
+			bulk->size[total_rx_packets]);
+
+		/* XXX: Should we prefetch the packet buffer ? */
+#ifdef DEBUG
+		packet = ixgbe_slot_addr_virt(buf, slot_index);
+		dump_packet(packet);
+#endif
+
+		rx_desc->wb.upper.status_error = 0;
 		next_to_clean = rx_ring->next_to_clean + 1;
 		rx_ring->next_to_clean = 
 			(next_to_clean < rx_ring->count) ? next_to_clean : 0;
@@ -404,6 +412,7 @@ static void ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 		slot_index = ixgbe_slot_detach(tx_ring, tx_ring->next_to_clean);
 		ixgbe_slot_release(buf, slot_index);
 
+		tx_desc->wb.status = 0;
 		next_to_clean = tx_ring->next_to_clean + 1;
 		tx_ring->next_to_clean =
 			(next_to_clean < tx_ring->count) ? next_to_clean : 0;

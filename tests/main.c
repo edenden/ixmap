@@ -82,7 +82,8 @@ int main(int argc, char **argv)
 		ih_list[i]->promisc = 1;
 
 		ret = ixgbe_alloc_descring(ih_list[i],
-			IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
+			4096, 4096);
+			//IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
 		if(ret < 0){
 			printf("failed to ixgbe_alloc_descring, idx = %d\n", i);
 			printf("please decrease descripter or enable iommu\n");
