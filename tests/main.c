@@ -18,7 +18,7 @@
 #include "rxinit.h"
 #include "txinit.h"
 
-static int buf_count = 4096;
+static int buf_count = 131072;
 static char *ixgbe_interface_list[2];
 static int budget = 1024;
 
@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	struct ixgbe_handle **ih_list;
 	struct ixgbe_thread *threads;
 	uint32_t buf_size = 0;
-	uint32_t num_cores = 4;
+	uint32_t num_cores = 2;
 	uint32_t num_ports = 2;
 	sigset_t sigset;
 	int ret = 0, i, signal;
@@ -558,7 +558,7 @@ static struct ixgbe_handle *ixgbe_open(char *interface_name,
 	memset(&req_up, 0, sizeof(struct uio_ixgbe_up_req));
 
 	ih->num_interrupt_rate =
-		min((uint16_t)IXGBE_8K_ITR, req_info.max_interrupt_rate);
+		min((uint16_t)200/*IXGBE_8K_ITR*/, req_info.max_interrupt_rate);
 	req_up.num_interrupt_rate = ih->num_interrupt_rate;
 
 	ih->num_queues =

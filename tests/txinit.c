@@ -106,8 +106,8 @@ static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 	 * Setting PTHRESH to 32 both improves performance
 	 * and avoids a TX hang with DFP enabled
 	 */
-	txdctl |= (1 << 8) |    /* HTHRESH = 1 */
-		   32;	  /* PTHRESH = 32 */
+	txdctl |=	(1 << 8) |	/* HTHRESH = 1 */
+			32;		/* PTHRESH = 32 */
 
 	/* enable queue */
 	IXGBE_WRITE_REG(ih, IXGBE_TXDCTL(reg_idx), txdctl);
