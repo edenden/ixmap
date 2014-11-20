@@ -82,8 +82,7 @@ int main(int argc, char **argv)
 		ih_list[i]->promisc = 1;
 
 		ret = ixgbe_alloc_descring(ih_list[i],
-			4096, 4096);
-			//IXGBE_DEFAULT_RXD, IXGBE_DEFAULT_TXD);
+			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
 		if(ret < 0){
 			printf("failed to ixgbe_alloc_descring, idx = %d\n", i);
 			printf("please decrease descripter or enable iommu\n");
@@ -221,6 +220,10 @@ static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
 		thread->ports[i].tx_ring = &(ih_list[i]->tx_ring[thread_index]);
 		thread->ports[i].mtu_frame = ih_list[i]->mtu_frame;
 		thread->ports[i].budget = ih_list[i]->budget;
+		thread->ports[i].count_rx_alloc_failed = 0;
+		thread->ports[i].count_rx_clean_total = 0;
+		thread->ports[i].count_tx_xmit_failed = 0;
+		thread->ports[i].count_tx_clean_total = 0;
 	}
 
 	ret = pthread_create(&thread->tid, NULL, process_interrupt, thread);
@@ -558,7 +561,7 @@ static struct ixgbe_handle *ixgbe_open(char *interface_name,
 	memset(&req_up, 0, sizeof(struct uio_ixgbe_up_req));
 
 	ih->num_interrupt_rate =
-		min((uint16_t)200/*IXGBE_8K_ITR*/, req_info.max_interrupt_rate);
+		min((uint16_t)IXGBE_20K_ITR, req_info.max_interrupt_rate);
 	req_up.num_interrupt_rate = ih->num_interrupt_rate;
 
 	ih->num_queues =

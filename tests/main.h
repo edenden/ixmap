@@ -117,6 +117,11 @@ struct ixgbe_port {
 	struct ixgbe_ring       *tx_ring;
 	uint32_t		mtu_frame;
 	int                     budget;
+
+	unsigned long		count_rx_alloc_failed;
+	unsigned long		count_rx_clean_total;
+	unsigned long		count_tx_xmit_failed;
+	unsigned long		count_tx_clean_total;
 };
 
 /* Per thread parameter each thread takes */

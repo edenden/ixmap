@@ -15,14 +15,14 @@
 #include "main.h"
 #include "driver.h"
 
-static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
-	int port_index, int *tempcount);
-static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
-	int port_index, struct ixgbe_bulk *bulk, int *tempxmitcount);
-static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
-	int budget, struct ixgbe_bulk *bulk, int *temprecvcount);
-static void ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
-	int budget, int *tempsendcount);
+static void ixgbe_rx_alloc(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int port_index);
+static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int port_index, struct ixgbe_bulk *bulk);
+static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int budget, struct ixgbe_bulk *bulk);
+static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int budget);
 static inline int ixgbe_slot_assign(struct ixgbe_buf *buf);
 static inline void ixgbe_slot_attach(struct ixgbe_ring *ring,
 	uint16_t desc_index, int slot_index);
@@ -70,10 +70,6 @@ void *process_interrupt(void *data)
 	int read_size, fd_ep, i, ret, num_fd;
 	int max_budget = 0;
 	uint8_t *read_buf;
-int tempalloccount = 0;
-int temprecvcount = 0;
-int tempsendcount = 0;
-int tempxmitcount = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
 
@@ -120,8 +116,7 @@ int tempxmitcount = 0;
 
 	/* Prepare initial RX buffer */
 	for(i = 0; i < thread->num_ports; i++){
-		ixgbe_rx_alloc(thread->ports[i].rx_ring, thread->buf, i,
-&tempalloccount);
+		ixgbe_rx_alloc(&thread->ports[i], thread->buf, i);
 	}
 
 	while(1){
@@ -142,21 +137,19 @@ int tempxmitcount = 0;
 				/* Rx descripter cleaning */
 				ixgbe_print("Rx: descripter cleaning on thread %d\n",
 					thread->index);
-				ixgbe_rx_clean(thread->ports[irq_data->port_index].rx_ring,
+				ixgbe_rx_clean(&thread->ports[irq_data->port_index],
 					thread->buf, thread->ports[irq_data->port_index].budget,
-					&bulk, &temprecvcount);
+					&bulk);
 				ixgbe_print("Rx: descripter cleaning completed\n\n");
 
-				ixgbe_rx_alloc(thread->ports[irq_data->port_index].rx_ring,
-					thread->buf, irq_data->port_index,
-&tempalloccount);
+				ixgbe_rx_alloc(&thread->ports[irq_data->port_index],
+					thread->buf, irq_data->port_index);
 
 				ixgbe_print("Tx: xmit start on thread %d\n",
 					thread->index);
 				/* XXX: Following is 2ports specific code */
-				ixgbe_tx_xmit(thread->ports[!irq_data->port_index].tx_ring,
-					thread->buf, !irq_data->port_index, &bulk,
-&tempxmitcount);
+				ixgbe_tx_xmit(&thread->ports[!irq_data->port_index],
+					thread->buf, !irq_data->port_index, &bulk);
 
 				ixgbe_print("Tx: xmit completed\n\n");
 
@@ -167,15 +160,13 @@ int tempxmitcount = 0;
 				/* Tx descripter cleaning */
 				ixgbe_print("Tx: descripter cleaning on thread %d\n",
 					thread->index);
-				ixgbe_tx_clean(thread->ports[irq_data->port_index].tx_ring,
-					thread->buf, thread->ports[irq_data->port_index].budget,
-&tempsendcount);
+				ixgbe_tx_clean(&thread->ports[irq_data->port_index],
+					thread->buf, thread->ports[irq_data->port_index].budget);
 				ixgbe_print("Tx: descripter cleaning completed\n\n");
 
 				/* XXX: Following is 2ports specific code */
-				ixgbe_rx_alloc(thread->ports[!irq_data->port_index].rx_ring,
-					thread->buf, !irq_data->port_index,
-&tempalloccount);
+				ixgbe_rx_alloc(&thread->ports[!irq_data->port_index],
+					thread->buf, !irq_data->port_index);
 
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					tx_qmask);
@@ -195,11 +186,17 @@ out:
 	free(bulk.size);
 	free(bulk.slot_index);
 	free(read_buf);
-	ixgbe_print("thread %d stopped\n", thread->index);
-printf("allocation fail count on thread %d = %d\n", thread->index, tempalloccount);
-printf("xmit fail count on thread %d = %d\n", thread->index, tempxmitcount);
-printf("total received on thread %d = %d\n", thread->index, temprecvcount);
-printf("total sending on thread %d = %d\n", thread->index, tempsendcount);
+	for(i = 0; i < thread->num_ports; i++){
+		printf("thread %d port %d statictis:\n", thread->index, i);
+		printf("\tRx allocation failed = %lu\n",
+			thread->ports[i].count_rx_alloc_failed);
+		printf("\tRx packetes received = %lu\n",
+			thread->ports[i].count_rx_clean_total);
+		printf("\tTx xmit failed = %lu\n",
+			thread->ports[i].count_tx_xmit_failed);
+		printf("\tTx packetes transmitted = %lu\n",
+			thread->ports[i].count_tx_clean_total);
+	}
 	return NULL;
 
 err_ixgbe_irq_setmask:
@@ -217,12 +214,14 @@ err_alloc_read_buf:
 	return NULL;
 }
 
-static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
-	int port_index//)
-, int *tempcount)
+static void ixgbe_rx_alloc(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int port_index)
 {
+	struct ixgbe_ring *rx_ring;
 	unsigned int total_allocated = 0;
 	uint16_t max_allocation;
+
+	rx_ring = port->rx_ring;
 
 	max_allocation = ixgbe_desc_unused(rx_ring);
 	if (!max_allocation)
@@ -238,7 +237,8 @@ static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 
 		slot_index = ixgbe_slot_assign(buf);
 		if(slot_index < 0){
-(*tempcount)++;
+			port->count_rx_alloc_failed +=
+				(max_allocation - total_allocated);
 			break;
 		}
 
@@ -269,14 +269,16 @@ static void ixgbe_rx_alloc(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 	}
 }
 
-static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
-	int port_index, struct ixgbe_bulk *bulk//)
-, int *tempxmitcount)
+static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int port_index, struct ixgbe_bulk *bulk)
 {
+	struct ixgbe_ring *tx_ring;
 	unsigned int total_xmit = 0;
 	uint16_t unused_count;
 	uint32_t tx_flags;
 	int i;
+
+	tx_ring = port->tx_ring;
 
 	/* Nothing to do */
 	if(unlikely(!bulk->count))
@@ -338,18 +340,20 @@ static void ixgbe_tx_xmit(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 
 	/* drop overflowed frames */
 	for(i = 0; i < bulk->count - total_xmit; i++){
-(*tempxmitcount)++;
+		port->count_tx_xmit_failed++;
 		ixgbe_slot_release(buf, bulk->slot_index[total_xmit + i]);
 	}
 
 	return;
 }
 
-static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
-	int budget, struct ixgbe_bulk *bulk//)
-, int *temprecvcount)
+static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int budget, struct ixgbe_bulk *bulk)
 {
+	struct ixgbe_ring *rx_ring;
 	unsigned int total_rx_packets = 0;
+
+	rx_ring = port->rx_ring;
 
 	do{
 		union ixgbe_adv_rx_desc *rx_desc;
@@ -411,15 +415,17 @@ static void ixgbe_rx_clean(struct ixgbe_ring *rx_ring, struct ixgbe_buf *buf,
 	}while(likely(total_rx_packets < budget));
 
 	bulk->count = total_rx_packets;
-*temprecvcount += total_rx_packets;
+	port->count_rx_clean_total += total_rx_packets;
 	return;
 }
 
-static void ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
-	int budget//)
-, int *tempsendcount)
+static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
+	int budget)
 {
+	struct ixgbe_ring *tx_ring;
 	unsigned int total_tx_packets = 0;
+
+	tx_ring = port->tx_ring;
 
 	do {
 		union ixgbe_adv_tx_desc *tx_desc;
@@ -445,7 +451,8 @@ static void ixgbe_tx_clean(struct ixgbe_ring *tx_ring, struct ixgbe_buf *buf,
 
 		total_tx_packets++;
 	}while(likely(total_tx_packets < budget));
-*tempsendcount += total_tx_packets;
+
+	port->count_tx_clean_total += total_tx_packets;
 
 	return;
 }
