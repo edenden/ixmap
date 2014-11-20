@@ -391,7 +391,9 @@ static void ixgbe_release_descring(struct ixgbe_handle *ih)
 		perror("failed to unmap descring");
 
 	size_rx_desc = sizeof(union ixgbe_adv_rx_desc) * ih->num_rx_desc;
+	size_rx_desc = ALIGN(size_rx_desc, 128);
 	size_tx_desc = sizeof(union ixgbe_adv_tx_desc) * ih->num_tx_desc;
+	size_tx_desc = ALIGN(size_tx_desc, 128);
 	munmap(ih->rx_ring[i].addr_virtual,
 		ih->num_queues * (size_rx_desc + size_tx_desc));
 
