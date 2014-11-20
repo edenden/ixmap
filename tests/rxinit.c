@@ -248,7 +248,7 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 	 */
 	ih->buf_size = ALIGN(ih->mtu_frame, 1024);
 	if(ih->buf_size > IXGBE_MAX_RXBUFFER)
-		ih->buf_size = ALIGN(IXGBE_MAX_RXBUFFER, 1024);
+		ih->buf_size = IXGBE_MAX_RXBUFFER;
 
 	hlreg0 = IXGBE_READ_REG(ih, IXGBE_HLREG0);
 	/* set jumbo enable since MHADD.MFS is keeping size locked at
