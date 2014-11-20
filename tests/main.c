@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	struct ixgbe_handle **ih_list;
 	struct ixgbe_thread *threads;
 	uint32_t buf_size = 0;
-	uint32_t num_cores = 2;
+	uint32_t num_cores = 4;
 	uint32_t num_ports = 2;
 	sigset_t sigset;
 	int ret = 0, i, signal;
