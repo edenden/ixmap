@@ -18,7 +18,7 @@
 #include "rxinit.h"
 #include "txinit.h"
 
-static int buf_count = 131072;
+static int buf_count = 16384;
 static char *ixgbe_interface_list[2];
 static int budget = 1024;
 
@@ -218,6 +218,8 @@ static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
 		thread->ports[i].interface_name = ih_list[i]->interface_name;
 		thread->ports[i].rx_ring = &(ih_list[i]->rx_ring[thread_index]);
 		thread->ports[i].tx_ring = &(ih_list[i]->tx_ring[thread_index]);
+		thread->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
+		thread->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
 		thread->ports[i].mtu_frame = ih_list[i]->mtu_frame;
 		thread->ports[i].budget = ih_list[i]->budget;
 		thread->ports[i].count_rx_alloc_failed = 0;
@@ -271,8 +273,10 @@ static void ixgbe_kill_thread(struct ixgbe_thread *thread)
 static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc)
 {
-	int ret, i, rx_assigned = 0, tx_assigned = 0;
+	int rx_assigned = 0, tx_assigned = 0, i, ret;
 	unsigned long size_tx_desc, size_rx_desc;
+	void *addr_virtual;
+	unsigned long addr_dma;
 
 	ih->rx_ring = malloc(sizeof(struct ixgbe_ring) * ih->num_queues);
 	if(!ih->rx_ring)
@@ -283,42 +287,45 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 		goto err_alloc_tx_ring;
 
 	size_rx_desc = sizeof(union ixgbe_adv_rx_desc) * num_rx_desc;
+	size_rx_desc = ALIGN(size_rx_desc, 128); /* needs 128-byte alignment */
 	size_tx_desc = sizeof(union ixgbe_adv_tx_desc) * num_tx_desc;
+	size_tx_desc = ALIGN(size_tx_desc, 128); /* needs 128-byte alignment */
+
+	/*
+	 * XXX: We don't support NUMA-aware memory allocation in userspace.
+	 * To support, mbind() or set_mempolicy() will be useful.
+	 */
+	ih->addr_virtual = mmap(NULL,
+		ih->num_queues * (size_rx_desc + size_tx_desc),
+		PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
+	if(ih->addr_virtual == MAP_FAILED){
+		goto err_mmap;
+	}
+
+	ret = ixgbe_dma_map(ih, ih->addr_virtual, &ih->addr_dma,
+		ih->num_queues * (size_rx_desc + size_tx_desc));
+	if(ret < 0){
+		goto err_dma_map;
+	}
+
+	addr_virtual	= ih->addr_virtual;
+	addr_dma	= ih->addr_dma;
 
 	/* Rx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++, rx_assigned++){
-		void *addr_virtual;
-		unsigned long addr_dma;
 		int *slot_index;
-
-		/*
-		 * XXX: We don't support NUMA-aware memory allocation in userspace.
-		 * To support, mbind() or set_mempolicy() will be useful.
-		 */
-		addr_virtual = mmap(NULL, size_rx_desc, PROT_READ | PROT_WRITE,
-			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
-		if(addr_virtual == MAP_FAILED){
-			goto err_rx_assign;
-		}
-
-		ret = ixgbe_dma_map(ih,
-			addr_virtual, &addr_dma, size_rx_desc);
-		if(ret < 0){
-			munmap(addr_virtual, size_rx_desc);
-			goto err_rx_assign;
-		}
 
 		slot_index = malloc(sizeof(int) * num_rx_desc);
 		if(!slot_index){
-			ixgbe_dma_unmap(ih, addr_dma);
-			munmap(addr_virtual, size_rx_desc);
 			goto err_rx_assign;
 		}
 
+		addr_virtual	+= (i * size_rx_desc);
+		addr_dma	+= (i * size_rx_desc);
+
 		ih->rx_ring[i].addr_dma = addr_dma;
 		ih->rx_ring[i].addr_virtual = addr_virtual;
-		ih->rx_ring[i].count = num_rx_desc;
-
 		ih->rx_ring[i].next_to_use = 0;
 		ih->rx_ring[i].next_to_clean = 0;
 		ih->rx_ring[i].slot_index = slot_index;
@@ -326,57 +333,41 @@ static int ixgbe_alloc_descring(struct ixgbe_handle *ih,
 
 	/* Tx descripter ring allocation */
 	for(i = 0; i < ih->num_queues; i++, tx_assigned++){
-		void	*addr_virtual;
-		unsigned long addr_dma;
 		int *slot_index;
-
-		/*
-		 * XXX: We don't support NUMA-aware memory allocation in userspace.
-		 * To support, mbind() or set_mempolicy() will be useful.
-		 */
-		addr_virtual = mmap(NULL, size_tx_desc, PROT_READ | PROT_WRITE,
-			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
-		if(addr_virtual == MAP_FAILED){
-			goto err_tx_assign;
-		}
-
-		ret = ixgbe_dma_map(ih,
-			addr_virtual, &addr_dma, size_tx_desc);
-		if(ret < 0){
-			munmap(addr_virtual, size_tx_desc);
-			goto err_tx_assign;
-		}
 
 		slot_index = malloc(sizeof(int) * num_tx_desc);
 		if(!slot_index){
-			ixgbe_dma_unmap(ih, addr_dma);
-			munmap(addr_virtual, size_tx_desc);
 			goto err_tx_assign;
 		}
 
+		addr_virtual	+= (i * size_tx_desc);
+		addr_dma	+= (i * size_tx_desc);
+
 		ih->tx_ring[i].addr_dma = addr_dma;
 		ih->tx_ring[i].addr_virtual = addr_virtual;
-		ih->tx_ring[i].count = num_tx_desc;
-
 		ih->tx_ring[i].next_to_use = 0;
 		ih->tx_ring[i].next_to_clean = 0;
 		ih->tx_ring[i].slot_index = slot_index;
 	}
+
+	ih->num_rx_desc = num_rx_desc;
+	ih->num_tx_desc = num_tx_desc;
 
 	return 0;
 
 err_tx_assign:
 	for(i = 0; i < tx_assigned; i++){
 		free(ih->tx_ring[i].slot_index);
-		ixgbe_dma_unmap(ih, ih->tx_ring[i].addr_dma);
-		munmap(ih->tx_ring[i].addr_virtual, size_tx_desc);
 	}
 err_rx_assign:
 	for(i = 0; i < rx_assigned; i++){
 		free(ih->rx_ring[i].slot_index);
-		ixgbe_dma_unmap(ih, ih->rx_ring[i].addr_dma);
-		munmap(ih->rx_ring[i].addr_virtual, size_rx_desc);
 	}
+	ixgbe_dma_unmap(ih, ih->addr_dma);
+err_dma_map:
+	munmap(ih->addr_virtual,
+		ih->num_queues * (size_rx_desc + size_tx_desc));
+err_mmap:
 	free(ih->tx_ring);
 err_alloc_tx_ring:
 	free(ih->rx_ring);
@@ -392,25 +383,20 @@ static void ixgbe_release_descring(struct ixgbe_handle *ih)
 
 	for(i = 0; i < ih->num_queues; i++){
 		free(ih->rx_ring[i].slot_index);
-
-		ret = ixgbe_dma_unmap(ih, ih->rx_ring[i].addr_dma);
-		if(ret < 0)
-			perror("failed to unmap descring");
-
-		size_rx_desc = sizeof(union ixgbe_adv_rx_desc) * ih->rx_ring[i].count;
-		munmap(ih->rx_ring[i].addr_virtual, size_rx_desc);
-	}
-
-	for(i = 0; i < ih->num_queues; i++){
 		free(ih->tx_ring[i].slot_index);
-
-		ret = ixgbe_dma_unmap(ih, ih->tx_ring[i].addr_dma);
-		if(ret < 0)
-			perror("failed to unmap descring");
-
-		size_tx_desc = sizeof(union ixgbe_adv_tx_desc) * ih->tx_ring[i].count;
-		munmap(ih->tx_ring[i].addr_virtual, size_tx_desc);
 	}
+
+	ret = ixgbe_dma_unmap(ih, ih->addr_dma);
+	if(ret < 0)
+		perror("failed to unmap descring");
+
+	size_rx_desc = sizeof(union ixgbe_adv_rx_desc) * ih->num_rx_desc;
+	size_tx_desc = sizeof(union ixgbe_adv_tx_desc) * ih->num_tx_desc;
+	munmap(ih->rx_ring[i].addr_virtual,
+		ih->num_queues * (size_rx_desc + size_tx_desc));
+
+	free(ih->tx_ring);
+	free(ih->rx_ring);
 
 	return;
 }

@@ -243,13 +243,12 @@ static void ixgbe_set_rx_buffer_len(struct ixgbe_handle *ih)
 	ih->mtu_frame += VLAN_HLEN;
 
 	/*
-	 * XXX: Currently we consider only CPU L1 cache line alignment.
-	 * Do we have to take care about DMA or other requirement?
+	 * XXX: 82599 SRRCTL requires packet buffer is aligned in 1K and
+	 * over 2K at least. Is this calculation correct?
 	 */
-	ih->buf_size = ALIGN(ih->mtu_frame, L1_CACHE_BYTES);
+	ih->buf_size = ALIGN(ih->mtu_frame, 1024);
 	if(ih->buf_size > IXGBE_MAX_RXBUFFER)
-		ih->buf_size = (IXGBE_MAX_RXBUFFER >> L1_CACHE_SHIFT)
-				<< L1_CACHE_SHIFT;
+		ih->buf_size = ALIGN(IXGBE_MAX_RXBUFFER, 1024);
 
 	hlreg0 = IXGBE_READ_REG(ih, IXGBE_HLREG0);
 	/* set jumbo enable since MHADD.MFS is keeping size locked at
@@ -278,7 +277,7 @@ static void ixgbe_configure_rx_ring(struct ixgbe_handle *ih,
 	IXGBE_WRITE_REG(ih, IXGBE_RDBAH(reg_idx),
 		addr_dma >> 32);
 	IXGBE_WRITE_REG(ih, IXGBE_RDLEN(reg_idx),
-		ring->count * sizeof(union ixgbe_adv_rx_desc));
+		ih->num_rx_desc * sizeof(union ixgbe_adv_rx_desc));
 
 	/* reset head and tail pointers */
 	IXGBE_WRITE_REG(ih, IXGBE_RDH(reg_idx), 0);

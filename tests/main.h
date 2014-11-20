@@ -67,7 +67,6 @@
 struct ixgbe_ring {
 	void		*addr_virtual;
 	unsigned long	addr_dma;
-	uint32_t	count;
 
 	uint8_t		*tail;
 	uint16_t	next_to_use;
@@ -101,6 +100,11 @@ struct ixgbe_handle {
 	struct ixgbe_ring	*rx_ring;
 	struct ixgbe_buf	*buf;
 
+	void			*addr_virtual;
+	unsigned long		addr_dma;
+	uint32_t		num_tx_desc;
+	uint32_t		num_rx_desc;
+
 	uint32_t		num_queues;
 	uint16_t		num_interrupt_rate;
 	uint32_t		promisc;
@@ -117,6 +121,8 @@ struct ixgbe_port {
 	struct ixgbe_ring       *tx_ring;
 	uint32_t		mtu_frame;
 	int                     budget;
+	uint32_t		num_tx_desc;
+	uint32_t		num_rx_desc;
 
 	unsigned long		count_rx_alloc_failed;
 	unsigned long		count_rx_clean_total;

@@ -20,9 +20,8 @@ static void ixgbe_rx_alloc(struct ixgbe_port *port, struct ixgbe_buf *buf,
 static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
 	int port_index, struct ixgbe_bulk *bulk);
 static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
-	int budget, struct ixgbe_bulk *bulk);
-static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
-	int budget);
+	struct ixgbe_bulk *bulk);
+static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf);
 static inline int ixgbe_slot_assign(struct ixgbe_buf *buf);
 static inline void ixgbe_slot_attach(struct ixgbe_ring *ring,
 	uint16_t desc_index, int slot_index);
@@ -138,8 +137,7 @@ void *process_interrupt(void *data)
 				ixgbe_print("Rx: descripter cleaning on thread %d\n",
 					thread->index);
 				ixgbe_rx_clean(&thread->ports[irq_data->port_index],
-					thread->buf, thread->ports[irq_data->port_index].budget,
-					&bulk);
+					thread->buf, &bulk);
 				ixgbe_print("Rx: descripter cleaning completed\n\n");
 
 				ixgbe_rx_alloc(&thread->ports[irq_data->port_index],
@@ -161,7 +159,7 @@ void *process_interrupt(void *data)
 				ixgbe_print("Tx: descripter cleaning on thread %d\n",
 					thread->index);
 				ixgbe_tx_clean(&thread->ports[irq_data->port_index],
-					thread->buf, thread->ports[irq_data->port_index].budget);
+					thread->buf);
 				ixgbe_print("Tx: descripter cleaning completed\n\n");
 
 				/* XXX: Following is 2ports specific code */
@@ -223,7 +221,7 @@ static void ixgbe_rx_alloc(struct ixgbe_port *port, struct ixgbe_buf *buf,
 
 	rx_ring = port->rx_ring;
 
-	max_allocation = ixgbe_desc_unused(rx_ring);
+	max_allocation = ixgbe_desc_unused(rx_ring, port->num_rx_desc);
 	if (!max_allocation)
 		return;
 
@@ -251,7 +249,7 @@ static void ixgbe_rx_alloc(struct ixgbe_port *port, struct ixgbe_buf *buf,
 
 		next_to_use = rx_ring->next_to_use + 1;
 		rx_ring->next_to_use =
-			(next_to_use < rx_ring->count) ? next_to_use : 0;
+			(next_to_use < port->num_rx_desc) ? next_to_use : 0;
 
 		total_allocated++;
 	}while(likely(total_allocated < max_allocation));
@@ -287,7 +285,8 @@ static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
 	/* set type for advanced descriptor with frame checksum insertion */
 	tx_flags = IXGBE_ADVTXD_DTYP_DATA | IXGBE_ADVTXD_DCMD_DEXT
 			| IXGBE_ADVTXD_DCMD_IFCS;
-	unused_count = min(bulk->count, ixgbe_desc_unused(tx_ring));
+	unused_count =	min(bulk->count,
+			ixgbe_desc_unused(tx_ring, port->num_tx_desc));
 
 	do{
 		union ixgbe_adv_tx_desc *tx_desc;
@@ -320,7 +319,7 @@ static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
 
 		next_to_use = tx_ring->next_to_use + 1;
 		tx_ring->next_to_use =
-			(next_to_use < tx_ring->count) ? next_to_use : 0;
+			(next_to_use < port->num_tx_desc) ? next_to_use : 0;
 
 		total_xmit++;
 	}while(likely(total_xmit < unused_count));
@@ -348,7 +347,7 @@ static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
 }
 
 static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
-	int budget, struct ixgbe_bulk *bulk)
+	struct ixgbe_bulk *bulk)
 {
 	struct ixgbe_ring *rx_ring;
 	unsigned int total_rx_packets = 0;
@@ -407,20 +406,19 @@ static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
 
 		next_to_clean = rx_ring->next_to_clean + 1;
 		rx_ring->next_to_clean = 
-			(next_to_clean < rx_ring->count) ? next_to_clean : 0;
+			(next_to_clean < port->num_rx_desc) ? next_to_clean : 0;
 
 		/* XXX: Should we prefetch the next_to_clean desc ? */
 
 		total_rx_packets++;
-	}while(likely(total_rx_packets < budget));
+	}while(likely(total_rx_packets < port->budget));
 
 	bulk->count = total_rx_packets;
 	port->count_rx_clean_total += total_rx_packets;
 	return;
 }
 
-static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
-	int budget)
+static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf)
 {
 	struct ixgbe_ring *tx_ring;
 	unsigned int total_tx_packets = 0;
@@ -447,10 +445,10 @@ static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
 
 		next_to_clean = tx_ring->next_to_clean + 1;
 		tx_ring->next_to_clean =
-			(next_to_clean < tx_ring->count) ? next_to_clean : 0;
+			(next_to_clean < port->num_tx_desc) ? next_to_clean : 0;
 
 		total_tx_packets++;
-	}while(likely(total_tx_packets < budget));
+	}while(likely(total_tx_packets < port->budget));
 
 	port->count_tx_clean_total += total_tx_packets;
 

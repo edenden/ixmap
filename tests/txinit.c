@@ -77,7 +77,7 @@ static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 	IXGBE_WRITE_REG(ih, IXGBE_TDBAH(reg_idx),
 			addr_dma >> 32);
 	IXGBE_WRITE_REG(ih, IXGBE_TDLEN(reg_idx),
-			ring->count * sizeof(union ixgbe_adv_tx_desc));
+			ih->num_tx_desc * sizeof(union ixgbe_adv_tx_desc));
 
 	/* disable head writeback */
 	IXGBE_WRITE_REG(ih, IXGBE_TDWBAH(reg_idx), 0);
