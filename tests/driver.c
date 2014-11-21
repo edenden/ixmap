@@ -151,9 +151,10 @@ void *process_interrupt(void *data)
 					ret = read(irq_data->fd, read_buf, read_size);
 					if(ret < 0)
 						goto out;
+					ixgbe_irq_enable_queues(
+						thread->ports[irq_data->port_index].ih,
+						rx_qmask);
 				}
-				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
-					rx_qmask);
 				break;
 			case IXGBE_IRQ_TX:
 				/* Tx descripter cleaning */
@@ -171,9 +172,10 @@ void *process_interrupt(void *data)
 					ret = read(irq_data->fd, read_buf, read_size);
 					if(ret < 0)
 						goto out;
+					ixgbe_irq_enable_queues(
+						thread->ports[irq_data->port_index].ih,
+						tx_qmask);
 				}
-				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
-					tx_qmask);
 				break;
 			case IXGBE_SIGNAL:
 				ret = read(irq_data->fd, read_buf, read_size);
