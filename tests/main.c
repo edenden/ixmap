@@ -20,7 +20,6 @@
 
 static int buf_count = 16384;
 static char *ixgbe_interface_list[2];
-static int budget = 1024;
 
 static inline void ixgbe_irq_enable(struct ixgbe_handle *ih);
 static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
@@ -39,7 +38,7 @@ static int ixgbe_dma_map(struct ixgbe_handle *ih,
 static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
 	unsigned long addr_dma);
 static struct ixgbe_handle *ixgbe_open(char *interface_name,
-	uint32_t num_core, int budget);
+	uint32_t num_core, uint32_t budget, uint16_t intr_rate);
 static void ixgbe_close(struct ixgbe_handle *ih);
 static int ixgbe_set_signal(sigset_t *sigset);
 
@@ -50,6 +49,8 @@ int main(int argc, char **argv)
 	uint32_t buf_size = 0;
 	uint32_t num_cores = 4;
 	uint32_t num_ports = 2;
+	uint32_t budget = 1024;
+	uint16_t intr_rate = IXGBE_20K_ITR;
 	sigset_t sigset;
 	int ret = 0, i, signal;
 	int cores_assigned = 0, ports_assigned = 0;
@@ -64,7 +65,8 @@ int main(int argc, char **argv)
 	}
 
 	for(i = 0; i < num_ports; i++, ports_assigned++){
-		ih_list[i] = ixgbe_open(ixgbe_interface_list[i], num_cores, budget);
+		ih_list[i] = ixgbe_open(ixgbe_interface_list[i],
+			num_cores, budget, intr_rate);
 		if(!ih_list[i]){
 			printf("failed to ixgbe_open, idx = %d\n", i);
 			ret = -1;
@@ -220,8 +222,8 @@ static int ixgbe_thread_create(struct ixgbe_handle **ih_list,
 		thread->ports[i].tx_ring = &(ih_list[i]->tx_ring[thread_index]);
 		thread->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
 		thread->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
-		thread->ports[i].mtu_frame = ih_list[i]->mtu_frame;
 		thread->ports[i].budget = ih_list[i]->budget;
+		thread->ports[i].mtu_frame = ih_list[i]->mtu_frame;
 		thread->ports[i].count_rx_alloc_failed = 0;
 		thread->ports[i].count_rx_clean_total = 0;
 		thread->ports[i].count_tx_xmit_failed = 0;
@@ -523,7 +525,7 @@ static int ixgbe_dma_unmap(struct ixgbe_handle *ih,
 }
 
 static struct ixgbe_handle *ixgbe_open(char *interface_name,
-	uint32_t num_core, int budget)
+	uint32_t num_core, uint32_t budget, uint16_t intr_rate)
 {
 	struct ixgbe_handle *ih;
 	char filename[FILENAME_SIZE];
@@ -549,7 +551,7 @@ static struct ixgbe_handle *ixgbe_open(char *interface_name,
 	memset(&req_up, 0, sizeof(struct uio_ixgbe_up_req));
 
 	ih->num_interrupt_rate =
-		min((uint16_t)IXGBE_20K_ITR, req_info.max_interrupt_rate);
+		min(intr_rate, req_info.max_interrupt_rate);
 	req_up.num_interrupt_rate = ih->num_interrupt_rate;
 
 	ih->num_queues =

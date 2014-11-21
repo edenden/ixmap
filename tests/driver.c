@@ -67,7 +67,7 @@ void *process_interrupt(void *data)
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	uint64_t tx_qmask, rx_qmask;
 	int read_size, fd_ep, i, ret, num_fd;
-	int max_budget = 0;
+	int max_bulk_count = 0;
 	uint8_t *read_buf;
 
 	ixgbe_print("thread %d started\n", thread->index);
@@ -85,15 +85,15 @@ void *process_interrupt(void *data)
 
 	/* Prepare bulk array */
 	for(i = 0; i < thread->num_ports; i++){
-		if(thread->ports[i].budget > max_budget){
-			max_budget = thread->ports[i].budget;
+		if(thread->ports[i].budget > max_bulk_count){
+			max_bulk_count = thread->ports[i].budget;
 		}
 	}
 	bulk.count = 0;
-	bulk.slot_index = malloc(sizeof(int) * max_budget);
+	bulk.slot_index = malloc(sizeof(int) * max_bulk_count);
 	if(!bulk.slot_index)
 		goto err_bulk_slot_index;
-	bulk.size = malloc(sizeof(uint32_t) * max_budget);
+	bulk.size = malloc(sizeof(uint32_t) * max_bulk_count);
 	if(!bulk.size)
 		goto err_bulk_size;
 

@@ -104,13 +104,13 @@ struct ixgbe_handle {
 	unsigned long		addr_dma;
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;
+	uint32_t		budget;
 
 	uint32_t		num_queues;
 	uint16_t		num_interrupt_rate;
 	uint32_t		promisc;
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
-	int			budget;
 };
 
 /* Per port parameter each thread takes */
@@ -120,9 +120,9 @@ struct ixgbe_port {
 	struct ixgbe_ring       *rx_ring;
 	struct ixgbe_ring       *tx_ring;
 	uint32_t		mtu_frame;
-	int                     budget;
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;
+	uint32_t		budget;
 
 	unsigned long		count_rx_alloc_failed;
 	unsigned long		count_rx_clean_total;
