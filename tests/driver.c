@@ -19,9 +19,9 @@ static void ixgbe_rx_alloc(struct ixgbe_port *port, struct ixgbe_buf *buf,
 	int port_index);
 static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
 	int port_index, struct ixgbe_bulk *bulk);
-static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
+static int ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
 	struct ixgbe_bulk *bulk);
-static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf);
+static int ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf);
 static inline int ixgbe_slot_assign(struct ixgbe_buf *buf);
 static inline void ixgbe_slot_attach(struct ixgbe_ring *ring,
 	uint16_t desc_index, int slot_index);
@@ -127,16 +127,13 @@ void *process_interrupt(void *data)
 
 		for(i = 0; i < num_fd; i++){
 			irq_data = (struct ixgbe_irq_data *)events[i].data.ptr;
-			ret = read(irq_data->fd, read_buf, read_size);
-			if(ret < 0)
-				continue;
 			
 			switch(irq_data->type){
 			case IXGBE_IRQ_RX:
 				/* Rx descripter cleaning */
 				ixgbe_print("Rx: descripter cleaning on thread %d\n",
 					thread->index);
-				ixgbe_rx_clean(&thread->ports[irq_data->port_index],
+				ret = ixgbe_rx_clean(&thread->ports[irq_data->port_index],
 					thread->buf, &bulk);
 				ixgbe_print("Rx: descripter cleaning completed\n\n");
 
@@ -148,9 +145,13 @@ void *process_interrupt(void *data)
 				/* XXX: Following is 2ports specific code */
 				ixgbe_tx_xmit(&thread->ports[!irq_data->port_index],
 					thread->buf, !irq_data->port_index, &bulk);
-
 				ixgbe_print("Tx: xmit completed\n\n");
 
+				if(ret < thread->ports[irq_data->port_index].budget){
+					ret = read(irq_data->fd, read_buf, read_size);
+					if(ret < 0)
+						goto out;
+				}
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					rx_qmask);
 				break;
@@ -158,7 +159,7 @@ void *process_interrupt(void *data)
 				/* Tx descripter cleaning */
 				ixgbe_print("Tx: descripter cleaning on thread %d\n",
 					thread->index);
-				ixgbe_tx_clean(&thread->ports[irq_data->port_index],
+				ret = ixgbe_tx_clean(&thread->ports[irq_data->port_index],
 					thread->buf);
 				ixgbe_print("Tx: descripter cleaning completed\n\n");
 
@@ -166,10 +167,18 @@ void *process_interrupt(void *data)
 				ixgbe_rx_alloc(&thread->ports[!irq_data->port_index],
 					thread->buf, !irq_data->port_index);
 
+				if(ret < thread->ports[irq_data->port_index].budget){
+					ret = read(irq_data->fd, read_buf, read_size);
+					if(ret < 0)
+						goto out;
+				}
 				ixgbe_irq_enable_queues(thread->ports[irq_data->port_index].ih,
 					tx_qmask);
 				break;
 			case IXGBE_SIGNAL:
+				ret = read(irq_data->fd, read_buf, read_size);
+				if(ret < 0)
+					continue;
 				goto out;
 				break;
 			default:
@@ -346,7 +355,7 @@ static void ixgbe_tx_xmit(struct ixgbe_port *port, struct ixgbe_buf *buf,
 	return;
 }
 
-static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
+static int ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
 	struct ixgbe_bulk *bulk)
 {
 	struct ixgbe_ring *rx_ring;
@@ -415,10 +424,10 @@ static void ixgbe_rx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf,
 
 	bulk->count = total_rx_packets;
 	port->count_rx_clean_total += total_rx_packets;
-	return;
+	return total_rx_packets;
 }
 
-static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf)
+static int ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf)
 {
 	struct ixgbe_ring *tx_ring;
 	unsigned int total_tx_packets = 0;
@@ -451,8 +460,7 @@ static void ixgbe_tx_clean(struct ixgbe_port *port, struct ixgbe_buf *buf)
 	}while(likely(total_tx_packets < port->budget));
 
 	port->count_tx_clean_total += total_tx_packets;
-
-	return;
+	return total_tx_packets;
 }
 
 static inline int ixgbe_slot_assign(struct ixgbe_buf *buf)
