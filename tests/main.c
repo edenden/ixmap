@@ -422,6 +422,10 @@ static struct ixgbe_buf *ixgbe_alloc_buf(struct ixgbe_handle **ih_list,
 	if(!buf->addr_dma)
 		goto err_alloc_buf_addr_dma;
 
+	/*
+	 * XXX: Should we add buffer padding for memory interleaving?
+	 * DPDK does so in rte_mempool.c/optimize_object_size().
+	 */
 	size = buf_size * count;
 
 	/*
