@@ -20,12 +20,12 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 
-#include "ixgbe_type.h"
-#include "ixgbe_82599.h"
-#include "ixgbe_common.h"
-#include "ixgbe_phy.h"
-#include "ixgbe_eeprom.h"
-#include "ixgbe_uio.h"
+#include "ixmap_type.h"
+#include "ixmap_main.h"
+#include "ixmap_82599.h"
+#include "ixmap_common.h"
+#include "ixmap_phy.h"
+#include "ixmap_eeprom.h"
 
 static s32 ixgbe_read_eeprom_82599(struct ixgbe_hw *hw, u16 offset, u16 *data);
 static s32 ixgbe_verify_fw_version_82599(struct ixgbe_hw *hw);

@@ -15,12 +15,12 @@
 #include <linux/sched.h>
 #include <asm/io.h>
 
-#include "ixgbe_uio.h"
-#include "ixgbe_type.h"
-#include "ixgbe_common.h"
-#include "ixgbe_82599.h"
-#include "ixgbe_eeprom.h"
-#include "ixgbe_dma.h"
+#include "ixmap_main.h"
+#include "ixmap_type.h"
+#include "ixmap_common.h"
+#include "ixmap_82599.h"
+#include "ixmap_eeprom.h"
+#include "ixmap_dma.h"
 
 static void uio_ixgbe_free_msix(struct uio_ixgbe_udapter *ud);
 static int uio_ixgbe_down(struct uio_ixgbe_udapter *ud);

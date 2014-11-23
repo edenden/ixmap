@@ -19,9 +19,9 @@
 
 #include <linux/version.h>
 
-#include "ixgbe_uio.h"
-#include "ixgbe_type.h"
-#include "ixgbe_dma.h"
+#include "ixmap_main.h"
+#include "ixmap_type.h"
+#include "ixmap_dma.h"
 
 static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
 	unsigned long addr_dma, unsigned long size);

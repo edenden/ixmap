@@ -20,9 +20,9 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 
-#include "ixgbe_type.h"
-#include "ixgbe_common.h"
-#include "ixgbe_phy.h"
+#include "ixmap_type.h"
+#include "ixmap_common.h"
+#include "ixmap_phy.h"
 
 s32 ixgbe_identify_module_generic(struct ixgbe_hw *hw)
 {

@@ -20,11 +20,11 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 
-#include "ixgbe_type.h"
-#include "ixgbe_common.h"
-#include "ixgbe_phy.h"
-#include "ixgbe_eeprom.h"
-#include "ixgbe_uio.h"
+#include "ixmap_main.h"
+#include "ixmap_type.h"
+#include "ixmap_common.h"
+#include "ixmap_phy.h"
+#include "ixmap_eeprom.h"
 
 static u32 ixgbe_pcie_timeout_poll(struct ixgbe_hw *hw);
 

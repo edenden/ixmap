@@ -20,10 +20,10 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 
-#include "ixgbe_type.h"
-#include "ixgbe_common.h"
-#include "ixgbe_eeprom.h"
-#include "ixgbe_uio.h"
+#include "ixmap_main.h"
+#include "ixmap_type.h"
+#include "ixmap_common.h"
+#include "ixmap_eeprom.h"
 
 static s32 ixgbe_acquire_eeprom(struct ixgbe_hw *hw);
 static s32 ixgbe_ready_eeprom(struct ixgbe_hw *hw);
