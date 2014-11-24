@@ -33,55 +33,56 @@ static int32_t ixmap_verify_fw_version_82599(struct ixmap_hw *hw);
 
 int32_t ixmap_init_ops_82599(struct ixmap_hw *hw)
 {
-	struct ixmap_mac_info *mac = &hw->mac;
-	struct ixmap_phy_info *phy = &hw->phy;
-	struct ixmap_eeprom_info *eeprom = &hw->eeprom;
+	struct ixmap_mac_info *mac	= &hw->mac;
+	struct ixmap_phy_info *phy	= &hw->phy;
+	struct ixmap_eeprom_info *eeprom 
+					= &hw->eeprom;
 
 	/* PHY */
-	phy->ops.identify = &ixmap_identify_phy_82599;
-	phy->ops.init = &ixmap_init_phy_ops_82599;
+	phy->ops.identify		= &ixmap_identify_phy_82599;
+	phy->ops.init			= &ixmap_init_phy_ops_82599;
 
 	/* MAC */
-	mac->ops.init_hw = &ixmap_init_hw;
-	mac->ops.reset_hw = &ixmap_reset_hw_82599;
-	mac->ops.get_mac_addr = &ixmap_get_mac_addr;
-	mac->ops.get_media_type = &ixmap_get_media_type_82599;
-	mac->ops.setup_link = &ixmap_setup_mac_link_82599;
-	mac->ops.check_link = &ixmap_check_mac_link;
-	mac->ops.start_hw = &ixmap_start_hw_82599;
-	mac->ops.prot_autoc_write = &prot_autoc_write_82599;
-	mac->ops.prot_autoc_read = &prot_autoc_read_82599;
-	mac->ops.stop_adapter = &ixmap_stop_adapter;
-	mac->ops.setup_sfp = &ixmap_setup_sfp_modules_82599;
-	mac->ops.acquire_swfw_sync = &ixmap_acquire_swfw_sync;
-	mac->ops.release_swfw_sync = &ixmap_release_swfw_sync;
-	mac->ops.clear_hw_cntrs = &ixmap_clear_hw_cntrs;
-	mac->ops.set_lan_id = &ixmap_set_lan_id_multi_port_pcie;
+	mac->ops.init_hw		= &ixmap_init_hw;
+	mac->ops.reset_hw		= &ixmap_reset_hw_82599;
+	mac->ops.get_mac_addr		= &ixmap_get_mac_addr;
+	mac->ops.get_media_type		= &ixmap_get_media_type_82599;
+	mac->ops.setup_link		= &ixmap_setup_mac_link_82599;
+	mac->ops.check_link		= &ixmap_check_mac_link;
+	mac->ops.start_hw		= &ixmap_start_hw_82599;
+	mac->ops.prot_autoc_write	= &prot_autoc_write_82599;
+	mac->ops.prot_autoc_read	= &prot_autoc_read_82599;
+	mac->ops.stop_adapter		= &ixmap_stop_adapter;
+	mac->ops.setup_sfp		= &ixmap_setup_sfp_modules_82599;
+	mac->ops.acquire_swfw_sync	= &ixmap_acquire_swfw_sync;
+	mac->ops.release_swfw_sync	= &ixmap_release_swfw_sync;
+	mac->ops.clear_hw_cntrs		= &ixmap_clear_hw_cntrs;
+	mac->ops.set_lan_id		= &ixmap_set_lan_id_multi_port_pcie;
 
 	/* RAR, Multicast, VLAN */
-	mac->ops.set_rar = &ixmap_set_rar;
-	mac->ops.init_rx_addrs = &ixmap_init_rx_addrs;
-	mac->ops.clear_vfta = &ixmap_clear_vfta;
+	mac->ops.set_rar		= &ixmap_set_rar;
+	mac->ops.init_rx_addrs		= &ixmap_init_rx_addrs;
+	mac->ops.clear_vfta		= &ixmap_clear_vfta;
 
 	/* Manageability interface */
-	mac->ops.set_fw_drv_ver = &ixmap_set_fw_drv_ver;
+	mac->ops.set_fw_drv_ver		= &ixmap_set_fw_drv_ver;
 
-	mac->mcft_size	  = IXGBE_82599_MC_TBL_SIZE;
-	mac->vft_size	   = IXGBE_82599_VFT_TBL_SIZE;
-	mac->num_rar_entries    = IXGBE_82599_RAR_ENTRIES;
-	mac->rx_pb_size	 = IXGBE_82599_RX_PB_SIZE;
-	mac->max_rx_queues	= IXGBE_82599_MAX_RX_QUEUES;
-	mac->max_tx_queues	= IXGBE_82599_MAX_TX_QUEUES;
-	mac->max_msix_vectors   = ixmap_get_pcie_msix_count(hw);
+	mac->mcft_size			= IXGBE_82599_MC_TBL_SIZE;
+	mac->vft_size			= IXGBE_82599_VFT_TBL_SIZE;
+	mac->num_rar_entries		= IXGBE_82599_RAR_ENTRIES;
+	mac->rx_pb_size			= IXGBE_82599_RX_PB_SIZE;
+	mac->max_rx_queues		= IXGBE_82599_MAX_RX_QUEUES;
+	mac->max_tx_queues		= IXGBE_82599_MAX_TX_QUEUES;
+	mac->max_msix_vectors		= ixmap_get_pcie_msix_count(hw);
 
-	mac->arc_subsystem_valid = (IXGBE_READ_REG(hw, IXGBE_FWSM) &
+	mac->arc_subsystem_valid	= (IXGBE_READ_REG(hw, IXGBE_FWSM) &
 					IXGBE_FWSM_MODE_MASK) ? true : false;
 
 	/* EEPROM */
-	eeprom->ops.init_params = &ixmap_init_eeprom_params;
-	eeprom->ops.read = &ixmap_read_eeprom_82599;
-	eeprom->ops.validate_checksum = &ixmap_validate_eeprom_checksum;
-	eeprom->ops.calc_checksum = &ixmap_calc_eeprom_checksum;
+	eeprom->ops.init_params		= &ixmap_init_eeprom_params;
+	eeprom->ops.read		= &ixmap_read_eeprom_82599;
+	eeprom->ops.validate_checksum	= &ixmap_validate_eeprom_checksum;
+	eeprom->ops.calc_checksum	= &ixmap_calc_eeprom_checksum;
 
 	return 0;
 }
