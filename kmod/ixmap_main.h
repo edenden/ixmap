@@ -71,5 +71,5 @@ void ixmap_irqdev_put(struct ixmap_irqdev *irqdev);
 int ixmap_up(struct ixmap_adapter *adapter);
 int ixmap_down(struct ixmap_adapter *adapter);
 void ixmap_reset(struct ixmap_adapter *adapter);
-#endif /* _IXMAP_MAIN */
+#endif /* _IXMAP_MAIN_H */
 
