@@ -1,3 +1,6 @@
+#ifndef _IXMAP_PHY_H
+#define _IXMAP_PHY_H
+
 /* EEPROM byte offsets */
 #define IXGBE_SFF_IDENTIFIER	    0x0
 #define IXGBE_SFF_IDENTIFIER_SFP	0x3
@@ -55,3 +58,5 @@
 int32_t ixmap_get_sfp_init_sequence_offsets(struct ixmap_hw *hw,
 	uint16_t *list_offset, uint16_t *data_offset);
 int32_t ixmap_identify_module(struct ixmap_hw *hw);
+
+#endif /* _IXMAP_PHY_H */

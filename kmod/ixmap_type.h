@@ -1,5 +1,5 @@
-#ifndef _IXGBE_TYPE_H_
-#define _IXGBE_TYPE_H_
+#ifndef _IXMAP_TYPE_H
+#define _IXMAP_TYPE_H
 
 /* forward declaration */
 struct ixmap_hw;
@@ -1035,4 +1035,4 @@ struct ixmap_hic_drv_info {
 	uint16_t pad2; /* end spacing to ensure length is mult. of dword2 */
 };
 
-#endif /* _IXGBE_TYPE_H_ */
+#endif /* _IXMAP_TYPE_H */

@@ -1,5 +1,5 @@
-#ifndef IXMAP_MAIN_H
-#define IXMAP_MAIN_H
+#ifndef _IXMAP_MAIN_H
+#define _IXMAP_MAIN_H
 
 #include <linux/if_ether.h>
 #include <linux/types.h>
@@ -71,5 +71,5 @@ void ixmap_irqdev_put(struct ixmap_irqdev *irqdev);
 int ixmap_up(struct ixmap_adapter *adapter);
 int ixmap_down(struct ixmap_adapter *adapter);
 void ixmap_reset(struct ixmap_adapter *adapter);
-#endif /* IXGBE_IOCTL_H */
+#endif /* _IXMAP_MAIN */
 

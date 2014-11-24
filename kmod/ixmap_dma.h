@@ -1,3 +1,6 @@
+#ifndef _IXMAP_DMA_H
+#define _IXMAP_DMA_H
+
 uint8_t __iomem *ixmap_dma_map_iobase(struct ixmap_adapter *ud);
 dma_addr_t ixmap_dma_map(struct ixmap_adapter *ud,
 	unsigned long addr_virtual, unsigned long size, uint8_t cache);
@@ -24,3 +27,5 @@ struct ixmap_dma_area {
 	struct sg_table		*sgt;
 	unsigned int		npages;
 };
+
+#endif /* _IXMAP_DMA_H */

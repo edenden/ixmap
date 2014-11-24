@@ -1,3 +1,6 @@
+#ifndef _IXMAP_COMMON_H
+#define _IXMAP_COMMON_H
+
 int32_t ixmap_init_hw(struct ixmap_hw *hw);
 void ixmap_start_hw(struct ixmap_hw *hw);
 int32_t ixmap_get_mac_addr(struct ixmap_hw *hw,
@@ -67,3 +70,5 @@ static inline void IXGBE_WRITE_REG(struct ixmap_hw *hw,
 
 #define IXGBE_CPU_TO_LE32(_i) cpu_to_le32(_i)
 #define IXGBE_LE32_TO_CPUS(_i) le32_to_cpus(_i)
+
+#endif /* _IXMAP_COMMON_H */

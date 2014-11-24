@@ -1,3 +1,6 @@
+#ifndef _IXMAP_EEPROM_H
+#define _IXMAP_EEPROM_H
+
 int32_t ixmap_acquire_swfw_sync(struct ixmap_hw *hw, uint16_t mask);
 void ixmap_release_swfw_sync(struct ixmap_hw *hw, uint16_t mask);
 int32_t ixmap_validate_eeprom_checksum(struct ixmap_hw *hw,
@@ -15,3 +18,4 @@ uint16_t ixmap_calc_eeprom_checksum(struct ixmap_hw *hw);
 int32_t ixmap_read_pba_string(struct ixmap_hw *hw,
 	uint8_t *pba_num, uint32_t pba_num_size);
 
+#endif /* _IXMAP_EEPROM_H */

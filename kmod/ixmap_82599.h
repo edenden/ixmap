@@ -1,3 +1,6 @@
+#ifndef _IXMAP_82599_H
+#define _IXMAP_82599_H
+
 #define IXGBE_82599_MAX_TX_QUEUES 128
 #define IXGBE_82599_MAX_RX_QUEUES 128
 #define IXGBE_82599_RAR_ENTRIES   128
@@ -26,3 +29,5 @@ int32_t ixmap_get_link_capabilities_82599(struct ixmap_hw *hw,
 	uint32_t *speed, int *autoneg);
 int ixmap_verify_lesm_fw_enabled_82599(struct ixmap_hw *hw);
 int32_t ixmap_reset_pipeline_82599(struct ixmap_hw *hw);
+
+#endif /* _IXMAP_82599_H */

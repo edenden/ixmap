@@ -1,3 +1,6 @@
+#ifndef _IXMAP_FOPS_H
+#define _IXMAP_FOPS_H
+
 #define MISCDEV_NAME_SIZE	32
 
 enum {
@@ -69,3 +72,5 @@ void ixmap_miscdev_deregister(struct ixmap_adapter *adapter);
 int ixmap_irqdev_misc_register(struct ixmap_irqdev *irqdev,
 	unsigned int id, int direction, int queue_idx);
 void ixmap_irqdev_misc_deregister(struct ixmap_irqdev *irqdev);
+
+#endif /* _IXMAP_FOPS_H */
