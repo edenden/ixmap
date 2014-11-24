@@ -23,7 +23,6 @@ struct ixmap_adapter {
 	struct list_head	list;
 	struct list_head	areas;
 	unsigned int		id;
-	uint8_t			removed;
 	uint8_t			up;
 
 	struct miscdevice	miscdev;

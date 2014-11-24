@@ -172,7 +172,6 @@ static void ixmap_adapter_free(struct ixmap_adapter *adapter)
 {
 	down(&dev_sem);
 	list_del(&adapter->list);
-	adapter->removed = 1;
 	up(&dev_sem);
 
 	kfree(adapter->hw);

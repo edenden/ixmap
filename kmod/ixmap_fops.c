@@ -115,10 +115,6 @@ static int ixmap_cmd_up(struct ixmap_adapter *adapter, void __user *argp)
 	struct ixmap_up_req req;
 	int err = 0;
 
-	if(adapter->removed){
-		return -ENODEV;
-	}
-
 	if(adapter->up){
 		return -EALREADY;
 	}
@@ -160,10 +156,6 @@ err_up_complete:
 static int ixmap_cmd_down(struct ixmap_adapter *adapter,
 	unsigned long arg)
 {
-	if(adapter->removed){
-		return -ENODEV;
-	}
-
 	if(!adapter->up){
 		return -EALREADY;
 	}
@@ -177,10 +169,6 @@ static int ixmap_cmd_down(struct ixmap_adapter *adapter,
 static int ixmap_cmd_reset(struct ixmap_adapter *adapter,
 	unsigned long arg)
 {
-	if (adapter->removed){
-		return -ENODEV;
-	}
-
 	if(!adapter->up){
 		return 0;
 	}
