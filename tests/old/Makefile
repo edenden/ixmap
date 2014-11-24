@@ -4,7 +4,7 @@
 CC = gcc
 CFLAGS = -Wall
 LDFLAGS =
-TARGET = ixgbe
+TARGET = ixmapfwd
 LIBS = -lpthread
 OBJECTS = main.o driver.o rxinit.o txinit.o
 
