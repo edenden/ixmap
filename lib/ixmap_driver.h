@@ -167,4 +167,3 @@ static inline void ixgbe_write_tail(struct ixgbe_ring *ring, uint32_t value)
 #define IXGBE_TX_DESC(R, i)	\
 	(&(((union ixgbe_adv_tx_desc *)((R)->addr_virtual))[i]))
 
-void *process_interrupt(void *data);

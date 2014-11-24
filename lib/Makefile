@@ -6,7 +6,7 @@ CFLAGS = -Wall -fPIC
 LDFLAGS = -shared 
 TARGET = ixmap
 LIBS = -lpthread
-OBJECTS = main.o driver.o rxinit.o txinit.o
+OBJECTS = ixmap_common.o ixmap_driver.o ixmap_rxinit.o ixmap_txinit.o
 MAJOR = 1
 MINOR = 0
 
