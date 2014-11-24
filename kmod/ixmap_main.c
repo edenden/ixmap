@@ -37,7 +37,7 @@ static void ixmap_io_resume(struct pci_dev *pdev);
 static irqreturn_t ixmap_interrupt(int irq, void *data);
 static void ixmap_write_eitr(struct ixmap_adapter *adapter, int vector);
 static void ixmap_set_ivar(struct ixmap_adapter *adapter,
-	s8 direction, u8 queue, u8 msix_vector);
+	int8_t direction, uint8_t queue, uint8_t msix_vector);
 static void ixmap_free_msix(struct ixmap_adapter *adapter);
 static int ixmap_configure_msix(struct ixmap_adapter *adapter);
 static void ixmap_setup_gpie(struct ixmap_adapter *adapter);
@@ -77,7 +77,7 @@ static struct pci_driver ixmap_driver = {
 	.err_handler	= &ixmap_err_handler,
 };
 
-uint16_t ixmap_read_pci_cfg_word(struct ixgbe_hw *hw, uint32_t reg)
+uint16_t ixmap_read_pci_cfg_word(struct ixmap_hw *hw, uint32_t reg)
 {
 	struct ixmap_adapter *adapter = hw->back;
 	uint16_t value;
@@ -151,7 +151,7 @@ static struct ixmap_adapter *ixmap_adapter_alloc(void)
 		return NULL;
 	}
 
-	adapter->hw = kzalloc(sizeof(struct ixgbe_hw), GFP_KERNEL);
+	adapter->hw = kzalloc(sizeof(struct ixmap_hw), GFP_KERNEL);
 	if(!adapter->hw){
 		return NULL;
 	}
@@ -210,8 +210,8 @@ static void ixmap_irqdev_free(struct ixmap_irqdev *irqdev)
 
 static void ixmap_release_hw_control(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_hw *hw = adapter->hw;
-	u32 ctrl_ext;
+	struct ixmap_hw *hw = adapter->hw;
+	uint32_t ctrl_ext;
 
 	/* Let firmware take over control of h/w */
 	ctrl_ext = IXGBE_READ_REG(hw, IXGBE_CTRL_EXT);
@@ -221,8 +221,8 @@ static void ixmap_release_hw_control(struct ixmap_adapter *adapter)
 
 static void ixmap_take_hw_control(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_hw *hw = adapter->hw;
-	u32 ctrl_ext;
+	struct ixmap_hw *hw = adapter->hw;
+	uint32_t ctrl_ext;
 
 	/* Let firmware know the driver has taken over */
 	ctrl_ext = IXGBE_READ_REG(hw, IXGBE_CTRL_EXT);
@@ -232,7 +232,7 @@ static void ixmap_take_hw_control(struct ixmap_adapter *adapter)
 
 static int ixmap_sw_init(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	struct pci_dev *pdev = adapter->pdev;
 
 	/* PCI config space info */
@@ -243,8 +243,8 @@ static int ixmap_sw_init(struct ixmap_adapter *adapter)
 	hw->subsystem_device_id = pdev->subsystem_device;
 
 	/* Setup hw api */
-	hw->mac.type  = ixgbe_mac_82599EB;
-	ixgbe_init_ops_82599(hw);
+	hw->mac.type  = ixmap_mac_82599EB;
+	ixmap_init_ops_82599(hw);
 
 	return 0;
 }
@@ -252,12 +252,12 @@ static int ixmap_sw_init(struct ixmap_adapter *adapter)
 static int ixmap_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct ixmap_adapter *adapter;
-	struct ixgbe_hw *hw;
-	u16 offset = 0, eeprom_verh = 0, eeprom_verl = 0;
-	u16 eeprom_cfg_blkh = 0, eeprom_cfg_blkl = 0;
-	u32 etrack_id;
-	u16 build, major, patch;
-	u8 part_str[IXGBE_PBANUM_LENGTH];
+	struct ixmap_hw *hw;
+	uint16_t offset = 0, eeprom_verh = 0, eeprom_verl = 0;
+	uint16_t eeprom_cfg_blkh = 0, eeprom_cfg_blkl = 0;
+	uint32_t etrack_id;
+	uint16_t build, major, patch;
+	uint8_t part_str[IXGBE_PBANUM_LENGTH];
 	int pci_using_dac, err;
 
 	pr_info("probing device %s\n", pci_name(pdev));
@@ -347,7 +347,7 @@ static int ixmap_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_sw_init;
 	}
 
-	if (ixgbe_validate_mac_addr(hw->mac.perm_addr)) {
+	if (ixmap_validate_mac_addr(hw->mac.perm_addr)) {
 		pr_err("invalid MAC address\n");
 		err = -EIO;
 		goto err_sw_init;
@@ -398,10 +398,10 @@ static int ixmap_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		hw->mac.ops.disable_tx_laser(hw);
 
 	/* First try to read PBA as a string */
-	err = ixgbe_read_pba_string_generic(hw, part_str, IXGBE_PBANUM_LENGTH);
+	err = ixmap_read_pba_string(hw, part_str, IXGBE_PBANUM_LENGTH);
 	if (err)
 		strncpy(part_str, "Unknown", IXGBE_PBANUM_LENGTH);
-	if (hw->phy.sfp_type != ixgbe_sfp_type_not_present)
+	if (hw->phy.sfp_type != ixmap_sfp_type_not_present)
 		pr_info("MAC: %d, PHY: %d, SFP+: %d, PBA No: %s\n",
 		       hw->mac.type, hw->phy.type, hw->phy.sfp_type, part_str);
 
@@ -491,8 +491,8 @@ static irqreturn_t ixmap_interrupt(int irq, void *data)
 
 static void ixmap_write_eitr(struct ixmap_adapter *adapter, int vector)
 {
-	struct ixgbe_hw *hw = adapter->hw;
-	u32 itr_reg = adapter->num_interrupt_rate & IXGBE_MAX_EITR;
+	struct ixmap_hw *hw = adapter->hw;
+	uint32_t itr_reg = adapter->num_interrupt_rate & IXGBE_MAX_EITR;
 
 	/*
 	 * set the WDIS bit to not clear the timer bits and cause an
@@ -503,10 +503,10 @@ static void ixmap_write_eitr(struct ixmap_adapter *adapter, int vector)
 }
 
 static void ixmap_set_ivar(struct ixmap_adapter *adapter,
-	s8 direction, u8 queue, u8 msix_vector)
+	int8_t direction, uint8_t queue, uint8_t msix_vector)
 {
-	u32 ivar, index;
-	struct ixgbe_hw *hw = adapter->hw;
+	uint32_t ivar, index;
+	struct ixmap_hw *hw = adapter->hw;
 
 	/* tx or rx causes */
 	msix_vector |= IXGBE_IVAR_ALLOC_VAL;
@@ -539,7 +539,7 @@ static void ixmap_free_msix(struct ixmap_adapter *adapter)
 static int ixmap_configure_msix(struct ixmap_adapter *adapter)
 {
 	int vector = 0, vector_num, queue_idx, err;
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	struct msix_entry *entry;
 	struct ixmap_irqdev *irqdev;
 
@@ -648,7 +648,7 @@ err_num_msix_vectors:
 
 static void ixmap_setup_gpie(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	uint32_t eiac, gpie;
 
 	/*
@@ -671,7 +671,7 @@ static void ixmap_setup_gpie(struct ixmap_adapter *adapter)
 
 int ixmap_up(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 
 	ixmap_take_hw_control(adapter);
 	ixmap_setup_gpie(adapter);
@@ -693,7 +693,7 @@ int ixmap_up(struct ixmap_adapter *adapter)
 	}
 
 	/* Setup flow control: Though we don't support flow control */
-	ixgbe_setup_fc(hw);
+	ixmap_setup_fc(hw);
 
 	/* clear any pending interrupts, may auto mask */
 	IXGBE_READ_REG(hw, IXGBE_EICR);
@@ -706,7 +706,7 @@ int ixmap_up(struct ixmap_adapter *adapter)
 
 int ixmap_down(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	int vector;
 
 	/* Disable Interrupts */
@@ -750,7 +750,7 @@ int ixmap_down(struct ixmap_adapter *adapter)
 
 void ixmap_reset(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	int err;
 
 	err = hw->mac.ops.init_hw(hw);

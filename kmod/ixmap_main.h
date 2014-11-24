@@ -36,7 +36,7 @@ struct ixmap_adapter {
 	struct pci_dev		*pdev;
 	unsigned long		iobase;
 	unsigned long		iolen;
-	struct ixgbe_hw		*hw;
+	struct ixmap_hw		*hw;
 	char			eeprom_id[32];
 	struct msix_entry	*msix_entries;
 	uint32_t		num_q_vectors;
@@ -61,7 +61,7 @@ struct ixmap_irqdev {
 	atomic_t		count_interrupt;
 };
 
-uint16_t ixmap_read_pci_cfg_word(struct ixgbe_hw *hw, uint32_t reg);
+uint16_t ixmap_read_pci_cfg_word(struct ixmap_hw *hw, uint32_t reg);
 int ixmap_adapter_inuse(struct ixmap_adapter *adapter);
 void ixmap_adapter_get(struct ixmap_adapter *adapter);
 void ixmap_adapter_put(struct ixmap_adapter *adapter);

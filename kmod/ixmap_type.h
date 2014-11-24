@@ -2,7 +2,7 @@
 #define _IXGBE_TYPE_H_
 
 /* forward declaration */
-struct ixgbe_hw;
+struct ixmap_hw;
 
 /* Device IDs */
 #define IXGBE_DEV_ID_82599_SFP		  0x10FB
@@ -442,7 +442,7 @@ struct ixgbe_hw;
 #define IXGBE_LINKS2_AN_SUPPORTED       0x00000040
 
 /* Link speed */
-typedef u32 ixgbe_link_speed;
+typedef uint32_t ixmap_link_speed;
 #define IXGBE_LINK_SPEED_UNKNOWN	0
 #define IXGBE_LINK_SPEED_100_FULL       0x0008
 #define IXGBE_LINK_SPEED_1GB_FULL       0x0020
@@ -814,225 +814,225 @@ typedef u32 ixgbe_link_speed;
 
 /* Check whether address is multicast. This is little-endian specific check.*/
 #define IXGBE_IS_MULTICAST(Address) \
-		(bool)(((u8 *)(Address))[0] & ((u8)0x01))
+		(int)(((uint8_t *)(Address))[0] & ((uint8_t)0x01))
 
 /* Check whether an address is broadcast. */
 #define IXGBE_IS_BROADCAST(Address) \
-		((((u8 *)(Address))[0] == ((u8)0xff)) && \
-		(((u8 *)(Address))[1] == ((u8)0xff)))
+		((((uint8_t *)(Address))[0] == ((uint8_t)0xff)) && \
+		(((uint8_t *)(Address))[1] == ((uint8_t)0xff)))
 
-enum ixgbe_phy_type {
-	ixgbe_phy_unknown = 0,
-	ixgbe_phy_none,
-	ixgbe_phy_generic
+enum ixmap_phy_type {
+	ixmap_phy_unknown = 0,
+	ixmap_phy_none,
+	ixmap_phy_generic
 };
 
-enum ixgbe_mac_type {
-	ixgbe_mac_unknown = 0,
-	ixgbe_mac_82598EB,
-	ixgbe_mac_82599EB,
-	ixgbe_mac_X540,
-	ixgbe_num_macs
+enum ixmap_mac_type {
+	ixmap_mac_unknown = 0,
+	ixmap_mac_82598EB,
+	ixmap_mac_82599EB,
+	ixmap_mac_X540,
+	ixmap_num_macs
 };
 
-enum ixgbe_sfp_type {
-	ixgbe_sfp_type_srlr_core0 = 5,
-	ixgbe_sfp_type_srlr_core1 = 6,
-	ixgbe_sfp_type_not_present = 0xFFFE,
-	ixgbe_sfp_type_unknown = 0xFFFF
+enum ixmap_sfp_type {
+	ixmap_sfp_type_srlr_core0 = 5,
+	ixmap_sfp_type_srlr_core1 = 6,
+	ixmap_sfp_type_not_present = 0xFFFE,
+	ixmap_sfp_type_unknown = 0xFFFF
 };
 
-enum ixgbe_media_type {
-	ixgbe_media_type_unknown = 0,
-	ixgbe_media_type_fiber,
+enum ixmap_media_type {
+	ixmap_media_type_unknown = 0,
+	ixmap_media_type_fiber,
 };
 
-enum ixgbe_eeprom_type {
-	ixgbe_eeprom_uninitialized = 0,
-	ixgbe_eeprom_spi,
-	ixgbe_flash,
-	ixgbe_eeprom_none /* No NVM support */
+enum ixmap_eeprom_type {
+	ixmap_eeprom_uninitialized = 0,
+	ixmap_eeprom_spi,
+	ixmap_flash,
+	ixmap_eeprom_none /* No NVM support */
 };
 
 /* Function pointer table */
-struct ixgbe_mac_operations {
-	s32 (*init_hw)(struct ixgbe_hw *);
-	s32 (*reset_hw)(struct ixgbe_hw *);
-	s32 (*start_hw)(struct ixgbe_hw *);
-	s32 (*clear_hw_cntrs)(struct ixgbe_hw *);
-	enum ixgbe_media_type (*get_media_type)(struct ixgbe_hw *);
-	s32 (*get_mac_addr)(struct ixgbe_hw *, u8 *);
-	s32 (*stop_adapter)(struct ixgbe_hw *);
-	void (*set_lan_id)(struct ixgbe_hw *);
-	s32 (*setup_sfp)(struct ixgbe_hw *);
-	s32 (*acquire_swfw_sync)(struct ixgbe_hw *, u16);
-	void (*release_swfw_sync)(struct ixgbe_hw *, u16);
-	s32 (*prot_autoc_read)(struct ixgbe_hw *, bool *, u32 *);
-	s32 (*prot_autoc_write)(struct ixgbe_hw *, u32, bool);
+struct ixmap_mac_operations {
+	int32_t (*init_hw)(struct ixmap_hw *);
+	int32_t (*reset_hw)(struct ixmap_hw *);
+	int32_t (*start_hw)(struct ixmap_hw *);
+	int32_t (*clear_hw_cntrs)(struct ixmap_hw *);
+	enum ixmap_media_type (*get_media_type)(struct ixmap_hw *);
+	int32_t (*get_mac_addr)(struct ixmap_hw *, uint8_t *);
+	int32_t (*stop_adapter)(struct ixmap_hw *);
+	void (*set_lan_id)(struct ixmap_hw *);
+	int32_t (*setup_sfp)(struct ixmap_hw *);
+	int32_t (*acquire_swfw_sync)(struct ixmap_hw *, uint16_t);
+	void (*release_swfw_sync)(struct ixmap_hw *, uint16_t);
+	int32_t (*prot_autoc_read)(struct ixmap_hw *, int *, uint32_t *);
+	int32_t (*prot_autoc_write)(struct ixmap_hw *, uint32_t, int);
 
 	/* Link */
-	void (*disable_tx_laser)(struct ixgbe_hw *);
-	void (*enable_tx_laser)(struct ixgbe_hw *);
-	void (*flap_tx_laser)(struct ixgbe_hw *);
-	s32 (*setup_link)(struct ixgbe_hw *, u32, bool);
-	s32 (*check_link)(struct ixgbe_hw *, u32 *, bool *, bool);
+	void (*disable_tx_laser)(struct ixmap_hw *);
+	void (*enable_tx_laser)(struct ixmap_hw *);
+	void (*flap_tx_laser)(struct ixmap_hw *);
+	int32_t (*setup_link)(struct ixmap_hw *, uint32_t, int);
+	int32_t (*check_link)(struct ixmap_hw *, uint32_t *, int *, int);
 
 	/* RAR, Multicast, VLAN */
-	s32 (*set_rar)(struct ixgbe_hw *, u32, u8 *, u32, u32);
-	s32 (*init_rx_addrs)(struct ixgbe_hw *);
-	s32 (*clear_vfta)(struct ixgbe_hw *);
+	int32_t (*set_rar)(struct ixmap_hw *, uint32_t, uint8_t *, uint32_t, uint32_t);
+	int32_t (*init_rx_addrs)(struct ixmap_hw *);
+	int32_t (*clear_vfta)(struct ixmap_hw *);
 
 	/* Manageability interface */
-	s32 (*set_fw_drv_ver)(struct ixgbe_hw *, u8, u8, u8, u8);
+	int32_t (*set_fw_drv_ver)(struct ixmap_hw *, uint8_t, uint8_t, uint8_t, uint8_t);
 };
 
-struct ixgbe_phy_operations {
-	s32 (*identify)(struct ixgbe_hw *);
-	s32 (*init)(struct ixgbe_hw *);
+struct ixmap_phy_operations {
+	int32_t (*identify)(struct ixmap_hw *);
+	int32_t (*init)(struct ixmap_hw *);
 };
 
-struct ixgbe_eeprom_operations {
-	s32 (*init_params)(struct ixgbe_hw *);
-	s32 (*read)(struct ixgbe_hw *, u16, u16 *);
-	s32 (*validate_checksum)(struct ixgbe_hw *, u16 *);
-	u16 (*calc_checksum)(struct ixgbe_hw *);
+struct ixmap_eeprom_operations {
+	int32_t (*init_params)(struct ixmap_hw *);
+	int32_t (*read)(struct ixmap_hw *, uint16_t, uint16_t *);
+	int32_t (*validate_checksum)(struct ixmap_hw *, uint16_t *);
+	uint16_t (*calc_checksum)(struct ixmap_hw *);
 };
 
 #define IXGBE_FLAGS_DOUBLE_RESET_REQUIRED       0x01
-struct ixgbe_mac_info {
-	struct ixgbe_mac_operations ops;
-	enum ixgbe_mac_type type;
-	u8 addr[IXGBE_ETH_LENGTH_OF_ADDRESS];
-	u8 perm_addr[IXGBE_ETH_LENGTH_OF_ADDRESS];
-	u8 san_addr[IXGBE_ETH_LENGTH_OF_ADDRESS];
+struct ixmap_mac_info {
+	struct ixmap_mac_operations ops;
+	enum ixmap_mac_type type;
+	uint8_t addr[IXGBE_ETH_LENGTH_OF_ADDRESS];
+	uint8_t perm_addr[IXGBE_ETH_LENGTH_OF_ADDRESS];
+	uint8_t san_addr[IXGBE_ETH_LENGTH_OF_ADDRESS];
 	/* prefix for World Wide Node Name (WWNN) */
-	u16 wwnn_prefix;
+	uint16_t wwnn_prefix;
 	/* prefix for World Wide Port Name (WWPN) */
-	u16 wwpn_prefix;
+	uint16_t wwpn_prefix;
 #define IXGBE_MAX_MTA		   128
-	u32 mta_shadow[IXGBE_MAX_MTA];
-	s32 mc_filter_type;
-	u32 mcft_size;
-	u32 vft_size;
-	u32 num_rar_entries;
-	u32 rar_highwater;
-	u32 rx_pb_size;
-	u32 max_rx_queues;
-	u32 max_tx_queues;
-	u32 orig_autoc;
-	u8  san_mac_rar_index;
-	bool get_link_status;
-	u32 orig_autoc2;
-	u16 max_msix_vectors;
-	bool arc_subsystem_valid;
-	bool orig_link_settings_stored;
-	bool autotry_restart;
-	u8 flags;
-	bool set_lben;
+	uint32_t mta_shadow[IXGBE_MAX_MTA];
+	int32_t mc_filter_type;
+	uint32_t mcft_size;
+	uint32_t vft_size;
+	uint32_t num_rar_entries;
+	uint32_t rar_highwater;
+	uint32_t rx_pb_size;
+	uint32_t max_rx_queues;
+	uint32_t max_tx_queues;
+	uint32_t orig_autoc;
+	uint8_t  san_mac_rar_index;
+	int get_link_status;
+	uint32_t orig_autoc2;
+	uint16_t max_msix_vectors;
+	int arc_subsystem_valid;
+	int orig_link_settings_stored;
+	int autotry_restart;
+	uint8_t flags;
+	int set_lben;
 };
 
-struct ixgbe_phy_info {
-	struct ixgbe_phy_operations ops;
-	enum ixgbe_phy_type type;
-	enum ixgbe_sfp_type sfp_type;
-	enum ixgbe_media_type media_type;
-	bool sfp_setup_needed;
+struct ixmap_phy_info {
+	struct ixmap_phy_operations ops;
+	enum ixmap_phy_type type;
+	enum ixmap_sfp_type sfp_type;
+	enum ixmap_media_type media_type;
+	int sfp_setup_needed;
 };
 
-struct ixgbe_eeprom_info {
-	struct ixgbe_eeprom_operations ops;
-	enum ixgbe_eeprom_type type;
-	u32 semaphore_delay;
-	u16 word_size;
-	u16 address_bits;
-	u16 word_page_size;
+struct ixmap_eeprom_info {
+	struct ixmap_eeprom_operations ops;
+	enum ixmap_eeprom_type type;
+	uint32_t semaphore_delay;
+	uint16_t word_size;
+	uint16_t address_bits;
+	uint16_t word_page_size;
 };
 
 /* PCI bus types */
-enum ixgbe_bus_type {
-	ixgbe_bus_type_unknown = 0,
-	ixgbe_bus_type_pci,
-	ixgbe_bus_type_pcix,
-	ixgbe_bus_type_pci_express,
-	ixgbe_bus_type_reserved
+enum ixmap_bus_type {
+	ixmap_bus_type_unknown = 0,
+	ixmap_bus_type_pci,
+	ixmap_bus_type_pcix,
+	ixmap_bus_type_pci_express,
+	ixmap_bus_type_reserved
 };
 
 /* PCI bus speeds */
-enum ixgbe_bus_speed {
-	ixgbe_bus_speed_unknown = 0,
-	ixgbe_bus_speed_33      = 33,
-	ixgbe_bus_speed_66      = 66,
-	ixgbe_bus_speed_100     = 100,
-	ixgbe_bus_speed_120     = 120,
-	ixgbe_bus_speed_133     = 133,
-	ixgbe_bus_speed_2500    = 2500,
-	ixgbe_bus_speed_5000    = 5000,
-	ixgbe_bus_speed_8000    = 8000,
-	ixgbe_bus_speed_reserved
+enum ixmap_bus_speed {
+	ixmap_bus_speed_unknown = 0,
+	ixmap_bus_speed_33      = 33,
+	ixmap_bus_speed_66      = 66,
+	ixmap_bus_speed_100     = 100,
+	ixmap_bus_speed_120     = 120,
+	ixmap_bus_speed_133     = 133,
+	ixmap_bus_speed_2500    = 2500,
+	ixmap_bus_speed_5000    = 5000,
+	ixmap_bus_speed_8000    = 8000,
+	ixmap_bus_speed_reserved
 };
 
 /* PCI bus widths */
-enum ixgbe_bus_width {
-	ixgbe_bus_width_unknown = 0,
-	ixgbe_bus_width_pcie_x1 = 1,
-	ixgbe_bus_width_pcie_x2 = 2,
-	ixgbe_bus_width_pcie_x4 = 4,
-	ixgbe_bus_width_pcie_x8 = 8,
-	ixgbe_bus_width_32      = 32,
-	ixgbe_bus_width_64      = 64,
-	ixgbe_bus_width_reserved
+enum ixmap_bus_width {
+	ixmap_bus_width_unknown = 0,
+	ixmap_bus_width_pcie_x1 = 1,
+	ixmap_bus_width_pcie_x2 = 2,
+	ixmap_bus_width_pcie_x4 = 4,
+	ixmap_bus_width_pcie_x8 = 8,
+	ixmap_bus_width_32      = 32,
+	ixmap_bus_width_64      = 64,
+	ixmap_bus_width_reserved
 };
 
 /* Bus parameters */
-struct ixgbe_bus_info {
-	enum ixgbe_bus_speed speed;
-	enum ixgbe_bus_width width;
-	enum ixgbe_bus_type type;
+struct ixmap_bus_info {
+	enum ixmap_bus_speed speed;
+	enum ixmap_bus_width width;
+	enum ixmap_bus_type type;
 
-	u16 func;
-	u16 lan_id;
+	uint16_t func;
+	uint16_t lan_id;
 };
 
-struct ixgbe_hw {
-	u8 __iomem *hw_addr;
+struct ixmap_hw {
+	uint8_t __iomem *hw_addr;
 	void *back;
-	struct ixgbe_mac_info mac;
-	struct ixgbe_phy_info phy;
-	struct ixgbe_eeprom_info eeprom;
-	struct ixgbe_bus_info bus;
-	u16 device_id;
-	u16 vendor_id;
-	u16 subsystem_device_id;
-	u16 subsystem_vendor_id;
-	u8 revision_id;
-	bool adapter_stopped;
+	struct ixmap_mac_info mac;
+	struct ixmap_phy_info phy;
+	struct ixmap_eeprom_info eeprom;
+	struct ixmap_bus_info bus;
+	uint16_t device_id;
+	uint16_t vendor_id;
+	uint16_t subsystem_device_id;
+	uint16_t subsystem_vendor_id;
+	uint8_t revision_id;
+	int adapter_stopped;
 	int api_version;
-	bool force_full_reset;
-	bool allow_unsupported_sfp;
-	bool wol_enabled;
+	int force_full_reset;
+	int allow_unsupported_sfp;
+	int wol_enabled;
 };
 
 /* Host Interface Command Structures */
 
-struct ixgbe_hic_hdr {
-	u8 cmd;
-	u8 buf_len;
+struct ixmap_hic_hdr {
+	uint8_t cmd;
+	uint8_t buf_len;
 	union {
-		u8 cmd_resv;
-		u8 ret_status;
+		uint8_t cmd_resv;
+		uint8_t ret_status;
 	} cmd_or_resp;
-	u8 checksum;
+	uint8_t checksum;
 };
 
-struct ixgbe_hic_drv_info {
-	struct ixgbe_hic_hdr hdr;
-	u8 port_num;
-	u8 ver_sub;
-	u8 ver_build;
-	u8 ver_min;
-	u8 ver_maj;
-	u8 pad; /* end spacing to ensure length is mult. of dword */
-	u16 pad2; /* end spacing to ensure length is mult. of dword2 */
+struct ixmap_hic_drv_info {
+	struct ixmap_hic_hdr hdr;
+	uint8_t port_num;
+	uint8_t ver_sub;
+	uint8_t ver_build;
+	uint8_t ver_min;
+	uint8_t ver_maj;
+	uint8_t pad; /* end spacing to ensure length is mult. of dword */
+	uint16_t pad2; /* end spacing to ensure length is mult. of dword2 */
 };
 
 #endif /* _IXGBE_TYPE_H_ */

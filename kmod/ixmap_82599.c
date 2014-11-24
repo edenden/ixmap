@@ -27,42 +27,44 @@
 #include "ixmap_phy.h"
 #include "ixmap_eeprom.h"
 
-static s32 ixgbe_read_eeprom_82599(struct ixgbe_hw *hw, u16 offset, u16 *data);
-static s32 ixgbe_verify_fw_version_82599(struct ixgbe_hw *hw);
+static int32_t ixmap_read_eeprom_82599(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t *data);
+static int32_t ixmap_verify_fw_version_82599(struct ixmap_hw *hw);
 
-s32 ixgbe_init_ops_82599(struct ixgbe_hw *hw){
-	struct ixgbe_mac_info *mac = &hw->mac;
-	struct ixgbe_phy_info *phy = &hw->phy;
-	struct ixgbe_eeprom_info *eeprom = &hw->eeprom;
+int32_t ixmap_init_ops_82599(struct ixmap_hw *hw)
+{
+	struct ixmap_mac_info *mac = &hw->mac;
+	struct ixmap_phy_info *phy = &hw->phy;
+	struct ixmap_eeprom_info *eeprom = &hw->eeprom;
 
 	/* PHY */
-	phy->ops.identify = &ixgbe_identify_phy_82599;
-	phy->ops.init = &ixgbe_init_phy_ops_82599;
+	phy->ops.identify = &ixmap_identify_phy_82599;
+	phy->ops.init = &ixmap_init_phy_ops_82599;
 
 	/* MAC */
-	mac->ops.init_hw = &ixgbe_init_hw_generic;
-	mac->ops.reset_hw = &ixgbe_reset_hw_82599;
-	mac->ops.get_mac_addr = &ixgbe_get_mac_addr_generic;
-	mac->ops.get_media_type = &ixgbe_get_media_type_82599;
-	mac->ops.setup_link = &ixgbe_setup_mac_link_82599;
-	mac->ops.check_link = &ixgbe_check_mac_link_generic;
-	mac->ops.start_hw = &ixgbe_start_hw_82599;
+	mac->ops.init_hw = &ixmap_init_hw;
+	mac->ops.reset_hw = &ixmap_reset_hw_82599;
+	mac->ops.get_mac_addr = &ixmap_get_mac_addr;
+	mac->ops.get_media_type = &ixmap_get_media_type_82599;
+	mac->ops.setup_link = &ixmap_setup_mac_link_82599;
+	mac->ops.check_link = &ixmap_check_mac_link;
+	mac->ops.start_hw = &ixmap_start_hw_82599;
 	mac->ops.prot_autoc_write = &prot_autoc_write_82599;
 	mac->ops.prot_autoc_read = &prot_autoc_read_82599;
-	mac->ops.stop_adapter = &ixgbe_stop_adapter_generic;
-	mac->ops.setup_sfp = &ixgbe_setup_sfp_modules_82599;
-	mac->ops.acquire_swfw_sync = &ixgbe_acquire_swfw_sync;
-	mac->ops.release_swfw_sync = &ixgbe_release_swfw_sync;
-	mac->ops.clear_hw_cntrs = &ixgbe_clear_hw_cntrs_generic;
-	mac->ops.set_lan_id = &ixgbe_set_lan_id_multi_port_pcie;
+	mac->ops.stop_adapter = &ixmap_stop_adapter;
+	mac->ops.setup_sfp = &ixmap_setup_sfp_modules_82599;
+	mac->ops.acquire_swfw_sync = &ixmap_acquire_swfw_sync;
+	mac->ops.release_swfw_sync = &ixmap_release_swfw_sync;
+	mac->ops.clear_hw_cntrs = &ixmap_clear_hw_cntrs;
+	mac->ops.set_lan_id = &ixmap_set_lan_id_multi_port_pcie;
 
 	/* RAR, Multicast, VLAN */
-	mac->ops.set_rar = &ixgbe_set_rar_generic;
-	mac->ops.init_rx_addrs = &ixgbe_init_rx_addrs_generic;
-	mac->ops.clear_vfta = &ixgbe_clear_vfta_generic;
+	mac->ops.set_rar = &ixmap_set_rar;
+	mac->ops.init_rx_addrs = &ixmap_init_rx_addrs;
+	mac->ops.clear_vfta = &ixmap_clear_vfta;
 
 	/* Manageability interface */
-	mac->ops.set_fw_drv_ver = &ixgbe_set_fw_drv_ver_generic;
+	mac->ops.set_fw_drv_ver = &ixmap_set_fw_drv_ver;
 
 	mac->mcft_size	  = IXGBE_82599_MC_TBL_SIZE;
 	mac->vft_size	   = IXGBE_82599_VFT_TBL_SIZE;
@@ -70,26 +72,27 @@ s32 ixgbe_init_ops_82599(struct ixgbe_hw *hw){
 	mac->rx_pb_size	 = IXGBE_82599_RX_PB_SIZE;
 	mac->max_rx_queues	= IXGBE_82599_MAX_RX_QUEUES;
 	mac->max_tx_queues	= IXGBE_82599_MAX_TX_QUEUES;
-	mac->max_msix_vectors   = ixgbe_get_pcie_msix_count_generic(hw);
+	mac->max_msix_vectors   = ixmap_get_pcie_msix_count(hw);
 
 	mac->arc_subsystem_valid = (IXGBE_READ_REG(hw, IXGBE_FWSM) &
 					IXGBE_FWSM_MODE_MASK) ? true : false;
 
 	/* EEPROM */
-	eeprom->ops.init_params = &ixgbe_init_eeprom_params_generic;
-	eeprom->ops.read = &ixgbe_read_eeprom_82599;
-	eeprom->ops.validate_checksum = &ixgbe_validate_eeprom_checksum_generic;
-	eeprom->ops.calc_checksum = &ixgbe_calc_eeprom_checksum_generic;
+	eeprom->ops.init_params = &ixmap_init_eeprom_params;
+	eeprom->ops.read = &ixmap_read_eeprom_82599;
+	eeprom->ops.validate_checksum = &ixmap_validate_eeprom_checksum;
+	eeprom->ops.calc_checksum = &ixmap_calc_eeprom_checksum;
 
 	return 0;
 }
 
-s32 ixgbe_reset_hw_82599(struct ixgbe_hw *hw){
-	u32 link_speed;
-	s32 status;
-	u32 ctrl = 0;
-	u32 i, autoc, autoc2;
-	bool link_up = false;
+int32_t ixmap_reset_hw_82599(struct ixmap_hw *hw)
+{
+	uint32_t link_speed;
+	int32_t status;
+	uint32_t ctrl = 0;
+	uint32_t i, autoc, autoc2;
+	int link_up = false;
 
 	/* Call adapter stop to disable tx/rx and clear interrupts */
 	status = hw->mac.ops.stop_adapter(hw);
@@ -97,7 +100,7 @@ s32 ixgbe_reset_hw_82599(struct ixgbe_hw *hw){
 		goto reset_hw_out;
 
 	/* flush pending Tx transactions */
-	ixgbe_clear_tx_pending(hw);
+	ixmap_clear_tx_pending(hw);
 
 	/* Identify PHY and related function pointers */
 	status = hw->phy.ops.init(hw);
@@ -208,28 +211,29 @@ reset_hw_out:
 	return status;
 }
 
-s32 ixgbe_start_hw_82599(struct ixgbe_hw *hw){
-	s32 ret_val = 0;
+int32_t ixmap_start_hw_82599(struct ixmap_hw *hw)
+{
+	int32_t ret_val = 0;
 
-	ixgbe_start_hw_generic(hw);
-	ixgbe_start_hw_gen2(hw);
+	ixmap_start_hw(hw);
+	ixmap_start_hw_gen2(hw);
 
 	/* We need to run link autotry after the driver loads */
 	hw->mac.autotry_restart = true;
 
-	ret_val = ixgbe_verify_fw_version_82599(hw);
+	ret_val = ixmap_verify_fw_version_82599(hw);
 
 	return ret_val;
 }
 
-static s32 ixgbe_verify_fw_version_82599(struct ixgbe_hw *hw)
+static int32_t ixmap_verify_fw_version_82599(struct ixmap_hw *hw)
 {
-	s32 status = IXGBE_ERR_EEPROM_VERSION;
-	u16 fw_offset, fw_ptp_cfg_offset;
-	u16 fw_version;
+	int32_t status = IXGBE_ERR_EEPROM_VERSION;
+	uint16_t fw_offset, fw_ptp_cfg_offset;
+	uint16_t fw_version;
 
 	/* firmware check is only necessary for SFI devices */
-	if (hw->phy.media_type != ixgbe_media_type_fiber) {
+	if (hw->phy.media_type != ixmap_media_type_fiber) {
 		status = 0;
 		goto fw_version_out;
 	}
@@ -265,21 +269,23 @@ fw_version_out:
 	return status;
 }
 
-s32 ixgbe_init_phy_ops_82599(struct ixgbe_hw *hw){
-	struct ixgbe_phy_info *phy = &hw->phy;
-	u32 ret_val = 0;
+int32_t ixmap_init_phy_ops_82599(struct ixmap_hw *hw)
+{
+	struct ixmap_phy_info *phy = &hw->phy;
+	uint32_t ret_val = 0;
 
 	/* Identify the PHY or SFP module */
 	ret_val = phy->ops.identify(hw);
 
 	/* Setup function pointers based on detected SFP module and speeds */
-	ixgbe_init_mac_link_ops_82599(hw);
+	ixmap_init_mac_link_ops_82599(hw);
 
 	return ret_val;
 }
 
-enum ixgbe_media_type ixgbe_get_media_type_82599(struct ixgbe_hw *hw){
-	enum ixgbe_media_type media_type;
+enum ixmap_media_type ixmap_get_media_type_82599(struct ixmap_hw *hw)
+{
+	enum ixmap_media_type media_type;
 
 	switch (hw->device_id) {
 	case IXGBE_DEV_ID_82599_SFP:
@@ -288,24 +294,25 @@ enum ixgbe_media_type ixgbe_get_media_type_82599(struct ixgbe_hw *hw){
 	case IXGBE_DEV_ID_82599_SFP_SF2:
 	case IXGBE_DEV_ID_82599_SFP_SF_QP:
 	case IXGBE_DEV_ID_82599EN_SFP:
-		media_type = ixgbe_media_type_fiber;
+		media_type = ixmap_media_type_fiber;
 		break;
 	default:
-		media_type = ixgbe_media_type_unknown;
+		media_type = ixmap_media_type_unknown;
 		break;
 	}
 
 	return media_type;
 }
 
-void ixgbe_init_mac_link_ops_82599(struct ixgbe_hw *hw){
-	struct ixgbe_mac_info *mac = &hw->mac;
+void ixmap_init_mac_link_ops_82599(struct ixmap_hw *hw)
+{
+	struct ixmap_mac_info *mac = &hw->mac;
 
 	/* enable the laser control functions for SFP+ fiber */
-	if (mac->ops.get_media_type(hw) == ixgbe_media_type_fiber) {
-		mac->ops.disable_tx_laser = &ixgbe_disable_tx_laser_multispeed_fiber;
-		mac->ops.enable_tx_laser = &ixgbe_enable_tx_laser_multispeed_fiber;
-		mac->ops.flap_tx_laser = &ixgbe_flap_tx_laser_multispeed_fiber;
+	if (mac->ops.get_media_type(hw) == ixmap_media_type_fiber) {
+		mac->ops.disable_tx_laser = &ixmap_disable_tx_laser_multispeed_fiber;
+		mac->ops.enable_tx_laser = &ixmap_enable_tx_laser_multispeed_fiber;
+		mac->ops.flap_tx_laser = &ixmap_flap_tx_laser_multispeed_fiber;
 	} else {
 		mac->ops.disable_tx_laser = NULL;
 		mac->ops.enable_tx_laser = NULL;
@@ -313,8 +320,9 @@ void ixgbe_init_mac_link_ops_82599(struct ixgbe_hw *hw){
 	}
 }
 
-void ixgbe_disable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw){
-	u32 esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
+void ixmap_disable_tx_laser_multispeed_fiber(struct ixmap_hw *hw)
+{
+	uint32_t esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
 
 	/* Disable tx laser; allow 100us to go dark per spec */
 	esdp_reg |= IXGBE_ESDP_SDP3;
@@ -323,8 +331,9 @@ void ixgbe_disable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw){
 	udelay(100);
 }
 
-void ixgbe_enable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw){
-	u32 esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
+void ixmap_enable_tx_laser_multispeed_fiber(struct ixmap_hw *hw)
+{
+	uint32_t esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
 
 	/* Enable tx laser; allow 100ms to light up */
 	esdp_reg &= ~IXGBE_ESDP_SDP3;
@@ -333,22 +342,23 @@ void ixgbe_enable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw){
 	msleep(100);
 }
 
-void ixgbe_flap_tx_laser_multispeed_fiber(struct ixgbe_hw *hw){
-
+void ixmap_flap_tx_laser_multispeed_fiber(struct ixmap_hw *hw)
+{
 	if (hw->mac.autotry_restart) {
-		ixgbe_disable_tx_laser_multispeed_fiber(hw);
-		ixgbe_enable_tx_laser_multispeed_fiber(hw);
+		ixmap_disable_tx_laser_multispeed_fiber(hw);
+		ixmap_enable_tx_laser_multispeed_fiber(hw);
 		hw->mac.autotry_restart = false;
 	}
 }
 
-s32 prot_autoc_read_82599(struct ixgbe_hw *hw, bool *locked, u32 *reg_val)
+int32_t prot_autoc_read_82599(struct ixmap_hw *hw,
+	int *locked, uint32_t *reg_val)
 {
-	s32 ret_val;
+	int32_t ret_val;
 
 	*locked = false;
 	 /* If LESM is on then we need to hold the SW/FW semaphore. */
-	if (ixgbe_verify_lesm_fw_enabled_82599(hw)) {
+	if (ixmap_verify_lesm_fw_enabled_82599(hw)) {
 		ret_val = hw->mac.ops.acquire_swfw_sync(hw,
 					IXGBE_GSSR_MAC_CSR_SM);
 		if (ret_val != 0)
@@ -361,14 +371,16 @@ s32 prot_autoc_read_82599(struct ixgbe_hw *hw, bool *locked, u32 *reg_val)
 	return 0;
 }
 
-s32 prot_autoc_write_82599(struct ixgbe_hw *hw, u32 autoc, bool locked){
-	s32 ret_val = 0;
+int32_t prot_autoc_write_82599(struct ixmap_hw *hw,
+	uint32_t autoc, int locked)
+{
+	int32_t ret_val = 0;
 
 	/* We only need to get the lock if:
 	 *  - We didn't do it already (in the read part of a read-modify-write)
 	 *  - LESM is enabled.
 	 */
-	if (!locked && ixgbe_verify_lesm_fw_enabled_82599(hw)) {
+	if (!locked && ixmap_verify_lesm_fw_enabled_82599(hw)) {
 		ret_val = hw->mac.ops.acquire_swfw_sync(hw,
 					IXGBE_GSSR_MAC_CSR_SM);
 		if (ret_val != 0)
@@ -378,7 +390,7 @@ s32 prot_autoc_write_82599(struct ixgbe_hw *hw, u32 autoc, bool locked){
 	}
 
 	IXGBE_WRITE_REG(hw, IXGBE_AUTOC, autoc);
-	ret_val = ixgbe_reset_pipeline_82599(hw);
+	ret_val = ixmap_reset_pipeline_82599(hw);
 
 	/* Free the SW/FW semaphore as we either grabbed it here or
 	 * already had it when this function was called.
@@ -389,11 +401,11 @@ s32 prot_autoc_write_82599(struct ixgbe_hw *hw, u32 autoc, bool locked){
 	return ret_val;
 }
 
-bool ixgbe_verify_lesm_fw_enabled_82599(struct ixgbe_hw *hw)
+int ixmap_verify_lesm_fw_enabled_82599(struct ixmap_hw *hw)
 {
-	bool lesm_enabled = false;
-	u16 fw_offset, fw_lesm_param_offset, fw_lesm_state;
-	s32 status;
+	int lesm_enabled = false;
+	uint16_t fw_offset, fw_lesm_param_offset, fw_lesm_state;
+	int32_t status;
 
 	/* get the offset to the Firmware Module block */
 	status = hw->eeprom.ops.read(hw, IXGBE_FW_PTR, &fw_offset);
@@ -424,13 +436,14 @@ out:
 	return lesm_enabled;
 }
 
-s32 ixgbe_setup_sfp_modules_82599(struct ixgbe_hw *hw){
-	s32 ret_val = 0;
-	u16 list_offset, data_offset, data_value;
+int32_t ixmap_setup_sfp_modules_82599(struct ixmap_hw *hw)
+{
+	int32_t ret_val = 0;
+	uint16_t list_offset, data_offset, data_value;
 
-	ixgbe_init_mac_link_ops_82599(hw);
+	ixmap_init_mac_link_ops_82599(hw);
 
-	ret_val = ixgbe_get_sfp_init_sequence_offsets(hw, &list_offset, &data_offset);
+	ret_val = ixmap_get_sfp_init_sequence_offsets(hw, &list_offset, &data_offset);
 	if (ret_val != 0)
 		goto setup_sfp_out;
 
@@ -478,11 +491,11 @@ setup_sfp_err:
 	return IXGBE_ERR_PHY;
 }
 
-s32 ixgbe_reset_pipeline_82599(struct ixgbe_hw *hw)
+int32_t ixmap_reset_pipeline_82599(struct ixmap_hw *hw)
 {
-	s32 ret_val;
-	u32 anlp1_reg = 0;
-	u32 i, autoc_reg, autoc2_reg;
+	int32_t ret_val;
+	uint32_t anlp1_reg = 0;
+	uint32_t i, autoc_reg, autoc2_reg;
 
 	/* Enable link if disabled in NVM */
 	autoc2_reg = IXGBE_READ_REG(hw, IXGBE_AUTOC2);
@@ -520,52 +533,57 @@ reset_pipeline_out:
 	return ret_val;
 }
 
-static s32 ixgbe_read_eeprom_82599(struct ixgbe_hw *hw, u16 offset, u16 *data){
-	struct ixgbe_eeprom_info *eeprom = &hw->eeprom;
-	s32 ret_val = IXGBE_ERR_CONFIG;
+static int32_t ixmap_read_eeprom_82599(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t *data)
+{
+	struct ixmap_eeprom_info *eeprom = &hw->eeprom;
+	int32_t ret_val = IXGBE_ERR_CONFIG;
 
 	/*
 	 * If EEPROM is detected and can be addressed using 14 bits,
 	 * use EERD otherwise use bit bang
-	 * (At first time, eeprom->type is ixgbe_eeprom_uninitialized,
-	 * but after that eeprom->type will be ixgbe_eeprom_spi.)
+	 * (At first time, eeprom->type is ixmap_eeprom_uninitialized,
+	 * but after that eeprom->type will be ixmap_eeprom_spi.)
 	 */
-	if ((eeprom->type == ixgbe_eeprom_spi) &&
+	if ((eeprom->type == ixmap_eeprom_spi) &&
 	    (offset <= IXGBE_EERD_MAX_ADDR))
-		ret_val = ixgbe_read_eerd_generic(hw, offset, data);
+		ret_val = ixmap_read_eerd(hw, offset, data);
 	else
-		ret_val = ixgbe_read_eeprom_bit_bang_generic(hw, offset, data);
+		ret_val = ixmap_read_eeprom_bit_bang(hw, offset, data);
 
 	return ret_val;
 }
 
-s32 ixgbe_identify_phy_82599(struct ixgbe_hw *hw){
-	s32 status;
+int32_t ixmap_identify_phy_82599(struct ixmap_hw *hw)
+{
+	int32_t status;
 
 	/* Detect PHY if not unknown - returns success if already detected. */
-	status = ixgbe_identify_module_generic(hw);
+	status = ixmap_identify_module(hw);
 
 	return status;
 }
 
-s32 ixgbe_setup_mac_link_82599(struct ixgbe_hw *hw, u32 speed, bool autoneg_wait_to_complete){
-	bool autoneg = false;
-	s32 status = 0;
-	u32 pma_pmd_1g, link_mode;
+int32_t ixmap_setup_mac_link_82599(struct ixmap_hw *hw,
+	uint32_t speed, int autoneg_wait_to_complete)
+{
+	int autoneg = false;
+	int32_t status = 0;
+	uint32_t pma_pmd_1g, link_mode;
 
 	/* holds the value of AUTOC register at this curr ent point in time */
-	u32 current_autoc = IXGBE_READ_REG(hw, IXGBE_AUTOC); 
+	uint32_t current_autoc = IXGBE_READ_REG(hw, IXGBE_AUTOC); 
 
-	u32 orig_autoc = 0; /* holds the cached value of AUTOC register */
-	u32 autoc = current_autoc; /* Temporary variable used for comparison purposes */
-	u32 autoc2 = IXGBE_READ_REG(hw, IXGBE_AUTOC2);
-	u32 pma_pmd_10g_serial = autoc2 & IXGBE_AUTOC2_10G_SERIAL_PMA_PMD_MASK;
-	u32 links_reg;
-	u32 i;
-	u32 link_capabilities = IXGBE_LINK_SPEED_UNKNOWN;
+	uint32_t orig_autoc = 0; /* holds the cached value of AUTOC register */
+	uint32_t autoc = current_autoc; /* Temporary variable used for comparison purposes */
+	uint32_t autoc2 = IXGBE_READ_REG(hw, IXGBE_AUTOC2);
+	uint32_t pma_pmd_10g_serial = autoc2 & IXGBE_AUTOC2_10G_SERIAL_PMA_PMD_MASK;
+	uint32_t links_reg;
+	uint32_t i;
+	uint32_t link_capabilities = IXGBE_LINK_SPEED_UNKNOWN;
 
 	/* Check to see if speed passed in is supported. */
-	status = ixgbe_get_link_capabilities_82599(hw, &link_capabilities, &autoneg);
+	status = ixmap_get_link_capabilities_82599(hw, &link_capabilities, &autoneg);
 	if (status)
 		goto out;
 
@@ -654,9 +672,11 @@ out:
 	return status;
 }
 
-s32 ixgbe_get_link_capabilities_82599(struct ixgbe_hw *hw, u32 *speed, bool *autoneg){
-	s32 status = 0;
-	u32 autoc = 0;
+int32_t ixmap_get_link_capabilities_82599(struct ixmap_hw *hw,
+	uint32_t *speed, int *autoneg)
+{
+	int32_t status = 0;
+	uint32_t autoc = 0;
 
 	/*
 	 * Determine link capabilities based on the stored value of AUTOC,

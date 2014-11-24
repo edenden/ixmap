@@ -52,7 +52,6 @@
 #define IXGBE_MSRWD_READ_DATA_MASK      0xFFFF0000
 #define IXGBE_MSRWD_READ_DATA_SHIFT     16
 
-s32 ixgbe_get_sfp_init_sequence_offsets(struct ixgbe_hw *hw,
-					u16 *list_offset,
-					u16 *data_offset);
-s32 ixgbe_identify_module_generic(struct ixgbe_hw *hw);
+int32_t ixmap_get_sfp_init_sequence_offsets(struct ixmap_hw *hw,
+	uint16_t *list_offset, uint16_t *data_offset);
+int32_t ixmap_identify_module(struct ixmap_hw *hw);

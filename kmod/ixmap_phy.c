@@ -24,29 +24,29 @@
 #include "ixmap_common.h"
 #include "ixmap_phy.h"
 
-s32 ixgbe_identify_module_generic(struct ixgbe_hw *hw)
+int32_t ixmap_identify_module(struct ixmap_hw *hw)
 {
-	s32 status = IXGBE_ERR_SFP_NOT_PRESENT;
-	enum ixgbe_sfp_type stored_sfp_type = hw->phy.sfp_type;
+	int32_t status = IXGBE_ERR_SFP_NOT_PRESENT;
+	enum ixmap_sfp_type stored_sfp_type = hw->phy.sfp_type;
 
 	switch (hw->mac.ops.get_media_type(hw)) {
-	case ixgbe_media_type_fiber:
+	case ixmap_media_type_fiber:
 		/* LAN ID is needed for sfp_type determination */
 		hw->mac.ops.set_lan_id(hw);
 		/* Currently we support only 10GbE SR/LR SFP+ module on the phy layer */
 		if (hw->bus.lan_id == 0)
-			hw->phy.sfp_type = ixgbe_sfp_type_srlr_core0;
+			hw->phy.sfp_type = ixmap_sfp_type_srlr_core0;
 		else
-			hw->phy.sfp_type = ixgbe_sfp_type_srlr_core1;
+			hw->phy.sfp_type = ixmap_sfp_type_srlr_core1;
 
-		hw->phy.type = ixgbe_phy_generic;
+		hw->phy.type = ixmap_phy_generic;
 		if (hw->phy.sfp_type != stored_sfp_type)
 			hw->phy.sfp_setup_needed = true;
 		status = 0;
 		break;
 
 	default:
-		hw->phy.sfp_type = ixgbe_sfp_type_not_present;
+		hw->phy.sfp_type = ixmap_sfp_type_not_present;
 		status = IXGBE_ERR_SFP_NOT_PRESENT;
 		break;
 	}
@@ -54,14 +54,13 @@ s32 ixgbe_identify_module_generic(struct ixgbe_hw *hw)
 	return status;
 }
 
-s32 ixgbe_get_sfp_init_sequence_offsets(struct ixgbe_hw *hw,
-					u16 *list_offset,
-					u16 *data_offset)
+int32_t ixmap_get_sfp_init_sequence_offsets(struct ixmap_hw *hw,
+	uint16_t *list_offset, uint16_t *data_offset)
 {
-	u16 sfp_id;
-	u16 sfp_type = hw->phy.sfp_type;
+	uint16_t sfp_id;
+	uint16_t sfp_type = hw->phy.sfp_type;
 
-	if (hw->phy.sfp_type == ixgbe_sfp_type_not_present)
+	if (hw->phy.sfp_type == ixmap_sfp_type_not_present)
 		return IXGBE_ERR_SFP_NOT_PRESENT;
 
 	/* Read offset to PHY init contents */

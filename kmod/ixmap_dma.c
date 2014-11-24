@@ -265,7 +265,7 @@ static struct list_head *ixmap_dma_area_whereto(struct ixmap_adapter *adapter,
 static void ixmap_dma_area_free(struct ixmap_adapter *adapter,
 	struct ixmap_dma_area *area)
 {
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	struct pci_dev *pdev = adapter->pdev;
 	struct page **pages;
 	struct sg_table *sgt;

@@ -182,10 +182,10 @@ static int ixmap_cmd_reset(struct ixmap_adapter *adapter,
 static int ixmap_cmd_check_link(struct ixmap_adapter *adapter,
 	void __user *argp)
 {
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	struct ixmap_link_req req;
 	int err = 0, flush = 0;
-       	bool link_up;
+       	int link_up;
 	u32 link_speed = 0;
 
 	if (!adapter->up)
@@ -237,7 +237,7 @@ static int ixmap_cmd_info(struct ixmap_adapter *adapter,
 	void __user *argp)
 {
 	struct ixmap_info_req req;
-	struct ixgbe_hw *hw = adapter->hw;
+	struct ixmap_hw *hw = adapter->hw;
 	int err = 0;
 
 	req.mmio_base = adapter->iobase;

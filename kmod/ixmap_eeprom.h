@@ -1,15 +1,17 @@
-s32 ixgbe_acquire_swfw_sync(struct ixgbe_hw *hw, u16 mask);
-void ixgbe_release_swfw_sync(struct ixgbe_hw *hw, u16 mask);
-s32 ixgbe_validate_eeprom_checksum_generic(struct ixgbe_hw *hw, u16 *checksum_val);
-s32 ixgbe_read_eerd_generic(struct ixgbe_hw *hw, u16 offset, u16 *data);
-s32 ixgbe_read_eerd_buffer_generic(struct ixgbe_hw *hw, u16 offset,
-				   u16 words, u16 *data);
-s32 ixgbe_read_eeprom_bit_bang_generic(struct ixgbe_hw *hw, u16 offset,
-				       u16 *data);
-s32 ixgbe_init_uta_tables_generic(struct ixgbe_hw *hw);
-s32 ixgbe_poll_eerd_eewr_done(struct ixgbe_hw *hw, u32 ee_reg);
-s32 ixgbe_init_eeprom_params_generic(struct ixgbe_hw *hw);
-u16 ixgbe_calc_eeprom_checksum_generic(struct ixgbe_hw *hw);
-s32 ixgbe_read_pba_string_generic(struct ixgbe_hw *hw, u8 *pba_num,
-				  u32 pba_num_size);
+int32_t ixmap_acquire_swfw_sync(struct ixmap_hw *hw, uint16_t mask);
+void ixmap_release_swfw_sync(struct ixmap_hw *hw, uint16_t mask);
+int32_t ixmap_validate_eeprom_checksum(struct ixmap_hw *hw,
+	uint16_t *checksum_val);
+int32_t ixmap_read_eerd(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t *data);
+int32_t ixmap_read_eerd_buffer(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t words, uint16_t *data);
+int32_t ixmap_read_eeprom_bit_bang(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t *data);
+int32_t ixmap_init_uta_tables(struct ixmap_hw *hw);
+int32_t ixmap_poll_eerd_eewr_done(struct ixmap_hw *hw, uint32_t ee_reg);
+int32_t ixmap_init_eeprom_params(struct ixmap_hw *hw);
+uint16_t ixmap_calc_eeprom_checksum(struct ixmap_hw *hw);
+int32_t ixmap_read_pba_string(struct ixmap_hw *hw,
+	uint8_t *pba_num, uint32_t pba_num_size);
 

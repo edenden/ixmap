@@ -1,39 +1,42 @@
-s32 ixgbe_init_hw_generic(struct ixgbe_hw *hw);
-void ixgbe_start_hw_generic(struct ixgbe_hw *hw);
-s32 ixgbe_get_mac_addr_generic(struct ixgbe_hw *hw, u8 *mac_addr);
-s32 ixgbe_stop_adapter_generic(struct ixgbe_hw *hw);
-s32 ixgbe_init_rx_addrs_generic(struct ixgbe_hw *hw);
-s32 ixgbe_validate_mac_addr(u8 *mac_addr);
-s32 ixgbe_set_fw_drv_ver_generic(struct ixgbe_hw *hw, u8 maj, u8 min, u8 build, u8 sub);
-s32 ixgbe_check_mac_link_generic(struct ixgbe_hw *hw, u32 *speed,
-				 bool *link_up, bool link_up_wait_to_complete);
-u16 ixgbe_get_pcie_msix_count_generic(struct ixgbe_hw *hw);
-void ixgbe_start_hw_gen2(struct ixgbe_hw *hw);
-bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw);
-void ixgbe_clear_tx_pending(struct ixgbe_hw *hw);
-s32 ixgbe_disable_pcie_master(struct ixgbe_hw *hw);
-s32 ixgbe_init_uta_tables_generic(struct ixgbe_hw *hw);
-u8 ixgbe_calculate_checksum(u8 *buffer, u32 length);
-s32 ixgbe_host_interface_command(struct ixgbe_hw *hw, u32 *buffer,
-				 u32 length);
-s32 ixgbe_set_rar_generic(struct ixgbe_hw *hw, u32 index, u8 *addr, u32 vmdq,
-			  u32 enable_addr);
-s32 ixgbe_clear_vfta_generic(struct ixgbe_hw *hw);
-s32 ixgbe_clear_hw_cntrs_generic(struct ixgbe_hw *hw);
-void ixgbe_set_lan_id_multi_port_pcie(struct ixgbe_hw *hw);
-void ixgbe_setup_fc(struct ixgbe_hw *hw);
+int32_t ixmap_init_hw(struct ixmap_hw *hw);
+void ixmap_start_hw(struct ixmap_hw *hw);
+int32_t ixmap_get_mac_addr(struct ixmap_hw *hw,
+	uint8_t *mac_addr);
+int32_t ixmap_stop_adapter(struct ixmap_hw *hw);
+int32_t ixmap_init_rx_addrs(struct ixmap_hw *hw);
+int32_t ixmap_validate_mac_addr(uint8_t *mac_addr);
+int32_t ixmap_set_fw_drv_ver(struct ixmap_hw *hw,
+	uint8_t maj, uint8_t min, uint8_t build, uint8_t sub);
+int32_t ixmap_check_mac_link(struct ixmap_hw *hw, uint32_t *speed,
+	int *link_up, int link_up_wait_to_complete);
+uint16_t ixmap_get_pcie_msix_count(struct ixmap_hw *hw);
+void ixmap_start_hw_gen2(struct ixmap_hw *hw);
+int ixmap_device_supports_autoneg_fc(struct ixmap_hw *hw);
+void ixmap_clear_tx_pending(struct ixmap_hw *hw);
+int32_t ixmap_disable_pcie_master(struct ixmap_hw *hw);
+int32_t ixmap_init_uta_tables(struct ixmap_hw *hw);
+uint8_t ixmap_calculate_checksum(uint8_t *buffer, uint32_t length);
+int32_t ixmap_host_interface_command(struct ixmap_hw *hw, uint32_t *buffer,
+	uint32_t length);
+int32_t ixmap_set_rar(struct ixmap_hw *hw,
+	uint32_t index, uint8_t *addr, uint32_t vmdq, uint32_t enable_addr);
+int32_t ixmap_clear_vfta(struct ixmap_hw *hw);
+int32_t ixmap_clear_hw_cntrs(struct ixmap_hw *hw);
+void ixmap_set_lan_id_multi_port_pcie(struct ixmap_hw *hw);
+void ixmap_setup_fc(struct ixmap_hw *hw);
 
-static inline bool IXGBE_REMOVED(void __iomem *addr)
+static inline int IXGBE_REMOVED(void __iomem *addr)
 {
 	return unlikely(!addr);
 }
 
 #define IXGBE_FAILED_READ_REG 0xffffffffU
 
-static inline u32 IXGBE_READ_REG(struct ixgbe_hw *hw, u32 reg)
+static inline uint32_t IXGBE_READ_REG(struct ixmap_hw *hw,
+	uint32_t reg)
 {
-	u32 value;
-	u8 __iomem *reg_addr;
+	uint32_t value;
+	uint8_t __iomem *reg_addr;
 
 	reg_addr = ACCESS_ONCE(hw->hw_addr);
 	if (IXGBE_REMOVED(reg_addr))
@@ -42,9 +45,10 @@ static inline u32 IXGBE_READ_REG(struct ixgbe_hw *hw, u32 reg)
 	return value;
 }
 
-static inline void IXGBE_WRITE_REG(struct ixgbe_hw *hw, u32 reg, u32 value)
+static inline void IXGBE_WRITE_REG(struct ixmap_hw *hw,
+	uint32_t reg, uint32_t value)
 {
-	u8 __iomem *reg_addr;
+	uint8_t __iomem *reg_addr;
 
 	reg_addr = ACCESS_ONCE(hw->hw_addr);
 	if (IXGBE_REMOVED(reg_addr))

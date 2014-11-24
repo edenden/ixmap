@@ -25,79 +25,80 @@
 #include "ixmap_common.h"
 #include "ixmap_eeprom.h"
 
-static s32 ixgbe_acquire_eeprom(struct ixgbe_hw *hw);
-static s32 ixgbe_ready_eeprom(struct ixgbe_hw *hw);
-static void ixgbe_release_eeprom(struct ixgbe_hw *hw);
-static void ixgbe_standby_eeprom(struct ixgbe_hw *hw);
-static void ixgbe_shift_out_eeprom_bits(struct ixgbe_hw *hw, u16 data,
-					u16 count);
-static u16 ixgbe_shift_in_eeprom_bits(struct ixgbe_hw *hw, u16 count);
-static void ixgbe_raise_eeprom_clk(struct ixgbe_hw *hw, u32 *eec);
-static void ixgbe_lower_eeprom_clk(struct ixgbe_hw *hw, u32 *eec);
-static s32 ixgbe_get_eeprom_semaphore(struct ixgbe_hw *hw);
-static void ixgbe_release_eeprom_semaphore(struct ixgbe_hw *hw);
-static s32 ixgbe_read_eeprom_buffer_bit_bang(struct ixgbe_hw *hw, u16 offset,
-					     u16 words, u16 *data);
+static int32_t ixmap_acquire_eeprom(struct ixmap_hw *hw);
+static int32_t ixmap_ready_eeprom(struct ixmap_hw *hw);
+static void ixmap_release_eeprom(struct ixmap_hw *hw);
+static void ixmap_standby_eeprom(struct ixmap_hw *hw);
+static void ixmap_shift_out_eeprom_bits(struct ixmap_hw *hw,
+	uint16_t data, uint16_t count);
+static uint16_t ixmap_shift_in_eeprom_bits(struct ixmap_hw *hw,
+	uint16_t count);
+static void ixmap_raise_eeprom_clk(struct ixmap_hw *hw, uint32_t *eec);
+static void ixmap_lower_eeprom_clk(struct ixmap_hw *hw, uint32_t *eec);
+static int32_t ixmap_get_eeprom_semaphore(struct ixmap_hw *hw);
+static void ixmap_release_eeprom_semaphore(struct ixmap_hw *hw);
+static int32_t ixmap_read_eeprom_buffer_bit_bang(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t words, uint16_t *data);
 
-s32 ixgbe_acquire_swfw_sync(struct ixgbe_hw *hw, u16 mask)
+int32_t ixmap_acquire_swfw_sync(struct ixmap_hw *hw, uint16_t mask)
 {
-	u32 gssr = 0;
-	u32 swmask = mask;
-	u32 fwmask = mask << 5;
-	u32 timeout = 200;
-	u32 i;
+	uint32_t gssr = 0;
+	uint32_t swmask = mask;
+	uint32_t fwmask = mask << 5;
+	uint32_t timeout = 200;
+	uint32_t i;
 
 	for (i = 0; i < timeout; i++) {
 		/*
 		 * SW NVM semaphore bit is used for access to all
 		 * SW_FW_SYNC bits (not just NVM)
 		 */
-		if (ixgbe_get_eeprom_semaphore(hw))
+		if (ixmap_get_eeprom_semaphore(hw))
 			return IXGBE_ERR_SWFW_SYNC;
 
 		gssr = IXGBE_READ_REG(hw, IXGBE_GSSR);
 		if (!(gssr & (fwmask | swmask))) {
 			gssr |= swmask;
 			IXGBE_WRITE_REG(hw, IXGBE_GSSR, gssr);
-			ixgbe_release_eeprom_semaphore(hw);
+			ixmap_release_eeprom_semaphore(hw);
 			return 0;
 		} else {
 			/* Resource is currently in use by FW or SW */
-			ixgbe_release_eeprom_semaphore(hw);
+			ixmap_release_eeprom_semaphore(hw);
 			msleep(5);
 		}
 	}
 
 	/* If time expired clear the bits holding the lock and retry */
 	if (gssr & (fwmask | swmask))
-		ixgbe_release_swfw_sync(hw, gssr & (fwmask | swmask));
+		ixmap_release_swfw_sync(hw, gssr & (fwmask | swmask));
 
 	msleep(5);
 	return IXGBE_ERR_SWFW_SYNC;
 }
 
-void ixgbe_release_swfw_sync(struct ixgbe_hw *hw, u16 mask)
+void ixmap_release_swfw_sync(struct ixmap_hw *hw, uint16_t mask)
 {
-	u32 gssr;
-	u32 swmask = mask;
+	uint32_t gssr;
+	uint32_t swmask = mask;
 
-	ixgbe_get_eeprom_semaphore(hw);
+	ixmap_get_eeprom_semaphore(hw);
 
 	gssr = IXGBE_READ_REG(hw, IXGBE_GSSR);
 	gssr &= ~swmask;
 	IXGBE_WRITE_REG(hw, IXGBE_GSSR, gssr);
 
-	ixgbe_release_eeprom_semaphore(hw);
+	ixmap_release_eeprom_semaphore(hw);
 }
 
-s32 ixgbe_read_pba_string_generic(struct ixgbe_hw *hw, u8 *pba_num,
-				  u32 pba_num_size)
+int32_t ixmap_read_pba_string(struct ixmap_hw *hw,
+	uint8_t *pba_num, uint32_t pba_num_size)
 {
-	s32 ret_val;
-	u16 data;
-	u16 pba_ptr;
-	u16 offset;
-	u16 length;
+	int32_t ret_val;
+	uint16_t data;
+	uint16_t pba_ptr;
+	uint16_t offset;
+	uint16_t length;
 
 	if (pba_num == NULL) {
 		return IXGBE_ERR_INVALID_ARGUMENT;
@@ -160,7 +161,7 @@ s32 ixgbe_read_pba_string_generic(struct ixgbe_hw *hw, u8 *pba_num,
 	}
 
 	/* check if pba_num buffer is big enough */
-	if (pba_num_size  < (((u32)length * 2) - 1)) {
+	if (pba_num_size  < (((uint32_t)length * 2) - 1)) {
 		return IXGBE_ERR_NO_SPACE;
 	}
 
@@ -173,18 +174,20 @@ s32 ixgbe_read_pba_string_generic(struct ixgbe_hw *hw, u8 *pba_num,
 		if (ret_val) {
 			return ret_val;
 		}
-		pba_num[offset * 2] = (u8)(data >> 8);
-		pba_num[(offset * 2) + 1] = (u8)(data & 0xFF);
+		pba_num[offset * 2] = (uint8_t)(data >> 8);
+		pba_num[(offset * 2) + 1] = (uint8_t)(data & 0xFF);
 	}
 	pba_num[offset * 2] = '\0';
 
 	return 0;
 }
 
-s32 ixgbe_validate_eeprom_checksum_generic(struct ixgbe_hw *hw, u16 *checksum_val){
-	s32 status;
-	u16 checksum;
-	u16 read_checksum = 0;
+int32_t ixmap_validate_eeprom_checksum(struct ixmap_hw *hw,
+	uint16_t *checksum_val)
+{
+	int32_t status;
+	uint16_t checksum;
+	uint16_t read_checksum = 0;
 
 	/*
 	 * Read the first word from the EEPROM. If this times out or fails, do
@@ -213,17 +216,18 @@ s32 ixgbe_validate_eeprom_checksum_generic(struct ixgbe_hw *hw, u16 *checksum_va
 	return status;
 }
 
-s32 ixgbe_read_eerd_generic(struct ixgbe_hw *hw, u16 offset, u16 *data)
+int32_t ixmap_read_eerd(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t *data)
 {
-	return ixgbe_read_eerd_buffer_generic(hw, offset, 1, data);
+	return ixmap_read_eerd_buffer(hw, offset, 1, data);
 }
 
-s32 ixgbe_read_eerd_buffer_generic(struct ixgbe_hw *hw, u16 offset,
-				   u16 words, u16 *data)
+int32_t ixmap_read_eerd_buffer(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t words, uint16_t *data)
 {
-	u32 eerd;
-	s32 status = 0;
-	u32 i;
+	uint32_t eerd;
+	int32_t status = 0;
+	uint32_t i;
 
 	hw->eeprom.ops.init_params(hw);
 
@@ -242,7 +246,7 @@ s32 ixgbe_read_eerd_buffer_generic(struct ixgbe_hw *hw, u16 offset,
 		       IXGBE_EEPROM_RW_REG_START;
 
 		IXGBE_WRITE_REG(hw, IXGBE_EERD, eerd);
-		status = ixgbe_poll_eerd_eewr_done(hw, IXGBE_NVM_POLL_READ);
+		status = ixmap_poll_eerd_eewr_done(hw, IXGBE_NVM_POLL_READ);
 
 		if (status == 0) {
 			data[i] = (IXGBE_READ_REG(hw, IXGBE_EERD) >>
@@ -255,10 +259,10 @@ out:
 	return status;
 }
 
-s32 ixgbe_read_eeprom_bit_bang_generic(struct ixgbe_hw *hw, u16 offset,
-				       u16 *data)
+int32_t ixmap_read_eeprom_bit_bang(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t *data)
 {
-	s32 status;
+	int32_t status;
 
 	hw->eeprom.ops.init_params(hw);
 
@@ -267,33 +271,33 @@ s32 ixgbe_read_eeprom_bit_bang_generic(struct ixgbe_hw *hw, u16 offset,
 		goto out;
 	}
 
-	status = ixgbe_read_eeprom_buffer_bit_bang(hw, offset, 1, data);
+	status = ixmap_read_eeprom_buffer_bit_bang(hw, offset, 1, data);
 
 out:
 	return status;
 }
 
-static s32 ixgbe_read_eeprom_buffer_bit_bang(struct ixgbe_hw *hw, u16 offset,
-					     u16 words, u16 *data)
+static int32_t ixmap_read_eeprom_buffer_bit_bang(struct ixmap_hw *hw,
+	uint16_t offset, uint16_t words, uint16_t *data)
 {
-	s32 status;
-	u16 word_in;
-	u8 read_opcode = IXGBE_EEPROM_READ_OPCODE_SPI;
-	u16 i;
+	int32_t status;
+	uint16_t word_in;
+	uint8_t read_opcode = IXGBE_EEPROM_READ_OPCODE_SPI;
+	uint16_t i;
 
 	/* Prepare the EEPROM for reading  */
-	status = ixgbe_acquire_eeprom(hw);
+	status = ixmap_acquire_eeprom(hw);
 
 	if (status == 0) {
-		if (ixgbe_ready_eeprom(hw) != 0) {
-			ixgbe_release_eeprom(hw);
+		if (ixmap_ready_eeprom(hw) != 0) {
+			ixmap_release_eeprom(hw);
 			status = IXGBE_ERR_EEPROM;
 		}
 	}
 
 	if (status == 0) {
 		for (i = 0; i < words; i++) {
-			ixgbe_standby_eeprom(hw);
+			ixmap_standby_eeprom(hw);
 			/*
 			 * Some SPI eeproms use the 8th address bit embedded
 			 * in the opcode
@@ -303,28 +307,28 @@ static s32 ixgbe_read_eeprom_buffer_bit_bang(struct ixgbe_hw *hw, u16 offset,
 				read_opcode |= IXGBE_EEPROM_A8_OPCODE_SPI;
 
 			/* Send the READ command (opcode + addr) */
-			ixgbe_shift_out_eeprom_bits(hw, read_opcode,
+			ixmap_shift_out_eeprom_bits(hw, read_opcode,
 						    IXGBE_EEPROM_OPCODE_BITS);
-			ixgbe_shift_out_eeprom_bits(hw, (u16)((offset + i) * 2),
+			ixmap_shift_out_eeprom_bits(hw, (uint16_t)((offset + i) * 2),
 						    hw->eeprom.address_bits);
 
 			/* Read the data. */
-			word_in = ixgbe_shift_in_eeprom_bits(hw, 16);
+			word_in = ixmap_shift_in_eeprom_bits(hw, 16);
 			data[i] = (word_in >> 8) | (word_in << 8);
 		}
 
 		/* End this read operation */
-		ixgbe_release_eeprom(hw);
+		ixmap_release_eeprom(hw);
 	}
 
 	return status;
 }
 
-s32 ixgbe_poll_eerd_eewr_done(struct ixgbe_hw *hw, u32 ee_reg)
+int32_t ixmap_poll_eerd_eewr_done(struct ixmap_hw *hw, uint32_t ee_reg)
 {
-	u32 i;
-	u32 reg;
-	s32 status = IXGBE_ERR_EEPROM;
+	uint32_t i;
+	uint32_t reg;
+	int32_t status = IXGBE_ERR_EEPROM;
 
 	for (i = 0; i < IXGBE_EERD_EEWR_ATTEMPTS; i++) {
 		if (ee_reg == IXGBE_NVM_POLL_READ)
@@ -342,11 +346,11 @@ s32 ixgbe_poll_eerd_eewr_done(struct ixgbe_hw *hw, u32 ee_reg)
 	return status;
 }
 
-static s32 ixgbe_acquire_eeprom(struct ixgbe_hw *hw)
+static int32_t ixmap_acquire_eeprom(struct ixmap_hw *hw)
 {
-	s32 status = 0;
-	u32 eec;
-	u32 i;
+	int32_t status = 0;
+	uint32_t eec;
+	uint32_t i;
 
 	if (hw->mac.ops.acquire_swfw_sync(hw, IXGBE_GSSR_EEP_SM)
 	    != 0)
@@ -387,11 +391,11 @@ static s32 ixgbe_acquire_eeprom(struct ixgbe_hw *hw)
 	return status;
 }
 
-static s32 ixgbe_ready_eeprom(struct ixgbe_hw *hw)
+static int32_t ixmap_ready_eeprom(struct ixmap_hw *hw)
 {
-	s32 status = 0;
-	u16 i;
-	u8 spi_stat_reg;
+	int32_t status = 0;
+	uint16_t i;
+	uint8_t spi_stat_reg;
 
 	/*
 	 * Read "Status Register" repeatedly until the LSB is cleared.  The
@@ -400,14 +404,14 @@ static s32 ixgbe_ready_eeprom(struct ixgbe_hw *hw)
 	 * 5 milliseconds, then error out.
 	 */
 	for (i = 0; i < IXGBE_EEPROM_MAX_RETRY_SPI; i += 5) {
-		ixgbe_shift_out_eeprom_bits(hw, IXGBE_EEPROM_RDSR_OPCODE_SPI,
+		ixmap_shift_out_eeprom_bits(hw, IXGBE_EEPROM_RDSR_OPCODE_SPI,
 					    IXGBE_EEPROM_OPCODE_BITS);
-		spi_stat_reg = (u8)ixgbe_shift_in_eeprom_bits(hw, 8);
+		spi_stat_reg = (uint8_t)ixmap_shift_in_eeprom_bits(hw, 8);
 		if (!(spi_stat_reg & IXGBE_EEPROM_STATUS_RDY_SPI))
 			break;
 
 		udelay(5);
-		ixgbe_standby_eeprom(hw);
+		ixmap_standby_eeprom(hw);
 	};
 
 	/*
@@ -421,9 +425,9 @@ static s32 ixgbe_ready_eeprom(struct ixgbe_hw *hw)
 	return status;
 }
 
-static void ixgbe_release_eeprom(struct ixgbe_hw *hw)
+static void ixmap_release_eeprom(struct ixmap_hw *hw)
 {
-	u32 eec;
+	uint32_t eec;
 
 	eec = IXGBE_READ_REG(hw, IXGBE_EEC);
 
@@ -445,9 +449,9 @@ static void ixgbe_release_eeprom(struct ixgbe_hw *hw)
 	msleep(hw->eeprom.semaphore_delay);
 }
 
-static void ixgbe_standby_eeprom(struct ixgbe_hw *hw)
+static void ixmap_standby_eeprom(struct ixmap_hw *hw)
 {
-	u32 eec;
+	uint32_t eec;
 
 	eec = IXGBE_READ_REG(hw, IXGBE_EEC);
 
@@ -462,12 +466,12 @@ static void ixgbe_standby_eeprom(struct ixgbe_hw *hw)
 	udelay(1);
 }
 
-static void ixgbe_shift_out_eeprom_bits(struct ixgbe_hw *hw, u16 data,
-					u16 count)
+static void ixmap_shift_out_eeprom_bits(struct ixmap_hw *hw,
+	uint16_t data, uint16_t count)
 {
-	u32 eec;
-	u32 mask;
-	u32 i;
+	uint32_t eec;
+	uint32_t mask;
+	uint32_t i;
 
 	eec = IXGBE_READ_REG(hw, IXGBE_EEC);
 
@@ -495,8 +499,8 @@ static void ixgbe_shift_out_eeprom_bits(struct ixgbe_hw *hw, u16 data,
 
 		udelay(1);
 
-		ixgbe_raise_eeprom_clk(hw, &eec);
-		ixgbe_lower_eeprom_clk(hw, &eec);
+		ixmap_raise_eeprom_clk(hw, &eec);
+		ixmap_lower_eeprom_clk(hw, &eec);
 
 		/*
 		 * Shift mask to signify next bit of data to shift in to the
@@ -511,11 +515,12 @@ static void ixgbe_shift_out_eeprom_bits(struct ixgbe_hw *hw, u16 data,
 	IXGBE_WRITE_FLUSH(hw);
 }
 
-static u16 ixgbe_shift_in_eeprom_bits(struct ixgbe_hw *hw, u16 count)
+static uint16_t ixmap_shift_in_eeprom_bits(struct ixmap_hw *hw,
+	uint16_t count)
 {
-	u32 eec;
-	u32 i;
-	u16 data = 0;
+	uint32_t eec;
+	uint32_t i;
+	uint16_t data = 0;
 
 	/*
 	 * In order to read a register from the EEPROM, we need to shift
@@ -530,7 +535,7 @@ static u16 ixgbe_shift_in_eeprom_bits(struct ixgbe_hw *hw, u16 count)
 
 	for (i = 0; i < count; i++) {
 		data = data << 1;
-		ixgbe_raise_eeprom_clk(hw, &eec);
+		ixmap_raise_eeprom_clk(hw, &eec);
 
 		eec = IXGBE_READ_REG(hw, IXGBE_EEC);
 
@@ -538,13 +543,13 @@ static u16 ixgbe_shift_in_eeprom_bits(struct ixgbe_hw *hw, u16 count)
 		if (eec & IXGBE_EEC_DO)
 			data |= 1;
 
-		ixgbe_lower_eeprom_clk(hw, &eec);
+		ixmap_lower_eeprom_clk(hw, &eec);
 	}
 
 	return data;
 }
 
-static void ixgbe_raise_eeprom_clk(struct ixgbe_hw *hw, u32 *eec)
+static void ixmap_raise_eeprom_clk(struct ixmap_hw *hw, uint32_t *eec)
 {
 	/*
 	 * Raise the clock input to the EEPROM
@@ -556,7 +561,7 @@ static void ixgbe_raise_eeprom_clk(struct ixgbe_hw *hw, u32 *eec)
 	udelay(1);
 }
 
-static void ixgbe_lower_eeprom_clk(struct ixgbe_hw *hw, u32 *eec)
+static void ixmap_lower_eeprom_clk(struct ixmap_hw *hw, uint32_t *eec)
 {
 	/*
 	 * Lower the clock input to the EEPROM (clearing the SK bit), then
@@ -568,12 +573,12 @@ static void ixgbe_lower_eeprom_clk(struct ixgbe_hw *hw, u32 *eec)
 	udelay(1);
 }
 
-static s32 ixgbe_get_eeprom_semaphore(struct ixgbe_hw *hw)
+static int32_t ixmap_get_eeprom_semaphore(struct ixmap_hw *hw)
 {
-	s32 status = IXGBE_ERR_EEPROM;
-	u32 timeout = 2000;
-	u32 i;
-	u32 swsm;
+	int32_t status = IXGBE_ERR_EEPROM;
+	uint32_t timeout = 2000;
+	uint32_t i;
+	uint32_t swsm;
 
 	/* Get SMBI software semaphore between device drivers first */
 	for (i = 0; i < timeout; i++) {
@@ -596,7 +601,7 @@ static s32 ixgbe_get_eeprom_semaphore(struct ixgbe_hw *hw)
 		 * was a timeout, we should unconditionally clear the semaphore
 		 * bits to free the driver to make progress
 		 */
-		ixgbe_release_eeprom_semaphore(hw);
+		ixmap_release_eeprom_semaphore(hw);
 
 		udelay(50);
 		/*
@@ -634,7 +639,7 @@ static s32 ixgbe_get_eeprom_semaphore(struct ixgbe_hw *hw)
 		 * was not granted because we don't have access to the EEPROM
 		 */
 		if (i >= timeout) {
-			ixgbe_release_eeprom_semaphore(hw);
+			ixmap_release_eeprom_semaphore(hw);
 			status = IXGBE_ERR_EEPROM;
 		}
 	}
@@ -642,9 +647,9 @@ static s32 ixgbe_get_eeprom_semaphore(struct ixgbe_hw *hw)
 	return status;
 }
 
-static void ixgbe_release_eeprom_semaphore(struct ixgbe_hw *hw)
+static void ixmap_release_eeprom_semaphore(struct ixmap_hw *hw)
 {
-	u32 swsm;
+	uint32_t swsm;
 
 	swsm = IXGBE_READ_REG(hw, IXGBE_SWSM);
 
@@ -654,14 +659,14 @@ static void ixgbe_release_eeprom_semaphore(struct ixgbe_hw *hw)
 	IXGBE_WRITE_FLUSH(hw);
 }
 
-s32 ixgbe_init_eeprom_params_generic(struct ixgbe_hw *hw)
+int32_t ixmap_init_eeprom_params(struct ixmap_hw *hw)
 {
-	struct ixgbe_eeprom_info *eeprom = &hw->eeprom;
-	u32 eec;
-	u16 eeprom_size;
+	struct ixmap_eeprom_info *eeprom = &hw->eeprom;
+	uint32_t eec;
+	uint16_t eeprom_size;
 
-	if (eeprom->type == ixgbe_eeprom_uninitialized) {
-		eeprom->type = ixgbe_eeprom_none;
+	if (eeprom->type == ixmap_eeprom_uninitialized) {
+		eeprom->type = ixmap_eeprom_none;
 		/* Set default semaphore delay to 10ms which is a well
 		 * tested value */
 		eeprom->semaphore_delay = 10;
@@ -674,13 +679,13 @@ s32 ixgbe_init_eeprom_params_generic(struct ixgbe_hw *hw)
 		 */
 		eec = IXGBE_READ_REG(hw, IXGBE_EEC);
 		if (eec & IXGBE_EEC_PRES) {
-			eeprom->type = ixgbe_eeprom_spi;
+			eeprom->type = ixmap_eeprom_spi;
 
 			/*
 			 * SPI EEPROM is assumed here.  This code would need to
 			 * change if a future EEPROM is not SPI.
 			 */
-			eeprom_size = (u16)((eec & IXGBE_EEC_SIZE) >>
+			eeprom_size = (uint16_t)((eec & IXGBE_EEC_SIZE) >>
 					    IXGBE_EEC_SIZE_SHIFT);
 			eeprom->word_size = 1 << (eeprom_size +
 					     IXGBE_EEPROM_WORD_SIZE_SHIFT);
@@ -695,14 +700,14 @@ s32 ixgbe_init_eeprom_params_generic(struct ixgbe_hw *hw)
 	return 0;
 }
 
-u16 ixgbe_calc_eeprom_checksum_generic(struct ixgbe_hw *hw)
+uint16_t ixmap_calc_eeprom_checksum(struct ixmap_hw *hw)
 {
-	u16 i;
-	u16 j;
-	u16 checksum = 0;
-	u16 length = 0;
-	u16 pointer = 0;
-	u16 word = 0;
+	uint16_t i;
+	uint16_t j;
+	uint16_t checksum = 0;
+	uint16_t length = 0;
+	uint16_t pointer = 0;
+	uint16_t word = 0;
 
 	/* Include 0x0-0x3F in the checksum */
 	for (i = 0; i < IXGBE_EEPROM_CHECKSUM; i++) {
@@ -729,7 +734,7 @@ u16 ixgbe_calc_eeprom_checksum_generic(struct ixgbe_hw *hw)
 		}
 	}
 
-	checksum = (u16)IXGBE_EEPROM_SUM - checksum;
+	checksum = (uint16_t)IXGBE_EEPROM_SUM - checksum;
 
 	return checksum;
 }

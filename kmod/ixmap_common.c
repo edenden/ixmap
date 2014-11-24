@@ -26,10 +26,11 @@
 #include "ixmap_phy.h"
 #include "ixmap_eeprom.h"
 
-static u32 ixgbe_pcie_timeout_poll(struct ixgbe_hw *hw);
+static uint32_t ixmap_pcie_timeout_poll(struct ixmap_hw *hw);
 
-s32 ixgbe_init_hw_generic(struct ixgbe_hw *hw){
-	s32 status;
+int32_t ixmap_init_hw(struct ixmap_hw *hw)
+{
+	int32_t status;
 
 	/* Reset the hardware */
 	status = hw->mac.ops.reset_hw(hw);
@@ -42,9 +43,9 @@ s32 ixgbe_init_hw_generic(struct ixgbe_hw *hw){
 	return status;
 }
 
-void ixgbe_start_hw_generic(struct ixgbe_hw *hw)
+void ixmap_start_hw(struct ixmap_hw *hw)
 {
-	u32 ctrl_ext;
+	uint32_t ctrl_ext;
 
 	/* Set the media type */
 	hw->phy.media_type = hw->mac.ops.get_media_type(hw);
@@ -69,10 +70,10 @@ void ixgbe_start_hw_generic(struct ixgbe_hw *hw)
 	return;
 }
 
-void ixgbe_start_hw_gen2(struct ixgbe_hw *hw)
+void ixmap_start_hw_gen2(struct ixmap_hw *hw)
 {
-	u32 i;
-	u32 regval;
+	uint32_t i;
+	uint32_t regval;
 
 	/* Clear the rate limiters */
 	for (i = 0; i < hw->mac.max_tx_queues; i++) {
@@ -98,14 +99,14 @@ void ixgbe_start_hw_gen2(struct ixgbe_hw *hw)
 	return;
 }
 
-bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw)
+int ixmap_device_supports_autoneg_fc(struct ixmap_hw *hw)
 {
-	bool supported = false;
-	ixgbe_link_speed speed;
-	bool link_up;
+	int supported = false;
+	ixmap_link_speed speed;
+	int link_up;
 
 	switch (hw->phy.media_type) {
-	case ixgbe_media_type_fiber:
+	case ixmap_media_type_fiber:
 		hw->mac.ops.check_link(hw, &speed, &link_up, false);
 		/* if link is down, assume supported */
 		if (link_up)
@@ -121,9 +122,9 @@ bool ixgbe_device_supports_autoneg_fc(struct ixgbe_hw *hw)
 	return supported;
 }
 
-void ixgbe_setup_fc(struct ixgbe_hw *hw)
+void ixmap_setup_fc(struct ixmap_hw *hw)
 {
-	u32 mflcn_reg, fccfg_reg;
+	uint32_t mflcn_reg, fccfg_reg;
 
 	/* Disable any previous flow control settings */
 	mflcn_reg = IXGBE_READ_REG(hw, IXGBE_MFLCN);
@@ -147,27 +148,28 @@ void ixgbe_setup_fc(struct ixgbe_hw *hw)
 	return;
 }
 
-s32 ixgbe_get_mac_addr_generic(struct ixgbe_hw *hw, u8 *mac_addr){
-	u32 rar_high;
-	u32 rar_low;
-	u16 i;
+int32_t ixmap_get_mac_addr(struct ixmap_hw *hw, uint8_t *mac_addr)
+{
+	uint32_t rar_high;
+	uint32_t rar_low;
+	uint16_t i;
 
 	rar_high = IXGBE_READ_REG(hw, IXGBE_RAH(0));
 	rar_low = IXGBE_READ_REG(hw, IXGBE_RAL(0));
 
 	for (i = 0; i < 4; i++)
-		mac_addr[i] = (u8)(rar_low >> (i*8));
+		mac_addr[i] = (uint8_t)(rar_low >> (i*8));
 
 	for (i = 0; i < 2; i++)
-		mac_addr[i+4] = (u8)(rar_high >> (i*8));
+		mac_addr[i+4] = (uint8_t)(rar_high >> (i*8));
 
 	return 0;
 }
 
-void ixgbe_set_lan_id_multi_port_pcie(struct ixgbe_hw *hw)
+void ixmap_set_lan_id_multi_port_pcie(struct ixmap_hw *hw)
 {
-	struct ixgbe_bus_info *bus = &hw->bus;
-	u32 reg;
+	struct ixmap_bus_info *bus = &hw->bus;
+	uint32_t reg;
 
 	reg = IXGBE_READ_REG(hw, IXGBE_STATUS);
 	bus->func = (reg & IXGBE_STATUS_LAN_ID) >> IXGBE_STATUS_LAN_ID_SHIFT;
@@ -179,9 +181,10 @@ void ixgbe_set_lan_id_multi_port_pcie(struct ixgbe_hw *hw)
 		bus->func ^= 0x1;
 }
 
-s32 ixgbe_stop_adapter_generic(struct ixgbe_hw *hw){
-	u32 reg_val;
-	u16 i;
+int32_t ixmap_stop_adapter(struct ixmap_hw *hw)
+{
+	uint32_t reg_val;
+	uint16_t i;
 
 	/*
 	 * Set the adapter_stopped flag so other driver functions stop touching
@@ -218,19 +221,20 @@ s32 ixgbe_stop_adapter_generic(struct ixgbe_hw *hw){
 	 * Prevent the PCI-E bus from from hanging by disabling PCI-E master
 	 * access and verify no pending requests
 	 */
-	return ixgbe_disable_pcie_master(hw);
+	return ixmap_disable_pcie_master(hw);
 }
 
-s32 ixgbe_init_rx_addrs_generic(struct ixgbe_hw *hw){
-	u32 i;
-	u32 rar_entries = hw->mac.num_rar_entries;
+int32_t ixmap_init_rx_addrs(struct ixmap_hw *hw)
+{
+	uint32_t i;
+	uint32_t rar_entries = hw->mac.num_rar_entries;
 
 	/*
 	 * If the current mac address is valid, assume it is a software override
 	 * to the permanent address.
 	 * Otherwise, use the permanent address from the eeprom.
 	 */
-	if (ixgbe_validate_mac_addr(hw->mac.addr) ==
+	if (ixmap_validate_mac_addr(hw->mac.addr) ==
 	    IXGBE_ERR_INVALID_MAC_ADDR) {
 		/* Get the MAC address from the RAR0 for later reference */
 		hw->mac.ops.get_mac_addr(hw, hw->mac.addr);
@@ -251,14 +255,14 @@ s32 ixgbe_init_rx_addrs_generic(struct ixgbe_hw *hw){
 	for (i = 0; i < hw->mac.mcft_size; i++)
 		IXGBE_WRITE_REG(hw, IXGBE_MTA(i), 0);
 
-	ixgbe_init_uta_tables_generic(hw);
+	ixmap_init_uta_tables(hw);
 
 	return 0;
 }
 
-s32 ixgbe_validate_mac_addr(u8 *mac_addr)
+int32_t ixmap_validate_mac_addr(uint8_t *mac_addr)
 {
-	s32 status = 0;
+	int32_t status = 0;
 
 	/* Make sure it is not a multicast address */
 	if (IXGBE_IS_MULTICAST(mac_addr)) {
@@ -274,27 +278,27 @@ s32 ixgbe_validate_mac_addr(u8 *mac_addr)
 	return status;
 }
 
-u8 ixgbe_calculate_checksum(u8 *buffer, u32 length)
+uint8_t ixmap_calculate_checksum(uint8_t *buffer, uint32_t length)
 {
-	u32 i;
-	u8 sum = 0;
+	uint32_t i;
+	uint8_t sum = 0;
 
 	if (!buffer)
 		return 0;
 	for (i = 0; i < length; i++)
 		sum += buffer[i];
 
-	return (u8) (0 - sum);
+	return (uint8_t) (0 - sum);
 }
 
-s32 ixgbe_host_interface_command(struct ixgbe_hw *hw, u32 *buffer,
-				 u32 length)
+int32_t ixmap_host_interface_command(struct ixmap_hw *hw,
+	uint32_t *buffer, uint32_t length)
 {
-	u32 hicr, i, bi;
-	u32 hdr_size = sizeof(struct ixgbe_hic_hdr);
-	u8 buf_len, dword_len;
+	uint32_t hicr, i, bi;
+	uint32_t hdr_size = sizeof(struct ixmap_hic_hdr);
+	uint8_t buf_len, dword_len;
 
-	s32 ret_val = 0;
+	int32_t ret_val = 0;
 
 	if (length == 0 || length & 0x3 ||
 	    length > IXGBE_HI_MAX_BLOCK_BYTE_LENGTH) {
@@ -347,7 +351,7 @@ s32 ixgbe_host_interface_command(struct ixgbe_hw *hw, u32 *buffer,
 	}
 
 	/* If there is any thing in data position pull it in */
-	buf_len = ((struct ixgbe_hic_hdr *)buffer)->buf_len;
+	buf_len = ((struct ixmap_hic_hdr *)buffer)->buf_len;
 	if (buf_len == 0)
 		goto out;
 
@@ -369,10 +373,12 @@ out:
 	return ret_val;
 }
 
-s32 ixgbe_set_fw_drv_ver_generic(struct ixgbe_hw *hw, u8 maj, u8 min, u8 build, u8 sub){
-	struct ixgbe_hic_drv_info fw_cmd;
+int32_t ixmap_set_fw_drv_ver(struct ixmap_hw *hw,
+	uint8_t maj, uint8_t min, uint8_t build, uint8_t sub)
+{
+	struct ixmap_hic_drv_info fw_cmd;
 	int i;
-	s32 ret_val = 0;
+	int32_t ret_val = 0;
 
 	if (hw->mac.ops.acquire_swfw_sync(hw, IXGBE_GSSR_SW_MNG_SM)
 	    != 0) {
@@ -383,19 +389,19 @@ s32 ixgbe_set_fw_drv_ver_generic(struct ixgbe_hw *hw, u8 maj, u8 min, u8 build, 
 	fw_cmd.hdr.cmd = FW_CEM_CMD_DRIVER_INFO;
 	fw_cmd.hdr.buf_len = FW_CEM_CMD_DRIVER_INFO_LEN;
 	fw_cmd.hdr.cmd_or_resp.cmd_resv = FW_CEM_CMD_RESERVED;
-	fw_cmd.port_num = (u8)hw->bus.func;
+	fw_cmd.port_num = (uint8_t)hw->bus.func;
 	fw_cmd.ver_maj = maj;
 	fw_cmd.ver_min = min;
 	fw_cmd.ver_build = build;
 	fw_cmd.ver_sub = sub;
 	fw_cmd.hdr.checksum = 0;
-	fw_cmd.hdr.checksum = ixgbe_calculate_checksum((u8 *)&fw_cmd,
+	fw_cmd.hdr.checksum = ixmap_calculate_checksum((uint8_t *)&fw_cmd,
 				(FW_CEM_HDR_LEN + fw_cmd.hdr.buf_len));
 	fw_cmd.pad = 0;
 	fw_cmd.pad2 = 0;
 
 	for (i = 0; i <= FW_CEM_MAX_RETRIES; i++) {
-		ret_val = ixgbe_host_interface_command(hw, (u32 *)&fw_cmd,
+		ret_val = ixmap_host_interface_command(hw, (uint32_t *)&fw_cmd,
 						       sizeof(fw_cmd));
 		if (ret_val != 0)
 			continue;
@@ -414,10 +420,11 @@ out:
 	return ret_val;
 }
 
-s32 ixgbe_check_mac_link_generic(struct ixgbe_hw *hw, u32 *speed,
-				 bool *link_up, bool link_up_wait_to_complete){
-	u32 links_reg, links_orig;
-	u32 i;
+int32_t ixmap_check_mac_link(struct ixmap_hw *hw, uint32_t *speed,
+	 int *link_up, int link_up_wait_to_complete)
+{
+	uint32_t links_reg, links_orig;
+	uint32_t i;
 
 	/* clear the old state */
 	links_orig = IXGBE_READ_REG(hw, IXGBE_LINKS);
@@ -457,11 +464,11 @@ s32 ixgbe_check_mac_link_generic(struct ixgbe_hw *hw, u32 *speed,
 	return 0;
 }
 
-s32 ixgbe_disable_pcie_master(struct ixgbe_hw *hw)
+int32_t ixmap_disable_pcie_master(struct ixmap_hw *hw)
 {
-	s32 status = 0;
-	u32 i, poll;
-	u16 value;
+	int32_t status = 0;
+	uint32_t i, poll;
+	uint16_t value;
 
 	/* Always set this bit to ensure any future transactions are blocked */
 	IXGBE_WRITE_REG(hw, IXGBE_CTRL, IXGBE_CTRL_GIO_DIS);
@@ -492,7 +499,7 @@ s32 ixgbe_disable_pcie_master(struct ixgbe_hw *hw)
 	 * Before proceeding, make sure that the PCIe block does not have
 	 * transactions pending.
 	 */
-	poll = ixgbe_pcie_timeout_poll(hw);
+	poll = ixmap_pcie_timeout_poll(hw);
 	for (i = 0; i < poll; i++) {
 		udelay(100);
 		value = ixmap_read_pci_cfg_word(hw, IXGBE_PCI_DEVICE_STATUS);
@@ -508,13 +515,14 @@ out:
 	return status;
 }
 
-u16 ixgbe_get_pcie_msix_count_generic(struct ixgbe_hw *hw){
-	u16 msix_count = 1;
-	u16 max_msix_count;
-	u16 pcie_offset;
+uint16_t ixmap_get_pcie_msix_count(struct ixmap_hw *hw)
+{
+	uint16_t msix_count = 1;
+	uint16_t max_msix_count;
+	uint16_t pcie_offset;
 
 	switch (hw->mac.type) {
-	case ixgbe_mac_82599EB:
+	case ixmap_mac_82599EB:
 		pcie_offset = IXGBE_PCIE_MSIX_82599_CAPS;
 		max_msix_count = IXGBE_MAX_MSIX_VECTORS_82599;
 		break;
@@ -536,9 +544,9 @@ u16 ixgbe_get_pcie_msix_count_generic(struct ixgbe_hw *hw){
 	return msix_count;
 }
 
-void ixgbe_clear_tx_pending(struct ixgbe_hw *hw)
+void ixmap_clear_tx_pending(struct ixmap_hw *hw)
 {
-	u32 gcr_ext, hlreg0;
+	uint32_t gcr_ext, hlreg0;
 
 	/*
 	 * If double reset is not requested then all transactions should
@@ -569,7 +577,7 @@ void ixgbe_clear_tx_pending(struct ixgbe_hw *hw)
 	IXGBE_WRITE_REG(hw, IXGBE_HLREG0, hlreg0);
 }
 
-s32 ixgbe_init_uta_tables_generic(struct ixgbe_hw *hw)
+int32_t ixmap_init_uta_tables(struct ixmap_hw *hw)
 {
 	int i;
 
@@ -579,10 +587,10 @@ s32 ixgbe_init_uta_tables_generic(struct ixgbe_hw *hw)
 	return 0;
 }
 
-static u32 ixgbe_pcie_timeout_poll(struct ixgbe_hw *hw)
+static uint32_t ixmap_pcie_timeout_poll(struct ixmap_hw *hw)
 {
 	s16 devctl2;
-	u32 pollcnt;
+	uint32_t pollcnt;
 
 	devctl2 = ixmap_read_pci_cfg_word(hw, IXGBE_PCI_DEVICE_CONTROL2);
 	devctl2 &= IXGBE_PCIDEVCTRL2_TIMEO_MASK;
@@ -616,11 +624,11 @@ static u32 ixgbe_pcie_timeout_poll(struct ixgbe_hw *hw)
 	return (pollcnt * 11) / 10;
 }
 
-s32 ixgbe_set_rar_generic(struct ixgbe_hw *hw, u32 index, u8 *addr, u32 vmdq,
-			  u32 enable_addr)
+int32_t ixmap_set_rar(struct ixmap_hw *hw,
+	uint32_t index, uint8_t *addr, uint32_t vmdq, uint32_t enable_addr)
 {
-	u32 rar_low, rar_high;
-	u32 rar_entries = hw->mac.num_rar_entries;
+	uint32_t rar_low, rar_high;
+	uint32_t rar_entries = hw->mac.num_rar_entries;
 
 	/* Make sure we are using a valid rar index range */
 	if (index >= rar_entries) {
@@ -631,10 +639,10 @@ s32 ixgbe_set_rar_generic(struct ixgbe_hw *hw, u32 index, u8 *addr, u32 vmdq,
 	 * HW expects these in little endian so we reverse the byte
 	 * order from network order (big endian) to little endian
 	 */
-	rar_low = ((u32)addr[0] |
-		   ((u32)addr[1] << 8) |
-		   ((u32)addr[2] << 16) |
-		   ((u32)addr[3] << 24));
+	rar_low = ((uint32_t)addr[0] |
+		   ((uint32_t)addr[1] << 8) |
+		   ((uint32_t)addr[2] << 16) |
+		   ((uint32_t)addr[3] << 24));
 	/*
 	 * Some parts put the VMDq setting in the extra RAH bits,
 	 * so save everything except the lower 16 bits that hold part
@@ -642,7 +650,7 @@ s32 ixgbe_set_rar_generic(struct ixgbe_hw *hw, u32 index, u8 *addr, u32 vmdq,
 	 */
 	rar_high = IXGBE_READ_REG(hw, IXGBE_RAH(index));
 	rar_high &= ~(0x0000FFFF | IXGBE_RAH_AV);
-	rar_high |= ((u32)addr[4] | ((u32)addr[5] << 8));
+	rar_high |= ((uint32_t)addr[4] | ((uint32_t)addr[5] << 8));
 
 	if (enable_addr != 0)
 		rar_high |= IXGBE_RAH_AV;
@@ -653,9 +661,9 @@ s32 ixgbe_set_rar_generic(struct ixgbe_hw *hw, u32 index, u8 *addr, u32 vmdq,
 	return 0;
 }
 
-s32 ixgbe_clear_vfta_generic(struct ixgbe_hw *hw)
+int32_t ixmap_clear_vfta(struct ixmap_hw *hw)
 {
-	u32 offset;
+	uint32_t offset;
 
 	for (offset = 0; offset < hw->mac.vft_size; offset++)
 		IXGBE_WRITE_REG(hw, IXGBE_VFTA(offset), 0);
@@ -669,9 +677,9 @@ s32 ixgbe_clear_vfta_generic(struct ixgbe_hw *hw)
 	return 0;
 }
 
-s32 ixgbe_clear_hw_cntrs_generic(struct ixgbe_hw *hw)
+int32_t ixmap_clear_hw_cntrs(struct ixmap_hw *hw)
 {
-	u16 i = 0;
+	uint16_t i = 0;
 
 	IXGBE_READ_REG(hw, IXGBE_CRCERRS);
 	IXGBE_READ_REG(hw, IXGBE_ILLERRC);
