@@ -35,12 +35,12 @@ static int sg_alloc_table_from_pages(struct sg_table *sgt,
 	gfp_t gfp_mask);
 #endif /* < 3.6.0 */
 
-u8 __iomem *ixmap_dma_map_iobase(struct ixmap_adapter *adapter)
+uint8_t __iomem *ixmap_dma_map_iobase(struct ixmap_adapter *adapter)
 {
 	struct list_head *where;
 	struct ixmap_dma_area *area;
 	unsigned long addr_dma = adapter->iobase;
-	u8 __iomem *hw_addr;
+	uint8_t __iomem *hw_addr;
 
 	hw_addr = ioremap(adapter->iobase, adapter->iolen);
 	if (!hw_addr)

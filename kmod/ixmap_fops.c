@@ -186,7 +186,7 @@ static int ixmap_cmd_check_link(struct ixmap_adapter *adapter,
 	struct ixmap_link_req req;
 	int err = 0, flush = 0;
        	int link_up;
-	u32 link_speed = 0;
+	uint32_t link_speed = 0;
 
 	if (!adapter->up)
 		return -EAGAIN;

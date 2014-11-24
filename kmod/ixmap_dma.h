@@ -1,4 +1,4 @@
-u8 __iomem *ixmap_dma_map_iobase(struct ixmap_adapter *ud);
+uint8_t __iomem *ixmap_dma_map_iobase(struct ixmap_adapter *ud);
 dma_addr_t ixmap_dma_map(struct ixmap_adapter *ud,
 	unsigned long addr_virtual, unsigned long size, uint8_t cache);
 int ixmap_dma_unmap(struct ixmap_adapter *ud, unsigned long addr_dma);
