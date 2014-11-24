@@ -495,7 +495,7 @@ s32 ixgbe_disable_pcie_master(struct ixgbe_hw *hw)
 	poll = ixgbe_pcie_timeout_poll(hw);
 	for (i = 0; i < poll; i++) {
 		udelay(100);
-		value = ixgbe_read_pci_cfg_word(hw, IXGBE_PCI_DEVICE_STATUS);
+		value = ixmap_read_pci_cfg_word(hw, IXGBE_PCI_DEVICE_STATUS);
 		if (IXGBE_REMOVED(hw->hw_addr))
 			goto out;
 		if (!(value & IXGBE_PCI_DEVICE_STATUS_TRANSACTION_PENDING))
@@ -522,7 +522,7 @@ u16 ixgbe_get_pcie_msix_count_generic(struct ixgbe_hw *hw){
 		return msix_count;
 	}
 
-	msix_count = ixgbe_read_pci_cfg_word(hw, pcie_offset);
+	msix_count = ixmap_read_pci_cfg_word(hw, pcie_offset);
 	if (IXGBE_REMOVED(hw->hw_addr))
 		msix_count = 0;
 	msix_count &= IXGBE_PCIE_MSIX_TBL_SZ_MASK;
@@ -584,7 +584,7 @@ static u32 ixgbe_pcie_timeout_poll(struct ixgbe_hw *hw)
 	s16 devctl2;
 	u32 pollcnt;
 
-	devctl2 = ixgbe_read_pci_cfg_word(hw, IXGBE_PCI_DEVICE_CONTROL2);
+	devctl2 = ixmap_read_pci_cfg_word(hw, IXGBE_PCI_DEVICE_CONTROL2);
 	devctl2 &= IXGBE_PCIDEVCTRL2_TIMEO_MASK;
 
 	switch (devctl2) {

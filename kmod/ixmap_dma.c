@@ -23,10 +23,10 @@
 #include "ixmap_type.h"
 #include "ixmap_dma.h"
 
-static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
+static struct list_head *ixmap_dma_area_whereto(struct ixmap_adapter *adapter,
 	unsigned long addr_dma, unsigned long size);
-static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
-	struct ixgbe_dma_area *area);
+static void ixmap_dma_area_free(struct ixmap_adapter *adapter,
+	struct ixmap_dma_area *area);
 
 #if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,6,0) )
 static int sg_alloc_table_from_pages(struct sg_table *sgt,
@@ -35,27 +35,27 @@ static int sg_alloc_table_from_pages(struct sg_table *sgt,
 	gfp_t gfp_mask);
 #endif /* < 3.6.0 */
 
-u8 __iomem *ixgbe_dma_map_iobase(struct uio_ixgbe_udapter *ud)
+u8 __iomem *ixmap_dma_map_iobase(struct ixmap_adapter *adapter)
 {
 	struct list_head *where;
-	struct ixgbe_dma_area *area;
-	unsigned long addr_dma = ud->iobase;
+	struct ixmap_dma_area *area;
+	unsigned long addr_dma = adapter->iobase;
 	u8 __iomem *hw_addr;
 
-	hw_addr = ioremap(ud->iobase, ud->iolen);
+	hw_addr = ioremap(adapter->iobase, adapter->iolen);
 	if (!hw_addr)
 		goto err_ioremap;
 
-	where = ixgbe_dma_area_whereto(ud, addr_dma, ud->iolen);
+	where = ixmap_dma_area_whereto(adapter, addr_dma, adapter->iolen);
 	if(!where)
 		goto err_area_whereto;
 
-	area = kzalloc(sizeof(struct ixgbe_dma_area), GFP_KERNEL);
+	area = kzalloc(sizeof(struct ixmap_dma_area), GFP_KERNEL);
 	if (!area)
 		goto err_alloc_area;
 
 	atomic_set(&area->refcount, 1);
-	area->size = ud->iolen;
+	area->size = adapter->iolen;
 	area->cache = IXGBE_DMA_CACHE_DISABLE;
 	area->addr_dma = addr_dma;
 	area->direction = DMA_BIDIRECTIONAL;
@@ -71,12 +71,12 @@ err_ioremap:
 	return NULL;
 }
 
-dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
+dma_addr_t ixmap_dma_map(struct ixmap_adapter *adapter,
 		unsigned long addr_virtual, unsigned long size, uint8_t cache)
 {
-	struct ixgbe_dma_area *area;
+	struct ixmap_dma_area *area;
 	struct list_head *where;
-	struct pci_dev *pdev = ud->pdev;
+	struct pci_dev *pdev = adapter->pdev;
 	struct page **pages;
 	struct sg_table *sgt;
 	struct scatterlist *sg;
@@ -144,11 +144,11 @@ dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
 	}
 
 	addr_dma = sg_dma_address(sgt->sgl);
-        where = ixgbe_dma_area_whereto(ud, addr_dma, size);
+        where = ixmap_dma_area_whereto(adapter, addr_dma, size);
         if (!where)
 		goto err_area_whereto;
 
-	area = kzalloc(sizeof(struct ixgbe_dma_area), GFP_KERNEL);
+	area = kzalloc(sizeof(struct ixmap_dma_area), GFP_KERNEL);
 	if (!area)
 		goto err_alloc_area;
 
@@ -185,38 +185,38 @@ err_alloc_pages:
 	return 0;
 }
 
-int ixgbe_dma_unmap(struct uio_ixgbe_udapter *ud, unsigned long addr_dma)
+int ixmap_dma_unmap(struct ixmap_adapter *adapter, unsigned long addr_dma)
 {
-	struct ixgbe_dma_area *area;
+	struct ixmap_dma_area *area;
 
-	area = ixgbe_dma_area_lookup(ud, addr_dma);
+	area = ixmap_dma_area_lookup(adapter, addr_dma);
 	if (!area)
 		return -ENOENT;
 
 	list_del(&area->list);
-	ixgbe_dma_area_free(ud, area);
+	ixmap_dma_area_free(adapter, area);
 
 	return 0;
 }
 
-void ixgbe_dma_unmap_all(struct uio_ixgbe_udapter *ud)
+void ixmap_dma_unmap_all(struct ixmap_adapter *adapter)
 {
-	struct ixgbe_dma_area *area, *temp;
+	struct ixmap_dma_area *area, *temp;
 
-	list_for_each_entry_safe(area, temp, &ud->areas, list) {
+	list_for_each_entry_safe(area, temp, &adapter->areas, list) {
 		list_del(&area->list);
-		ixgbe_dma_area_free(ud, area);
+		ixmap_dma_area_free(adapter, area);
 	}
 
 	return;
 }
 
-struct ixgbe_dma_area *ixgbe_dma_area_lookup(struct uio_ixgbe_udapter *ud,
+struct ixmap_dma_area *ixmap_dma_area_lookup(struct ixmap_adapter *adapter,
 	unsigned long addr_dma)
 {
-	struct ixgbe_dma_area *area;
+	struct ixmap_dma_area *area;
 
-	list_for_each_entry(area, &ud->areas, list) {
+	list_for_each_entry(area, &adapter->areas, list) {
 		if (area->addr_dma == addr_dma)
 			return area;
 	}
@@ -224,12 +224,12 @@ struct ixgbe_dma_area *ixgbe_dma_area_lookup(struct uio_ixgbe_udapter *ud,
 	return NULL;
 }
 
-static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
+static struct list_head *ixmap_dma_area_whereto(struct ixmap_adapter *adapter,
 	unsigned long addr_dma, unsigned long size)
 {
 	unsigned long start_new, end_new;
 	unsigned long start_area, end_area;
-	struct ixgbe_dma_area *area;
+	struct ixmap_dma_area *area;
 	struct list_head *last;
 
 	pr_info("add area: start = %p end = %p size = %lu\n",
@@ -237,9 +237,9 @@ static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
 
 	start_new = addr_dma;
 	end_new   = start_new + size;
-	last  = &ud->areas;
+	last  = &adapter->areas;
 
-	list_for_each_entry(area, &ud->areas, list) {
+	list_for_each_entry(area, &adapter->areas, list) {
 		start_area = area->addr_dma;
 		end_area   = start_area + area->size;
 
@@ -262,11 +262,11 @@ static struct list_head *ixgbe_dma_area_whereto(struct uio_ixgbe_udapter *ud,
 	return last;
 }
 
-static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
-	struct ixgbe_dma_area *area)
+static void ixmap_dma_area_free(struct ixmap_adapter *adapter,
+	struct ixmap_dma_area *area)
 {
-	struct ixgbe_hw *hw = ud->hw;
-	struct pci_dev *pdev = ud->pdev;
+	struct ixgbe_hw *hw = adapter->hw;
+	struct pci_dev *pdev = adapter->pdev;
 	struct page **pages;
 	struct sg_table *sgt;
 	unsigned int i, npages;
@@ -275,7 +275,7 @@ static void ixgbe_dma_area_free(struct uio_ixgbe_udapter *ud,
 		(void *)area->addr_dma, (void *)(area->addr_dma + area->size), area->size);
 
 	if (atomic_dec_and_test(&area->refcount)){
-		if(area->addr_dma == ud->iobase){
+		if(area->addr_dma == adapter->iobase){
 			iounmap(hw->hw_addr);
 		}else{
 			pages = area->pages;

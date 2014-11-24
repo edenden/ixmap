@@ -114,8 +114,6 @@ s32 ixgbe_reset_hw_82599(struct ixgbe_hw *hw){
 		}
 	}
 
-	IXGBE_DBG("detected SFP+: %d\n", hw->phy.sfp_type);
-
 mac_reset_top:
 	/*
 	 * Issue global reset to the MAC.  Needs to be SW reset if link is up.

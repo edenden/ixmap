@@ -4,7 +4,8 @@ EXTRA_CFLAGS := -Wall -Wunused-function
 # objects will be automatically built from the corresponding .c file -
 # no need to list the source files explicitly.
 obj-m := ixmap.o
-ixmap-objs := ixmap_82599.o ixmap_common.o ixmap_phy.o ixmap_eeprom.o ixmap_dma.o ixmap_main.o
+ixmap-objs := ixmap_82599.o ixmap_common.o ixmap_phy.o ixmap_eeprom.o \
+ixmap_dma.o ixmap_fops.o ixmap_main.o
 
 # KDIR is the location of the kernel source.  The current standard is
 # to link to the associated source tree from the directory containing

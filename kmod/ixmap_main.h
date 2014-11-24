@@ -1,5 +1,5 @@
-#ifndef UIO_IXGBE_H
-#define UIO_IXGBE_H
+#ifndef IXMAP_MAIN_H
+#define IXMAP_MAIN_H
 
 #include <linux/if_ether.h>
 #include <linux/types.h>
@@ -9,29 +9,17 @@
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#define DEBUG
-#ifdef DEBUG
-#define IXGBE_DBG(args...) printk(KERN_DEBUG "uio-ixgbe: " args)
-#else
-#define IXGBE_DBG(args...)
-#endif
-#define IXGBE_INFO(args...) printk(KERN_INFO "uio-ixgbe: " args)
-#define IXGBE_ERR(args...)  printk(KERN_ERR  "uio-ixgbe: " args)
-
-#define MISCDEV_NAME_SIZE	32
-#define IXGBE_10K_ITR		400
-#define IXGBE_20K_ITR		200
 #define MIN_MSIX_Q_VECTORS	1
 #define IXGBE_MAX_RSS_INDICES	16
-#define IXGBE_IVAR_ALLOC_VAL	    0x80 /* Interrupt Allocation valid */
+#define IXGBE_IVAR_ALLOC_VAL    0x80 /* Interrupt Allocation valid */
 
 /* General purpose Interrupt Enable */
-#define IXGBE_GPIE_MSIX_MODE    0x00000010 /* MSI-X mode */
-#define IXGBE_GPIE_OCD	  0x00000020 /* Other Clear Disable */
+#define IXGBE_GPIE_MSIX_MODE	0x00000010 /* MSI-X mode */
+#define IXGBE_GPIE_OCD		0x00000020 /* Other Clear Disable */
 #define IXGBE_GPIE_EIAME	0x40000000
-#define IXGBE_GPIE_PBA_SUPPORT  0x80000000
+#define IXGBE_GPIE_PBA_SUPPORT	0x80000000
 
-struct uio_ixgbe_udapter {
+struct ixmap_adapter {
 	struct list_head	list;
 	struct list_head	areas;
 	unsigned int		id;
@@ -40,8 +28,7 @@ struct uio_ixgbe_udapter {
 
 	struct miscdevice	miscdev;
 
-	struct list_head	irqdev_rx;
-	struct list_head	irqdev_tx;
+	struct list_head	irqdev_list;
 
 	struct semaphore	sem;
 	atomic_t		refcount;
@@ -63,83 +50,27 @@ struct uio_ixgbe_udapter {
 	uint16_t		num_interrupt_rate;
 };
 
-struct ixgbe_irqdev {
-	struct uio_ixgbe_udapter	*ud;
-	struct list_head		list;
-	struct miscdevice		miscdev;
-	struct semaphore		sem;
-	atomic_t			refcount;
+struct ixmap_irqdev {
+	struct ixmap_adapter	*adapter;
+	struct list_head	list;
+	struct miscdevice	miscdev;
+	struct semaphore	sem;
+	atomic_t		refcount;
 
-	struct msix_entry		*msix_entry;
-	wait_queue_head_t		read_wait;
-	atomic_t			count_interrupt;
+	struct msix_entry	*msix_entry;
+	wait_queue_head_t	read_wait;
+	atomic_t		count_interrupt;
 };
 
-/* Ioctl defines */
-
-#define UIO_IXGBE_INFO		_IOW('E', 201, int)
-/* MAC and PHY info */
-struct uio_ixgbe_info_req {
-	unsigned long	mmio_base;
-	unsigned long	mmio_size;
-
-	uint16_t	mac_type;
-	uint8_t		mac_addr[ETH_ALEN];
-	uint16_t	phy_type;
-
-	uint16_t	max_interrupt_rate;
-	uint16_t	num_interrupt_rate;
-	uint32_t	num_rx_queues;
-	uint32_t	num_tx_queues;
-	uint32_t	max_rx_queues;
-	uint32_t	max_tx_queues;
-	uint32_t	max_msix_vectors;
-};
-
-#define UIO_IXGBE_UP		_IOW('E', 202, int)
-struct uio_ixgbe_up_req {
-	uint16_t		num_interrupt_rate;
-	uint32_t		num_rx_queues;
-	uint32_t		num_tx_queues;
-};
-
-#define UIO_IXGBE_DOWN		_IOW('E', 203, int)
-#define UIO_IXGBE_RESET		_IOW('E', 204, int)
-#define UIO_IXGBE_CHECK_LINK	_IOW('E', 205, int)
-#define UIO_IXGBE_GET_LINK	_IOW('E', 206, int)
-#define UIO_IXGBE_SET_LINK	_IOW('E', 207, int)
-
-struct uio_ixgbe_link_req {
-	uint16_t  speed;
-	uint16_t  duplex;
-	uint16_t  flowctl;
-	uint16_t  media_type;
-	uint32_t  autoneg_advertised;
-	uint8_t   autoneg_wait_to_complete;
-	uint16_t  flush;  /* Indicates that TX/RX flush is necessary
-			   * after link state changed */
-};
-
-#define UIO_IXGBE_MAP		_IOW('U', 210, int)
-struct uio_ixgbe_map_req {
-	unsigned long addr_virtual;
-	unsigned long addr_dma;
-	unsigned long size;
-	uint8_t cache;
-};
-
-#define UIO_IXGBE_UNMAP		_IOW('U', 211, int)
-struct uio_ixgbe_unmap_req {
-	unsigned long addr_dma;
-};
-
-#define UIO_IRQ_INFO		_IOW('E', 201, int)
-struct uio_irq_info_req {
-	uint32_t	vector;
-	uint16_t	entry;
-};
-
-u16 ixgbe_read_pci_cfg_word(struct ixgbe_hw *hw, u32 reg);
-
+uint16_t ixmap_read_pci_cfg_word(struct ixgbe_hw *hw, uint32_t reg);
+int ixmap_adapter_inuse(struct ixmap_adapter *adapter);
+void ixmap_adapter_get(struct ixmap_adapter *adapter);
+void ixmap_adapter_put(struct ixmap_adapter *adapter);
+int ixmap_irqdev_inuse(struct ixmap_irqdev *irqdev);
+void ixmap_irqdev_get(struct ixmap_irqdev *irqdev);
+void ixmap_irqdev_put(struct ixmap_irqdev *irqdev);
+int ixmap_up(struct ixmap_adapter *adapter);
+int ixmap_down(struct ixmap_adapter *adapter);
+void ixmap_reset(struct ixmap_adapter *adapter);
 #endif /* IXGBE_IOCTL_H */
 

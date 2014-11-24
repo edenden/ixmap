@@ -1,9 +1,9 @@
-u8 __iomem *ixgbe_dma_map_iobase(struct uio_ixgbe_udapter *ud);
-dma_addr_t ixgbe_dma_map(struct uio_ixgbe_udapter *ud,
+u8 __iomem *ixmap_dma_map_iobase(struct ixmap_adapter *ud);
+dma_addr_t ixmap_dma_map(struct ixmap_adapter *ud,
 	unsigned long addr_virtual, unsigned long size, uint8_t cache);
-int ixgbe_dma_unmap(struct uio_ixgbe_udapter *ud, unsigned long addr_dma);
-void ixgbe_dma_unmap_all(struct uio_ixgbe_udapter *ud);
-struct ixgbe_dma_area *ixgbe_dma_area_lookup(struct uio_ixgbe_udapter *ud,
+int ixmap_dma_unmap(struct ixmap_adapter *ud, unsigned long addr_dma);
+void ixmap_dma_unmap_all(struct ixmap_adapter *ud);
+struct ixmap_dma_area *ixmap_dma_area_lookup(struct ixmap_adapter *ud,
 	unsigned long addr_dma);
 
 enum {
@@ -12,7 +12,7 @@ enum {
 	IXGBE_DMA_CACHE_WRITECOMBINE
 };
 
-struct ixgbe_dma_area {
+struct ixmap_dma_area {
 	struct list_head	list;
 	atomic_t		refcount;
 	unsigned long		size;
