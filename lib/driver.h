@@ -1,8 +1,3 @@
-/* RX descriptor defines */
-#define IXGBE_DEFAULT_RXD	512
-#define IXGBE_MAX_RXD		4096
-#define IXGBE_MIN_RXD		64
-
 /* Receive Descriptor bit definitions */
 #define IXGBE_RXD_STAT_DD	0x01 /* Descriptor Done */
 #define IXGBE_RXDADV_ERR_CE     0x01000000 /* CRC Error */
@@ -19,9 +14,6 @@
 				IXGBE_RXDADV_ERR_USE)
 
 /* TX descriptor defines */
-#define IXGBE_DEFAULT_TXD	512
-#define IXGBE_MAX_TXD		4096
-#define IXGBE_MIN_TXD		64
 #define IXGBE_MAX_TXD_PWR	14
 #define IXGBE_MAX_DATA_PER_TXD	(1 << IXGBE_MAX_TXD_PWR)
 

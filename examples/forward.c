@@ -11,9 +11,10 @@
 #include <signal.h>
 #include <sys/signalfd.h>
 #include <pthread.h>
+#include <ixmap.h>
 
 #include "main.h"
-#include "driver.h"
+#include "forward.h"
 
 #ifdef DEBUG
 static void dump_packet(void *buffer)
@@ -96,11 +97,11 @@ void *process_interrupt(void *data)
 				port_index = ixmap_port_index(fd_desc->irqh);
 
 				/* Rx descripter cleaning */
-				ret = ixgbe_rx_clean(instance, port_index, buf, &bulk);
-				ixgbe_rx_alloc(instance, port_index, buf);
+				ret = ixmap_rx_clean(instance, port_index, buf, &bulk);
+				ixmap_rx_alloc(instance, port_index, buf);
 
 				/* XXX: Following is 2ports specific code */
-				ixgbe_tx_xmit(instance, !port_index, buf, &bulk);
+				ixmap_tx_xmit(instance, !port_index, buf, &bulk);
 
 				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);
@@ -113,10 +114,10 @@ void *process_interrupt(void *data)
 				port_index = ixmap_port_index(fd_desc->irqh);
 
 				/* Tx descripter cleaning */
-				ret = ixgbe_tx_clean(instance, port_index, buf);
+				ret = ixmap_tx_clean(instance, port_index, buf);
 
 				/* XXX: Following is 2ports specific code */
-				ixgbe_rx_alloc(instance, !port_index, buf);
+				ixmap_rx_alloc(instance, !port_index, buf);
 
 				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);

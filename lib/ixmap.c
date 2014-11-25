@@ -13,7 +13,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#include "libixmap.h"
+#include "ixmap.h"
 
 static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask);
 static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
@@ -307,8 +307,8 @@ err_alloc_buf:
 	return NULL;
 }
 
-void ixmap_buf_release(struct ixmap_handle **ih_list,
-	int ih_num, struct ixmap_buf *buf)
+void ixmap_buf_release(struct ixmap_buf *buf,
+	struct ixmap_handle **ih_list, int ih_num)
 {
 	int i, ret;
 	unsigned long size;

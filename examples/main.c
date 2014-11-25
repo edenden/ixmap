@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -11,16 +12,18 @@
 #include <net/ethernet.h>
 #include <signal.h>
 #include <pthread.h>
-
 #include <ixmap.h>
 
 #include "main.h"
-#include "driver.h"
+#include "forward.h"
 
 static int buf_count = 16384;
 static char *ixmap_interface_list[2];
 
-static int ixmap_set_signal(sigset_t *sigset);
+static int ixmapfwd_thread_create(struct ixmapfwd_thread *thread,
+	int thread_index, unsigned int num_ports);
+static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread);
+static int ixmapfwd_set_signal(sigset_t *sigset);
 
 int main(int argc, char **argv)
 {
@@ -195,7 +198,8 @@ static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread)
 	return;
 }
 
-static int ixmapfwd_set_signal(sigset_t *sigset){
+static int ixmapfwd_set_signal(sigset_t *sigset)
+{
 	int ret;
 
 	sigemptyset(sigset);

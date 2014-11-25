@@ -8,7 +8,7 @@
 #include <net/ethernet.h>
 #include <time.h>
 
-#include "libixmap.h"
+#include "ixmap.h"
 #include "rxinit.h"
 
 static void ixmap_set_rx_mode(struct ixmap_handle *ih);

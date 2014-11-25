@@ -8,7 +8,7 @@
 #include <net/ethernet.h>
 #include <time.h>
 
-#include "libixmap.h"
+#include "ixmap.h"
 #include "txinit.h"
 
 static void ixmap_setup_mtqc(struct ixmap_handle *ih);
