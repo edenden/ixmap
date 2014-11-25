@@ -6,7 +6,7 @@ CFLAGS = -Wall
 LDFLAGS =
 TARGET = ixmapfwd
 LIBS = -lpthread
-OBJECTS = main.o driver.o
+OBJECTS = main.o forward.o
 
 .SUFFIXES: .c .o
 
