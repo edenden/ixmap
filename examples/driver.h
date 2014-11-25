@@ -9,7 +9,6 @@ enum {
 struct ixmapfwd_fd_desc {
 	int				fd;
 	int				type;
-	int				port_index;
 	struct ixmap_irqdev_handle	*irqh;
 };
 

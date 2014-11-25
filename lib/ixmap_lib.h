@@ -115,17 +115,20 @@ struct ixmap_handle {
 
 struct ixmap_irqdev_handle {
 	int			fd;
+	uint32_t		port_index;
+	uint64_t		qmask;
 };
 
 /* Per port parameter each thread takes */
 struct ixmap_port {
-	struct ixmap_handle	*ih;
-	char                    *interface_name;
-	struct ixmap_ring       *rx_ring;
-	struct ixmap_ring       *tx_ring;
+	char			*interface_name;
+	void			*irqreg[2];
+	struct ixmap_ring	*rx_ring;
+	struct ixmap_ring	*tx_ring;
 	uint32_t		mtu_frame;
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;
+	uint32_t		num_queues;
 	uint32_t		budget;
 
 	unsigned long		count_rx_alloc_failed;
@@ -135,14 +138,9 @@ struct ixmap_port {
 };
 
 /* Per thread parameter each thread takes */
-struct ixmap_thread {
-	pthread_t		tid;
-	pthread_t		ptid;
-	uint32_t		num_threads;
-	uint32_t		index;
+struct ixmap_instance {
 	uint32_t		num_ports;
 	struct ixmap_buf	*buf;
-
 	struct ixmap_port 	*ports;
 };
 

@@ -15,14 +15,79 @@
 #include "ixmap_lib.h"
 #include "ixmap_driver.h"
 
-void ixmap_rx_alloc(struct ixmap_port *port, struct ixmap_buf *buf,
-	int port_index)
+void ixmap_irq_unmask_queues(struct ixmap_intance *instance,
+	struct ixmap_irqdev_handle *irqh)
 {
+	struct ixmap_port *port;
+	uint32_t mask;
+
+	port = &instance->ports[irqh->port_index];
+
+	mask = (irqh->qmask & 0xFFFFFFFF);
+	if (mask)
+		writel(mask, port->irqreg[0]);
+	mask = (irqh->qmask >> 32);
+	if (mask)
+		writel(mask, port->irqreg[1]);
+
+	return;
+}
+
+struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance)
+{
+	struct ixmap_bulk *bulk;
+	int i, max_bulk_count = 0;
+
+	/* Prepare bulk array */
+	for(i = 0; i < instance->num_ports; i++){
+		if(instance->ports[i].budget > max_bulk_count){
+			max_bulk_count = instance->ports[i].budget;
+		}
+	}
+
+	bulk = malloc(sizeof(struct ixmap_bulk));
+	if(!bulk)
+		goto err_alloc_bulk;
+	bulk->count = 0;
+
+	bulk->slot_index = malloc(sizeof(int) * max_bulk_count);
+	if(!bulk->slot_index)
+		goto err_bulk_slot_index;
+
+	bulk->size = malloc(sizeof(uint32_t) * max_bulk_count);
+	if(!bulk->size)
+		goto err_bulk_size;
+
+	return bulk;
+
+err_alloc_bulk_size:
+	free(bulk->slot_index);
+err_alloc_bulk_slot_index:
+	free(bulk);
+err_alloc_bulk:
+	return NULL;
+}
+
+void ixmap_bulk_release(struct ixmap_bulk *bulk)
+{
+	free(bulk->size);
+	free(bulk->slot_index);
+	free(bulk);
+
+	return;
+}
+
+void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index)
+{
+	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
+	struct ixmap_buf *buf;
 	unsigned int total_allocated = 0;
 	uint16_t max_allocation;
 
+	port = &instance->ports[port_index];
 	rx_ring = port->rx_ring;
+	buf = instance->buf;
 
 	max_allocation = ixmap_desc_unused(rx_ring, port->num_rx_desc);
 	if (!max_allocation)
@@ -70,16 +135,20 @@ void ixmap_rx_alloc(struct ixmap_port *port, struct ixmap_buf *buf,
 	}
 }
 
-void ixmap_tx_xmit(struct ixmap_port *port, struct ixmap_buf *buf,
-	int port_index, struct ixmap_bulk *bulk)
+void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
+	struct ixmap_bulk *bulk)
 {
+	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
+	struct ixmap_buf *buf;
 	unsigned int total_xmit = 0;
 	uint16_t unused_count;
 	uint32_t tx_flags;
 	int i;
 
+	port = &instance->ports[port_index];
 	tx_ring = port->tx_ring;
+	buf = instance->buf;
 
 	/* Nothing to do */
 	if(unlikely(!bulk->count))
@@ -149,13 +218,17 @@ void ixmap_tx_xmit(struct ixmap_port *port, struct ixmap_buf *buf,
 	return;
 }
 
-int ixmap_rx_clean(struct ixmap_port *port, struct ixmap_buf *buf,
+int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
 	struct ixmap_bulk *bulk)
 {
+	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
+	struct ixmap_buf *buf;
 	unsigned int total_rx_packets = 0;
 
+	port = &instance->ports[port_index];
 	rx_ring = port->rx_ring;
+	buf = instance->buf;
 
 	do{
 		union ixmap_adv_rx_desc *rx_desc;
@@ -221,12 +294,16 @@ int ixmap_rx_clean(struct ixmap_port *port, struct ixmap_buf *buf,
 	return total_rx_packets;
 }
 
-int ixmap_tx_clean(struct ixmap_port *port, struct ixmap_buf *buf)
+int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index)
 {
+	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
+	struct ixmap_buf *buf;
 	unsigned int total_tx_packets = 0;
 
+	port = &instance->ports[port_index];
 	tx_ring = port->tx_ring;
+	buf = instance->buf;
 
 	do {
 		union ixmap_adv_tx_desc *tx_desc;

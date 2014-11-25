@@ -15,20 +15,6 @@
 
 #include "ixmap_lib.h"
 
-void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask)
-{
-	uint32_t mask;
-
-	mask = (qmask & 0xFFFFFFFF);
-	if (mask)
-		IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(0), mask);
-	mask = (qmask >> 32);
-	if (mask)
-		IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(1), mask);
-
-	return;
-}
-
 void ixmap_irq_enable(struct ixmap_handle *ih)
 {
 	uint32_t mask;
@@ -48,55 +34,68 @@ void ixmap_irq_enable(struct ixmap_handle *ih)
 	return;
 }
 
-struct ixmap_thread *ixmap_thread_alloc(struct ixmap_handle **ih_list,
-	int num_ports, int num_cores, int thread_index, struct ixmap_buf *buf)
+static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask)
 {
-	struct ixmap_thread *thread;
+	uint32_t mask;
+
+	mask = (qmask & 0xFFFFFFFF);
+	if (mask)
+		IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(0), mask);
+	mask = (qmask >> 32);
+	if (mask)
+		IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(1), mask);
+
+	return;
+}
+
+struct ixmap_instance *ixmap_instance_alloc(struct ixmap_handle **ih_list,
+	int num_ports, int instance_index, struct ixmap_buf *buf)
+{
+	struct ixmap_instance *instance;
 	int i;
 
-	thread = malloc(sizeof(struct ixmap_thread));
-	if(!thread)
-		goto err_thread_alloc;
+	instance = malloc(sizeof(struct ixmap_instance));
+	if(!instance)
+		goto err_instance_alloc;
 
-	thread->index = thread_index;
-	thread->num_threads = num_cores;
-	thread->num_ports = num_ports;
-	thread->buf = buf;
-	thread->ptid = pthread_self();
+	instance->num_ports = num_ports;
+	instance->buf = buf;
 
-	thread->ports = malloc(sizeof(struct ixmap_port) * num_ports);
-	if(!thread->ports){
-		printf("failed to allocate port for each thread\n");
+	instance->ports = malloc(sizeof(struct ixmap_port) * num_ports);
+	if(!instance->ports){
+		printf("failed to allocate port for each instance\n");
 		goto err_alloc_ports;
 	}
 
 	for(i = 0; i < num_ports; i++){
-		thread->ports[i].ih = ih_list[i];
-		thread->ports[i].interface_name = ih_list[i]->interface_name;
-		thread->ports[i].rx_ring = &(ih_list[i]->rx_ring[thread_index]);
-		thread->ports[i].tx_ring = &(ih_list[i]->tx_ring[thread_index]);
-		thread->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
-		thread->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
-		thread->ports[i].budget = ih_list[i]->budget;
-		thread->ports[i].mtu_frame = ih_list[i]->mtu_frame;
-		thread->ports[i].count_rx_alloc_failed = 0;
-		thread->ports[i].count_rx_clean_total = 0;
-		thread->ports[i].count_tx_xmit_failed = 0;
-		thread->ports[i].count_tx_clean_total = 0;
+		instance->ports[i].interface_name = ih_list[i]->interface_name;
+		instance->ports[i].irqreg[0] = ih_list[i]->bar + IXGBE_EIMS_EX(0);
+		instance->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
+		instance->ports[i].rx_ring = &(ih_list[i]->rx_ring[instance_index]);
+		instance->ports[i].tx_ring = &(ih_list[i]->tx_ring[instance_index]);
+		instance->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
+		instance->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
+		instance->ports[i].num_queues = ih_list[i]->num_queues;
+		instance->ports[i].budget = ih_list[i]->budget;
+		instance->ports[i].mtu_frame = ih_list[i]->mtu_frame;
+		instance->ports[i].count_rx_alloc_failed = 0;
+		instance->ports[i].count_rx_clean_total = 0;
+		instance->ports[i].count_tx_xmit_failed = 0;
+		instance->ports[i].count_tx_clean_total = 0;
 	}
 
-	return thread;
+	return instance;
 
 err_alloc_ports:
-	free(thread);
-err_thread_alloc:
+	free(instance);
+err_instance_alloc:
 	return NULL;
 }
 
-void ixmap_thread_release(struct ixmap_thread *thread)
+void ixmap_instance_release(struct ixmap_instance *instance)
 {
-	free(thread->ports);
-	free(thread);
+	free(instance->ports);
+	free(instance);
 
 	return;
 }
@@ -358,7 +357,7 @@ static int ixmap_dma_unmap(struct ixmap_handle *ih,
 }
 
 struct ixmap_handle *ixmap_open(char *interface_name,
-	uint32_t num_core, uint32_t budget, uint16_t intr_rate)
+	uint32_t num_queues_req, uint32_t budget, uint16_t intr_rate)
 {
 	struct ixmap_handle *ih;
 	char filename[FILENAME_SIZE];
@@ -389,7 +388,7 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 
 	ih->num_queues =
 		min(req_info.max_rx_queues, req_info.max_tx_queues);
-	ih->num_queues = min(num_core, ih->num_queues);
+	ih->num_queues = min(num_queues_req, ih->num_queues);
 	req_up.num_rx_queues = ih->num_queues;
 	req_up.num_tx_queues = ih->num_queues;
 
@@ -428,20 +427,30 @@ void ixmap_close(struct ixmap_handle *ih)
 	return;
 }
 
-struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_thread *thread,
-	unsigned int port_num, enum ixmap_irq_direction)
+struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
+	unsigned int port_index, unsigned int queue_index, enum ixmap_irq_direction)
 {
+	struct ixmap_port *port;
 	struct ixmap_irqdev_handle *irqh;
 	char filename[FILENAME_SIZE];
+	uint64_t qmask;
+
+	port = &instance->ports[port_index];
+
+	if(queue_index >= port->num_queues){
+		goto err_invalid_queue_index;
+	}
 
 	switch(ixmap_irq_direction){
 	case IXMAP_IRQ_RX:
 		snprintf(filename, sizeof(filename), "/dev/%s-irqrx%d",
-			ports[i].interface_name, thread_index);
+			port->interface_name, queue_index);
+		qmask = 1 << queue_index;
 		break;
 	case IXMAP_IRQ_TX:
 		snprintf(filename, sizeof(filename), "/dev/%s-irqtx%d",
-			ports[i].interface_name, thread_index);
+			port->interface_name, queue_index);
+		qmask = 1 << (queue_index + port->num_queues);
 		break;
 	case default:
 		goto err_invalid_direction;
@@ -456,12 +465,16 @@ struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_thread *thread,
 	if(irqh->fd < 0)
 		goto err_open;
 
+	irqh->port_index = port_index;
+	irqh->qmask = qmask;
+
 	return irqh;
 
 err_open:
 	free(irqh);
 err_alloc_handle:
 err_invalid_direction:
+err_invalid_queue_index:
 	return NULL;
 }
 
@@ -471,4 +484,44 @@ void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh)
 	free(irqh);
 
 	return;
+}
+
+int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
+	unsigned int core_id)
+{
+	struct uio_irq_info_req req_info;
+	FILE *file;
+	char filename[FILENAME_SIZE];
+	uint32_t mask_low, mask_high;
+	int i, ret;
+
+	mask_low = core_id <= 31 ? 1 << core_id : 0;
+	mask_high = core_id <= 31 ? 0 : 1 << (core_id - 31);
+
+	ret = ioctl(irqh->fd, UIO_IRQ_INFO, (unsigned long)&req_info);
+	if(ret < 0){
+		printf("failed to UIO_IRQ_INFO\n");
+		goto err_set_affinity;
+	}
+
+	snprintf(filename, sizeof(filename),
+		"/proc/irq/%d/smp_affinity", req_info.vector);
+	file = fopen(filename, "w");
+	if(!file){
+		printf("failed to open smp_affinity\n");
+		goto err_set_affinity;
+	}
+
+	ixgbe_print("irq affinity mask: %08x,%08x\n", mask_high, mask_low);
+	ret = fprintf(file, "%08x,%08x", mask_high, mask_low);
+	if(ret < 0){
+		fclose(file);
+		goto err_set_affinity;
+	}
+
+	fclose(file);
+	return 0;
+
+err_set_affinity:
+	return -1;
 }
