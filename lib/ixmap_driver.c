@@ -15,7 +15,7 @@
 #include "ixmap_lib.h"
 #include "ixmap_driver.h"
 
-void ixmap_irq_unmask_queues(struct ixmap_intance *instance,
+inline void ixmap_irq_unmask_queues(struct ixmap_intance *instance,
 	struct ixmap_irqdev_handle *irqh)
 {
 	struct ixmap_port *port;
@@ -33,13 +33,31 @@ void ixmap_irq_unmask_queues(struct ixmap_intance *instance,
 	return;
 }
 
-struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance)
+inline unsigned int ixmap_budget(struct ixmap_instance *instance,
+	unsigned int port_index)
+{
+	unsigned int budget;
+
+	budget = instance->ports[port_index].budget;
+	return budget;
+}
+
+inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh)
+{
+	unsigned int port_index;
+
+	port_index = irqh->port_index;
+	return port_index;
+}
+
+struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
+	unsigned int num_ports)
 {
 	struct ixmap_bulk *bulk;
 	int i, max_bulk_count = 0;
 
 	/* Prepare bulk array */
-	for(i = 0; i < instance->num_ports; i++){
+	for(i = 0; i < num_ports; i++){
 		if(instance->ports[i].budget > max_bulk_count){
 			max_bulk_count = instance->ports[i].budget;
 		}
@@ -77,17 +95,16 @@ void ixmap_bulk_release(struct ixmap_bulk *bulk)
 	return;
 }
 
-void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index)
+void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
+	struct ixmap_buf *buf)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
-	struct ixmap_buf *buf;
 	unsigned int total_allocated = 0;
 	uint16_t max_allocation;
 
 	port = &instance->ports[port_index];
 	rx_ring = port->rx_ring;
-	buf = instance->buf;
 
 	max_allocation = ixmap_desc_unused(rx_ring, port->num_rx_desc);
 	if (!max_allocation)
@@ -136,11 +153,10 @@ void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index)
 }
 
 void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
-	struct ixmap_bulk *bulk)
+	struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
-	struct ixmap_buf *buf;
 	unsigned int total_xmit = 0;
 	uint16_t unused_count;
 	uint32_t tx_flags;
@@ -148,7 +164,6 @@ void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 
 	port = &instance->ports[port_index];
 	tx_ring = port->tx_ring;
-	buf = instance->buf;
 
 	/* Nothing to do */
 	if(unlikely(!bulk->count))
@@ -219,16 +234,14 @@ void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 }
 
 int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
-	struct ixmap_bulk *bulk)
+	struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
-	struct ixmap_buf *buf;
 	unsigned int total_rx_packets = 0;
 
 	port = &instance->ports[port_index];
 	rx_ring = port->rx_ring;
-	buf = instance->buf;
 
 	do{
 		union ixmap_adv_rx_desc *rx_desc;
@@ -294,16 +307,15 @@ int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
 	return total_rx_packets;
 }
 
-int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index)
+int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index,
+	struct ixmap_buf *buf)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
-	struct ixmap_buf *buf;
 	unsigned int total_tx_packets = 0;
 
 	port = &instance->ports[port_index];
 	tx_ring = port->tx_ring;
-	buf = instance->buf;
 
 	do {
 		union ixmap_adv_tx_desc *tx_desc;
@@ -391,4 +403,26 @@ static inline void *ixmap_slot_addr_virt(struct ixmap_buf *buf,
 	return addr_virtual;
 }
 
+unsigned long ixmap_count_rx_alloc_failed(struct ixmap_instance *instance,
+	unsigned int port_index)
+{
+	return instance->ports[port_index].count_rx_alloc_failed;
+}
 
+unsigned long ixmap_count_rx_clean_total(struct ixmap_instance *instance,
+	unsigned int port_index)
+{
+	return instance->ports[port_index].count_rx_clean_total;
+}
+
+unsigned long ixmap_count_tx_xmit_failed(struct ixmap_instance *instance,
+	unsigned int port_index)
+{
+	return instance->ports[port_index].count_tx_xmit_failed;
+}
+
+unsigned long ixmap_count_tx_clean_total(struct ixmap_instance *instance,
+	unsigned int port_index)
+{
+	return instance->ports[port_index].count_tx_clean_total;
+}

@@ -119,7 +119,6 @@ struct ixmap_irqdev_handle {
 	uint64_t		qmask;
 };
 
-/* Per port parameter each thread takes */
 struct ixmap_port {
 	char			*interface_name;
 	void			*irqreg[2];
@@ -137,10 +136,7 @@ struct ixmap_port {
 	unsigned long		count_tx_clean_total;
 };
 
-/* Per thread parameter each thread takes */
 struct ixmap_instance {
-	uint32_t		num_ports;
-	struct ixmap_buf	*buf;
 	struct ixmap_port 	*ports;
 };
 

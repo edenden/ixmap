@@ -35,14 +35,18 @@ static void dump_packet(void *buffer)
 void *process_interrupt(void *data)
 {
 	struct ixmapfwd_thread *thread = data;
-	struct ixmap_instance *instance = thread->instance;
-	struct ixmapfwd_fd_desc *fd_desc_list, *fd_desc;
+	struct ixmap_instance *instance;
+	struct ixmap_buf *buf;
 	struct ixmap_bulk *bulk;
+	struct ixmapfwd_fd_desc *fd_desc_list, *fd_desc;
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int read_size, fd_ep, i, ret, num_fd;
+	unsigned int port_index;
 	uint8_t *read_buf;
 
 	ixgbe_print("thread %d started\n", thread->index);
+	instance = thread->instance;
+	buf = thread->buf;
 
 	/* Prepare read buffer */
 	read_size = max(sizeof(uint32_t),
@@ -58,7 +62,7 @@ void *process_interrupt(void *data)
 
 	/* Prepare each fd in epoll */
 	fd_ep = ixmapfwd_epoll_prepare(&fd_desc_list,
-		instance, instance->num_ports, thread->index);
+		instance, thread->num_ports, thread->index);
 	if(fd_ep < 0){
 		printf("failed to epoll prepare\n");
 		goto err_ixgbe_epoll_prepare;
@@ -66,15 +70,15 @@ void *process_interrupt(void *data)
 
 	/* Set interrupt masks */
 	ret = ixmapfwd_irq_setmask(fd_desc_list, 
-		instance->num_ports, thread->index);
+		thread->num_ports, thread->index);
 	if(ret < 0){
 		printf("failed to set irq affinity mask\n");
 		goto err_ixgbe_irq_setmask;
 	}
 
 	/* Prepare initial RX buffer */
-	for(i = 0; i < instance->num_ports; i++){
-		ixmap_rx_alloc(instance, i);
+	for(i = 0; i < thread->num_ports; i++){
+		ixmap_rx_alloc(instance, i, buf);
 	}
 
 	while(1){
@@ -89,16 +93,16 @@ void *process_interrupt(void *data)
 			
 			switch(fd_desc->type){
 			case IXMAPFWD_IRQ_RX:
+				port_index = ixmap_port_index(fd_desc->irqh);
+
 				/* Rx descripter cleaning */
-				ret = ixgbe_rx_clean(instance, fd_desc->irqh->port_index,
-					&bulk);
-				ixgbe_rx_alloc(instance, fd_desc->irqh->port_index);
+				ret = ixgbe_rx_clean(instance, port_index, buf, &bulk);
+				ixgbe_rx_alloc(instance, port_index, buf);
 
 				/* XXX: Following is 2ports specific code */
-				ixgbe_tx_xmit(instance, !fd_desc->irqh->port_index,
-					&bulk);
+				ixgbe_tx_xmit(instance, !port_index, buf, &bulk);
 
-				if(ret < thread->ports[irq_data->port_index].budget){
+				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);
 					if(ret < 0)
 						goto out;
@@ -106,13 +110,15 @@ void *process_interrupt(void *data)
 				}
 				break;
 			case IXMAPFWD_IRQ_TX:
+				port_index = ixmap_port_index(fd_desc->irqh);
+
 				/* Tx descripter cleaning */
-				ret = ixgbe_tx_clean(instance, fd_desc->irqh->port_index);
+				ret = ixgbe_tx_clean(instance, port_index, buf);
 
 				/* XXX: Following is 2ports specific code */
-				ixgbe_rx_alloc(instance, !fd_desc->irqh->port_index);
+				ixgbe_rx_alloc(instance, !port_index, buf);
 
-				if(ret < thread->ports[irq_data->port_index].budget){
+				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);
 					if(ret < 0)
 						goto out;
@@ -132,24 +138,14 @@ void *process_interrupt(void *data)
 	}
 
 out:
-	ixgbe_epoll_destroy(fd_desc_list, fd_ep, instance->num_ports);
+	ixgbe_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 	ixmap_bulk_release(bulk);
 	free(read_buf);
-	for(i = 0; i < thread->num_ports; i++){
-		printf("thread %d port %d statictis:\n", thread->index, i);
-		printf("\tRx allocation failed = %lu\n",
-			thread->ports[i].count_rx_alloc_failed);
-		printf("\tRx packetes received = %lu\n",
-			thread->ports[i].count_rx_clean_total);
-		printf("\tTx xmit failed = %lu\n",
-			thread->ports[i].count_tx_xmit_failed);
-		printf("\tTx packetes transmitted = %lu\n",
-			thread->ports[i].count_tx_clean_total);
-	}
+	ixmapfwd_print_result(thread);
 	return NULL;
 
 err_ixgbe_irq_setmask:
-	ixgbe_epoll_destroy(fd_desc_list, fd_ep, instance->num_ports);
+	ixgbe_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 err_ixgbe_epoll_prepare:
 	ixmap_bulk_release(bulk);
 err_bulk_alloc:
@@ -337,3 +333,20 @@ static int ixmapfwd_signalfd_create(){
 	return signal_fd;
 }
 
+static void ixmapfwd_print_result(struct ixmapfwd_thread *thread)
+{
+	int i;
+
+	for(i = 0; i < thread->num_ports; i++){
+		printf("thread %d port %d statictis:\n", thread->index, i);
+		printf("\tRx allocation failed = %lu\n",
+			ixmap_count_rx_alloc_failed(thread->instance, i));
+		printf("\tRx packetes received = %lu\n",
+			ixmap_count_rx_clean_total(thread->instance, i));
+		printf("\tTx xmit failed = %lu\n",
+			ixmap_count_tx_xmit_failed(thread->instance, i));
+		printf("\tTx packetes transmitted = %lu\n",
+			ixmap_count_tx_clean_total(thread->instance, i));
+	}
+	return;
+}

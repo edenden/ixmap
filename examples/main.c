@@ -96,7 +96,8 @@ int main(int argc, char **argv)
 	}
 
 	for(i = 0; i < num_cores; i++, cores_assigned++){
-		threads[i].buf = ixmap_buf_alloc(ih_list, num_ports, buf_count, buf_size);
+		threads[i].buf = ixmap_buf_alloc(ih_list, num_ports,
+					buf_count, buf_size);
 		if(!threads[i].buf){
 			printf("failed to ixmap_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
@@ -104,18 +105,18 @@ int main(int argc, char **argv)
 			goto err_assign_cores;
 		}
 
-		threads[i].instance = ixmap_instance_alloc(ih_list, num_ports, i, buf);
+		threads[i].instance = ixmap_instance_alloc(ih_list, num_ports, i);
 		if(!threads[i].instance){
 			printf("failed to ixmap_instance_alloc, idx = %d\n", i);
-			ixmap_buf_release(ih_list, num_ports, threads[i].buf);
+			ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 			ret = -1;
 			goto err_assign_cores;
 		}
 
-		ret = ixmapfwd_thread_create(&threads[i], i);
+		ret = ixmapfwd_thread_create(&threads[i], i, num_ports);
 		if(ret < 0){
 			ixmap_instance_release(threads[i].instance);
-			ixmap_buf_release(ih_list, num_ports, threads[i].buf);
+			ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 			ret = -1;
 			goto err_assign_cores;
 		}
@@ -132,7 +133,7 @@ err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixmapfwd_thread_kill(&threads[i]);
 		ixmap_instance_release(threads[i].instance);
-		ixmap_buf_release(ih_list, num_ports, threads[i].buf);
+		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 	}
 err_ixmap_set_signal:
 	free(threads);
@@ -148,12 +149,13 @@ err_ih_list:
 }
 
 static int ixmapfwd_thread_create(struct ixmapfwd_thread *thread,
-	int thread_index)
+	int thread_index, unsigned int num_ports)
 {
 	cpu_set_t cpuset;
 	int ret;
 
 	thread->index = thread_index;
+	thread->num_ports = num_ports;
 	thread->ptid = pthread_self();
 
 	ret = pthread_create(&thread->tid, NULL, process_interrupt, thread);

@@ -49,7 +49,7 @@ static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask)
 }
 
 struct ixmap_instance *ixmap_instance_alloc(struct ixmap_handle **ih_list,
-	int num_ports, int instance_index, struct ixmap_buf *buf)
+	int ih_num, int queue_index)
 {
 	struct ixmap_instance *instance;
 	int i;
@@ -58,21 +58,18 @@ struct ixmap_instance *ixmap_instance_alloc(struct ixmap_handle **ih_list,
 	if(!instance)
 		goto err_instance_alloc;
 
-	instance->num_ports = num_ports;
-	instance->buf = buf;
-
-	instance->ports = malloc(sizeof(struct ixmap_port) * num_ports);
+	instance->ports = malloc(sizeof(struct ixmap_port) * ih_num);
 	if(!instance->ports){
 		printf("failed to allocate port for each instance\n");
 		goto err_alloc_ports;
 	}
 
-	for(i = 0; i < num_ports; i++){
+	for(i = 0; i < ih_num; i++){
 		instance->ports[i].interface_name = ih_list[i]->interface_name;
 		instance->ports[i].irqreg[0] = ih_list[i]->bar + IXGBE_EIMS_EX(0);
 		instance->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
-		instance->ports[i].rx_ring = &(ih_list[i]->rx_ring[instance_index]);
-		instance->ports[i].tx_ring = &(ih_list[i]->tx_ring[instance_index]);
+		instance->ports[i].rx_ring = &(ih_list[i]->rx_ring[queue_index]);
+		instance->ports[i].tx_ring = &(ih_list[i]->tx_ring[queue_index]);
 		instance->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
 		instance->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
 		instance->ports[i].num_queues = ih_list[i]->num_queues;
@@ -234,7 +231,7 @@ void ixmap_desc_release(struct ixmap_handle *ih)
 }
 
 struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
-	int num_ports, uint32_t count, uint32_t buf_size)
+	int ih_num, uint32_t count, uint32_t buf_size)
 {
 	struct ixmap_buf *buf;
 	void	*addr_virtual;
@@ -246,7 +243,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	if(!buf)
 		goto err_alloc_buf;
 
-	buf->addr_dma = malloc(sizeof(unsigned long) * num_ports);
+	buf->addr_dma = malloc(sizeof(unsigned long) * ih_num);
 	if(!buf->addr_dma)
 		goto err_alloc_buf_addr_dma;
 
@@ -265,7 +262,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	if(addr_virtual == MAP_FAILED)
 		goto err_mmap;
 
-	for(i = 0; i < num_ports; i++, mapped_ports++){
+	for(i = 0; i < ih_num; i++, mapped_ports++){
 		ret = ixmap_dma_map(ih_list[i], addr_virtual, &addr_dma, size);
 		if(ret < 0)
 			goto err_ixmap_dma_map;
@@ -305,14 +302,14 @@ err_alloc_buf:
 }
 
 void ixmap_buf_release(struct ixmap_handle **ih_list,
-	int num_ports, struct ixmap_buf *buf)
+	int ih_num, struct ixmap_buf *buf)
 {
 	int i, ret;
 	unsigned long size;
 
 	free(buf->free_index);
 
-	for(i = 0; i < num_ports; i++){
+	for(i = 0; i < ih_num; i++){
 		ret = ixmap_dma_unmap(ih_list[i], buf->addr_dma[i]);
 		if(ret < 0)
 			perror("failed to unmap buf");

@@ -22,6 +22,7 @@ struct ixmapfwd_thread {
 	int			index;
 	pthread_t		tid;
 	pthread_t		ptid;
+	int			num_ports;
 	struct ixmap_buf	*buf;
 	struct ixmap_instance	*instance;
 };
