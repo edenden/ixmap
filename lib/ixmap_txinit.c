@@ -8,20 +8,19 @@
 #include <net/ethernet.h>
 #include <time.h>
 
-#include "main.h"
-#include "driver.h"
-#include "txinit.h"
+#include "ixmap_lib.h"
+#include "ixmap_txinit.h"
 
-static void ixgbe_setup_mtqc(struct ixgbe_handle *ih);
-static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
-	uint8_t reg_idx, struct ixgbe_ring *ring);
+static void ixmap_setup_mtqc(struct ixmap_handle *ih);
+static void ixmap_configure_tx_ring(struct ixmap_handle *ih,
+	uint8_t reg_idx, struct ixmap_ring *ring);
 
-void ixgbe_configure_tx(struct ixgbe_handle *ih)
+void ixmap_configure_tx(struct ixmap_handle *ih)
 {
 	uint32_t dmatxctl;
 	int i;
 
-	ixgbe_setup_mtqc(ih);
+	ixmap_setup_mtqc(ih);
 
 	/* DMATXCTL.EN must be before Tx queues are enabled */
 	dmatxctl = IXGBE_READ_REG(ih, IXGBE_DMATXCTL);
@@ -30,11 +29,11 @@ void ixgbe_configure_tx(struct ixgbe_handle *ih)
 
 	/* Setup the HW Tx Head and Tail descriptor pointers */
 	for (i = 0; i < ih->num_queues; i++)
-		ixgbe_configure_tx_ring(ih, i, &ih->tx_ring[i]);
+		ixmap_configure_tx_ring(ih, i, &ih->tx_ring[i]);
 	return;
 }
 
-static void ixgbe_setup_mtqc(struct ixgbe_handle *ih)
+static void ixmap_setup_mtqc(struct ixmap_handle *ih)
 {
 	uint32_t rttdcs, mtqc;
 
@@ -56,8 +55,8 @@ static void ixgbe_setup_mtqc(struct ixgbe_handle *ih)
 	return;
 }
 
-static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
-	uint8_t reg_idx, struct ixgbe_ring *ring)
+static void ixmap_configure_tx_ring(struct ixmap_handle *ih,
+	uint8_t reg_idx, struct ixmap_ring *ring)
 {
 	int wait_loop = 10;
 	uint32_t txdctl = IXGBE_TXDCTL_ENABLE;
@@ -77,7 +76,7 @@ static void ixgbe_configure_tx_ring(struct ixgbe_handle *ih,
 	IXGBE_WRITE_REG(ih, IXGBE_TDBAH(reg_idx),
 			addr_dma >> 32);
 	IXGBE_WRITE_REG(ih, IXGBE_TDLEN(reg_idx),
-			ih->num_tx_desc * sizeof(union ixgbe_adv_tx_desc));
+			ih->num_tx_desc * sizeof(union ixmap_adv_tx_desc));
 
 	/* disable head writeback */
 	IXGBE_WRITE_REG(ih, IXGBE_TDWBAH(reg_idx), 0);

@@ -1,17 +1,3 @@
-#define EPOLL_MAXEVENTS 16
-
-enum {
-	IXGBE_IRQ_RX = 0,
-	IXGBE_IRQ_TX,
-	IXGBE_SIGNAL
-};
-
-struct ixgbe_irq_data {
-	int	fd;
-	int	type;
-	int	port_index;
-};
-
 /* RX descriptor defines */
 #define IXGBE_DEFAULT_RXD	512
 #define IXGBE_MAX_RXD		4096
@@ -54,7 +40,7 @@ struct ixgbe_irq_data {
 				14 /* Adv desc PAYLEN shift */
 
 /* Receive Descriptor - Advanced */
-union ixgbe_adv_rx_desc {
+union ixmap_adv_rx_desc {
 	struct {
 		uint64_t pkt_addr; /* Packet buffer address */
 		uint64_t hdr_addr; /* Header buffer address */
@@ -85,7 +71,7 @@ union ixgbe_adv_rx_desc {
 };
 
 /* Transmit Descriptor - Advanced */
-union ixgbe_adv_tx_desc {
+union ixmap_adv_tx_desc {
 	struct {
 		uint64_t buffer_addr; /* Address of descriptor's data buf */
 		uint32_t cmd_type_len;
@@ -111,13 +97,13 @@ static inline void writel(uint32_t b, volatile void *addr)
 	*(volatile uint32_t *) addr = htole32(b);
 }
 
-static inline uint32_t IXGBE_READ_REG(struct ixgbe_handle *ih, uint32_t reg)
+static inline uint32_t IXGBE_READ_REG(struct ixmap_handle *ih, uint32_t reg)
 {
 	uint32_t value = readl(ih->bar + reg);
 	return value;
 }
 
-static inline void IXGBE_WRITE_REG(struct ixgbe_handle *ih, uint32_t reg, uint32_t value)
+static inline void IXGBE_WRITE_REG(struct ixmap_handle *ih, uint32_t reg, uint32_t value)
 {
 	writel(value, ih->bar + reg);
 	return;
@@ -126,10 +112,10 @@ static inline void IXGBE_WRITE_REG(struct ixgbe_handle *ih, uint32_t reg, uint32
 #define IXGBE_WRITE_FLUSH(a) IXGBE_READ_REG(a, IXGBE_STATUS)
 
 /*
- * ixgbe_desc_unused - calculate if we have unused descriptors.
+ * ixmap_desc_unused - calculate if we have unused descriptors.
  * "-1" ensures next_to_clean does not overtake next_to_clean.
  */
-static inline uint16_t ixgbe_desc_unused(struct ixgbe_ring *ring,
+static inline uint16_t ixmap_desc_unused(struct ixmap_ring *ring,
 	uint16_t num_desc)
 {
         uint16_t next_to_clean = ring->next_to_clean;
@@ -140,14 +126,14 @@ static inline uint16_t ixgbe_desc_unused(struct ixgbe_ring *ring,
 		: (num_desc - next_to_use) + next_to_clean - 1;
 }
 
-/* ixgbe_test_staterr - tests bits in Rx descriptor status and error fields */
-static inline uint32_t ixgbe_test_staterr(union ixgbe_adv_rx_desc *rx_desc,
+/* ixmap_test_staterr - tests bits in Rx descriptor status and error fields */
+static inline uint32_t ixmap_test_staterr(union ixmap_adv_rx_desc *rx_desc,
                                         const uint32_t stat_err_bits)
 {
 	return rx_desc->wb.upper.status_error & htole32(stat_err_bits);
 }
 
-static inline void ixgbe_write_tail(struct ixgbe_ring *ring, uint32_t value)
+static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value)
 {
 	writel(value, ring->tail);
 }
@@ -163,7 +149,7 @@ static inline void ixgbe_write_tail(struct ixgbe_ring *ring, uint32_t value)
 #endif
 
 #define IXGBE_RX_DESC(R, i)	\
-	(&(((union ixgbe_adv_rx_desc *)((R)->addr_virtual))[i]))
+	(&(((union ixmap_adv_rx_desc *)((R)->addr_virtual))[i]))
 #define IXGBE_TX_DESC(R, i)	\
-	(&(((union ixgbe_adv_tx_desc *)((R)->addr_virtual))[i]))
+	(&(((union ixmap_adv_tx_desc *)((R)->addr_virtual))[i]))
 

@@ -15,15 +15,6 @@
 #include "main.h"
 #include "driver.h"
 
-static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
-	struct ixgbe_port *ports, uint32_t num_ports, uint32_t thread_index);
-static void ixgbe_epoll_destroy(struct ixgbe_irq_data *irq_data_list,
-	int fd_ep, int num_ports);
-static int epoll_add(int fd_ep, void *ptr, int fd);
-static int ixgbe_irq_setmask(struct ixgbe_irq_data *irq_data_list,
-	int num_ports, int thread_index);
-static int signalfd_create();
-
 #ifdef DEBUG
 static void dump_packet(void *buffer)
 {
@@ -44,7 +35,7 @@ static void dump_packet(void *buffer)
 void *process_interrupt(void *data)
 {
 	struct ixgbe_thread *thread = data;
-	struct ixgbe_irq_data *irq_data_list, *irq_data;
+	struct ixmapfwd_fd_desc *fd_desc_list, *fd_desc;
 	struct ixgbe_bulk bulk;
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	uint64_t tx_qmask, rx_qmask;
@@ -80,7 +71,7 @@ void *process_interrupt(void *data)
 		goto err_bulk_size;
 
 	/* Prepare TX-irq/RX-irq/signalfd in epoll */
-	fd_ep = ixgbe_epoll_prepare(&irq_data_list,
+	fd_ep = ixgbe_epoll_prepare(&fd_desc_list,
 		thread->ports, thread->num_ports, thread->index);
 	if(fd_ep < 0){
 		printf("failed to epoll prepare\n");
@@ -108,10 +99,10 @@ void *process_interrupt(void *data)
 		}
 
 		for(i = 0; i < num_fd; i++){
-			irq_data = (struct ixgbe_irq_data *)events[i].data.ptr;
+			fd_desc = (struct ixmapfwd_fd_desc *)events[i].data.ptr;
 			
-			switch(irq_data->type){
-			case IXGBE_IRQ_RX:
+			switch(fd_desc->type){
+			case IXMAPFWD_IRQ_RX:
 				/* Rx descripter cleaning */
 				ixgbe_print("Rx: descripter cleaning on thread %d\n",
 					thread->index);
@@ -138,7 +129,7 @@ void *process_interrupt(void *data)
 						rx_qmask);
 				}
 				break;
-			case IXGBE_IRQ_TX:
+			case IXMAPFWD_IRQ_TX:
 				/* Tx descripter cleaning */
 				ixgbe_print("Tx: descripter cleaning on thread %d\n",
 					thread->index);
@@ -159,7 +150,7 @@ void *process_interrupt(void *data)
 						tx_qmask);
 				}
 				break;
-			case IXGBE_SIGNAL:
+			case IXMAPFWD_SIGNAL:
 				ret = read(irq_data->fd, read_buf, read_size);
 				if(ret < 0)
 					continue;
@@ -172,8 +163,7 @@ void *process_interrupt(void *data)
 	}
 
 out:
-	ixgbe_epoll_destroy(irq_data_list,
-		fd_ep, thread->num_ports);
+	ixgbe_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 	free(bulk.size);
 	free(bulk.slot_index);
 	free(read_buf);
@@ -191,8 +181,7 @@ out:
 	return NULL;
 
 err_ixgbe_irq_setmask:
-	ixgbe_epoll_destroy(irq_data_list,
-		fd_ep, thread->num_ports);
+	ixgbe_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 err_ixgbe_epoll_prepare:
 	free(bulk.size);
 err_bulk_size:
@@ -205,11 +194,11 @@ err_alloc_read_buf:
 	return NULL;
 }
 
-static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
+static int ixgbe_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
 	struct ixgbe_port *ports, uint32_t num_ports, uint32_t thread_index)
 {
-	char filename[FILENAME_SIZE];
-	struct ixgbe_irq_data *irq_data_list;
+	struct ixmapfwd_fd_desc *fd_desc_list;
+	struct ixmapfwd_fd_desc *fd_desc_rx, *fd_desc_tx;
 	int fd_ep, i, ret;
 	int assigned_ports = 0;
 
@@ -221,103 +210,112 @@ static int ixgbe_epoll_prepare(struct ixgbe_irq_data **_irq_data_list,
 	}
 
 	/* TX/RX interrupt data preparing */
-	irq_data_list =
-		malloc(sizeof(struct ixgbe_irq_data) * (num_ports * 2 + 1));
-	if(!irq_data_list)
-		goto err_alloc_irq_data_list;
+	fd_desc_list =
+		malloc(sizeof(struct ixmapfwd_fd_desc) * (num_ports * 2 + 1));
+	if(!fd_desc_list)
+		goto err_alloc_fddesc;
 
 	for(i = 0; i < num_ports; i++, assigned_ports++){
+		fd_desc_rx = &fd_desc_list[i];
+		fd_desc_tx = &fd_desc_list[i + num_ports];
+		
 		/* Rx interrupt fd preparing */
-		snprintf(filename, sizeof(filename), "/dev/%s-irqrx%d",
-			ports[i].interface_name, thread_index);
-		irq_data_list[i].fd = open(filename, O_RDWR);
-		if(irq_data_list[i].fd < 0){
+		fd_desc_rx->irqh =
+			ixmap_irqdev_open(thread, i, IXMAP_IRQ_RX);
+		if(!fd_desc_rx->irqh){
 			perror("failed to open");
 			goto err_assign_port;
-		}
-
-		irq_data_list[i].type = IXGBE_IRQ_RX;
-		irq_data_list[i].port_index = i;
+                }
+		fd_desc_rx->fd = fd_desc_rx->irqh.fd;
+		fd_desc_rx->type = IXMAPFWD_IRQ_RX;
+		fd_desc_rx->port_index = i;
 
 		/* Tx interrupt fd preparing */
-		snprintf(filename, sizeof(filename), "/dev/%s-irqtx%d",
-			ports[i].interface_name, thread_index);
-		irq_data_list[i + num_ports].fd = open(filename, O_RDWR);
-		if(irq_data_list[i + num_ports].fd < 0){
+		fd_desc_tx->irqh =
+			ixmap_irqdev_open(thread, i, IXMAP_IRQ_TX);
+		if(!fd_desc_tx->irqh){
+			ixmap_irqdev_close(fd_desc_rx->irqh);
 			perror("failed to open");
-			close(irq_data_list[i].fd);
+			goto err_assign_port;
+		}
+		fd_desc_tx->fd =
+			fd_desc_tx->irqh.fd;
+		fd_desc_tx->type = IXMAPFWD_IRQ_TX;
+		fd_desc_tx->port_index = i;
+
+		ret = epoll_add(fd_ep, fd_desc_rx, fd_desc_rx->fd);
+		if(ret < 0){
+			perror("failed to add fd in epoll");
+			ixmap_irqdev_close(fd_desc_rx->irqh);
+			ixmap_irqdev_close(fd_desc_tx->irqh);
 			goto err_assign_port;
 		}
 
-		irq_data_list[i + num_ports].type = IXGBE_IRQ_TX;
-		irq_data_list[i + num_ports].port_index = i;
-
-		ret = epoll_add(fd_ep, &irq_data_list[i],
-			irq_data_list[i].fd);
+		ret = epoll_add(fd_ep, fd_desc_tx,
+			fd_desc_tx->fd);
 		if(ret < 0){
 			perror("failed to add fd in epoll");
-			close(irq_data_list[i].fd);
-			close(irq_data_list[i + num_ports].fd);
-			goto err_assign_port;
-		}
-
-		ret = epoll_add(fd_ep, &irq_data_list[i + num_ports],
-			irq_data_list[i + num_ports].fd);
-		if(ret < 0){
-			perror("failed to add fd in epoll");
-			close(irq_data_list[i].fd);
-			close(irq_data_list[i + num_ports].fd);
+			ixmap_irqdev_close(fd_desc_rx->irqh);
+			ixmap_irqdev_close(fd_desc_tx->irqh);
 			goto err_assign_port;
 		}
 	}
 
 	/* signalfd preparing */
-	irq_data_list[num_ports * 2].fd = signalfd_create();
-	if(irq_data_list[num_ports * 2].fd < 0){
+	fd_desc[num_ports * 2].fd = signalfd_create();
+	if(fd_desc[num_ports * 2].fd < 0){
 		perror("failed to open signalfd");
 		goto err_signalfd_create;
         }
-	irq_data_list[num_ports * 2].type = IXGBE_SIGNAL;
+	fd_desc[num_ports * 2].irqh = NULL;
+	irq_data_list[num_ports * 2].type = IXMAPFWD_SIGNAL;
 	irq_data_list[num_ports * 2].port_index = -1;
 
-	ret = epoll_add(fd_ep, &irq_data_list[num_ports * 2],
-		irq_data_list[num_ports * 2].fd);
+	ret = epoll_add(fd_ep, &fd_desc[num_ports * 2],
+		fd_desc[num_ports * 2].fd);
 	if(ret < 0){
 		perror("failed to add fd in epoll");
 		goto err_epoll_add_signal_fd;
 	}
 
-	*_irq_data_list = irq_data_list;
+	*_fd_desc_list = fd_desc_list;
 	return fd_ep;
 
 err_epoll_add_signal_fd:
-	close(irq_data_list[num_ports * 2].fd);
+	close(fd_desc[num_ports * 2].fd);
 err_signalfd_create:
 err_assign_port:
 	for(i = 0; i < assigned_ports; i++){
-		close(irq_data_list[i].fd);
-		close(irq_data_list[i + num_ports].fd);
+		fd_desc_rx = &fd_desc_list[i];
+		fd_desc_tx = &fd_desc_list[i + num_ports];
+
+		ixmap_irqdev_close(fd_desc_rx->irqh);
+		ixmap_irqdev_close(fd_desc_tx->irqh);
 	}
-	free(irq_data_list);
-err_alloc_irq_data_list:
+	free(fd_desc_list);
+err_alloc_fddesc:
 	close(fd_ep);
 err_epoll_create:
 	return -1;
 }
 
-static void ixgbe_epoll_destroy(struct ixgbe_irq_data *irq_data_list,
+static void ixgbe_epoll_destroy(struct ixmapfwd_fd_desc *fd_desc_list,
 	int fd_ep, int num_ports)
 {
+	struct ixmapfwd_fd_desc *fd_desc_rx, *fd_desc_tx;
 	int i;
 
-	close(irq_data_list[num_ports * 2].fd);
+	close(fd_desc_list[num_ports * 2].fd);
 
 	for(i = 0; i < num_ports; i++){
-		close(irq_data_list[i].fd);
-		close(irq_data_list[i + num_ports].fd);
+		fd_desc_rx = &fd_desc_list[i];
+		fd_desc_tx = &fd_desc_list[i + num_ports];
+
+		ixmap_irqdev_close(fd_desc_rx->irqh);
+		ixmap_irqdev_close(fd_desc_tx->irqh);
 	}
 
-	free(irq_data_list);
+	free(fd_desc_list);
 	close(fd_ep);
 	return;
 }

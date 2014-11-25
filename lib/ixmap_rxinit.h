@@ -110,6 +110,3 @@
 #define IXGBE_VMOLR_BAM		0x08000000 /* accept broadcast packets */
 #define IXGBE_VMOLR_MPE		0x10000000 /* multicast promiscuous */
 
-
-void ixgbe_configure_rx(struct ixgbe_handle *ih);
-

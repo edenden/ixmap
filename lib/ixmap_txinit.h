@@ -24,4 +24,3 @@
 /* Multiple Transmit Queue Command Register */
 #define IXGBE_MTQC_64Q_1PB	0x0 /* 64 queues 1 pack buffer */
 
-void ixgbe_configure_tx(struct ixgbe_handle *ih);
