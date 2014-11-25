@@ -1,3 +1,6 @@
+#ifndef _IXMAP_DRIVER_H
+#define _IXMAP_DRIVER_H
+
 /* Receive Descriptor bit definitions */
 #define IXGBE_RXD_STAT_DD	0x01 /* Descriptor Done */
 #define IXGBE_RXDADV_ERR_CE     0x01000000 /* CRC Error */
@@ -76,3 +79,4 @@ static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value)
 #define IXGBE_TX_DESC(R, i)	\
 	(&(((union ixmap_adv_tx_desc *)((R)->addr_virtual))[i]))
 
+#endif /* _IXMAP_DRIVER_H */

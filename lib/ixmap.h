@@ -1,3 +1,6 @@
+#ifndef _IXMAP_H
+#define _IXMAP_H
+
 //#define DEBUG
 
 #define ALIGN(x,a)		__ALIGN_MASK(x,(typeof(x))(a)-1)
@@ -256,3 +259,5 @@ static inline void IXGBE_WRITE_REG(struct ixmap_handle *ih, uint32_t reg, uint32
 }
 
 #define IXGBE_WRITE_FLUSH(a)	IXGBE_READ_REG(a, IXGBE_STATUS)
+
+#endif /* _IXMAP_H */

@@ -16,6 +16,16 @@
 #include "main.h"
 #include "forward.h"
 
+static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
+	struct ixmap_instance *instance, uint32_t num_ports, uint32_t queue_index);
+static void ixmapfwd_epoll_destroy(struct ixmapfwd_fd_desc *fd_desc_list,
+	int fd_ep, int num_ports);
+static int ixmapfwd_epoll_add(int fd_ep, void *ptr, int fd);
+static int ixmapfwd_irq_setmask(struct ixmapfwd_fd_desc *fd_desc_list,
+	int num_ports, int core_id);
+static int ixmapfwd_signalfd_create();
+static void ixmapfwd_print_result(struct ixmapfwd_thread *thread);
+
 #ifdef DEBUG
 static void dump_packet(void *buffer)
 {
@@ -57,7 +67,7 @@ void *process_interrupt(void *data)
 		goto err_alloc_read_buf;
 
 	/* Prepare bulk array */
-	bulk = ixmap_bulk_alloc(instance);
+	bulk = ixmap_bulk_alloc(instance, thread->num_ports);
 	if(!bulk)
 		goto err_bulk_alloc;
 
@@ -97,11 +107,11 @@ void *process_interrupt(void *data)
 				port_index = ixmap_port_index(fd_desc->irqh);
 
 				/* Rx descripter cleaning */
-				ret = ixmap_rx_clean(instance, port_index, buf, &bulk);
+				ret = ixmap_rx_clean(instance, port_index, buf, bulk);
 				ixmap_rx_alloc(instance, port_index, buf);
 
 				/* XXX: Following is 2ports specific code */
-				ixmap_tx_xmit(instance, !port_index, buf, &bulk);
+				ixmap_tx_xmit(instance, !port_index, buf, bulk);
 
 				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);
@@ -139,14 +149,14 @@ void *process_interrupt(void *data)
 	}
 
 out:
-	ixgbe_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
+	ixmapfwd_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 	ixmap_bulk_release(bulk);
 	free(read_buf);
 	ixmapfwd_print_result(thread);
 	return NULL;
 
 err_ixgbe_irq_setmask:
-	ixgbe_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
+	ixmapfwd_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 err_ixgbe_epoll_prepare:
 	ixmap_bulk_release(bulk);
 err_bulk_alloc:
@@ -158,12 +168,12 @@ err_alloc_read_buf:
 }
 
 static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
-	struct ixgbe_instance *instance, uint32_t num_ports, uint32_t queue_index)
+	struct ixmap_instance *instance, uint32_t num_ports, uint32_t queue_index)
 {
 	struct ixmapfwd_fd_desc *fd_desc_list;
 	struct ixmapfwd_fd_desc *fd_desc_rx, *fd_desc_tx;
 	struct ixmapfwd_fd_desc *fd_desc_sig;
-	int fd_ep, num_fd, port_index, ret;
+	int fd_ep, num_fd, i, ret;
 	int assigned_ports = 0;
 
 	/* epoll fd preparing */
@@ -179,32 +189,32 @@ static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
 	if(!fd_desc_list)
 		goto err_alloc_fddesc;
 
-	for(port_index = 0; i < num_ports; i++, assigned_ports++){
-		fd_desc_rx = &fd_desc_list[port_index];
-		fd_desc_tx = &fd_desc_list[port_index + num_ports];
+	for(i = 0; i < num_ports; i++, assigned_ports++){
+		fd_desc_rx = &fd_desc_list[i];
+		fd_desc_tx = &fd_desc_list[i + num_ports];
 		
 		/* Rx interrupt fd preparing */
 		fd_desc_rx->irqh = ixmap_irqdev_open(instance,
-					port_index, queue_index, IXMAP_IRQ_RX);
+					i, queue_index, IXMAP_IRQ_RX);
 		if(!fd_desc_rx->irqh){
 			perror("failed to open");
 			goto err_assign_port;
                 }
-		fd_desc_rx->fd = fd_desc_rx->irqh.fd;
+		fd_desc_rx->fd = ixmap_irqdev_fd(fd_desc_rx->irqh);
 		fd_desc_rx->type = IXMAPFWD_IRQ_RX;
 
 		/* Tx interrupt fd preparing */
 		fd_desc_tx->irqh = ixmap_irqdev_open(instance,
-					port_index, queue_index, IXMAP_IRQ_TX);
+					i, queue_index, IXMAP_IRQ_TX);
 		if(!fd_desc_tx->irqh){
 			ixmap_irqdev_close(fd_desc_rx->irqh);
 			perror("failed to open");
 			goto err_assign_port;
 		}
-		fd_desc_tx->fd = fd_desc_tx->irqh.fd;
+		fd_desc_tx->fd = ixmap_irqdev_fd(fd_desc_tx->irqh);
 		fd_desc_tx->type = IXMAPFWD_IRQ_TX;
 
-		ret = epoll_add(fd_ep, fd_desc_rx, fd_desc_rx->fd);
+		ret = ixmapfwd_epoll_add(fd_ep, fd_desc_rx, fd_desc_rx->fd);
 		if(ret < 0){
 			perror("failed to add fd in epoll");
 			ixmap_irqdev_close(fd_desc_rx->irqh);
@@ -212,7 +222,7 @@ static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
 			goto err_assign_port;
 		}
 
-		ret = epoll_add(fd_ep, fd_desc_tx, fd_desc_tx->fd);
+		ret = ixmapfwd_epoll_add(fd_ep, fd_desc_tx, fd_desc_tx->fd);
 		if(ret < 0){
 			perror("failed to add fd in epoll");
 			ixmap_irqdev_close(fd_desc_rx->irqh);
@@ -222,9 +232,9 @@ static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
 	}
 
 	/* signalfd preparing */
-	fd_desc_sig = &fd_desc[num_ports * 2];
+	fd_desc_sig = &fd_desc_list[num_ports * 2];
 
-	fd_desc_sig->fd = signalfd_create();
+	fd_desc_sig->fd = ixmapfwd_signalfd_create();
 	if(fd_desc_sig->fd < 0){
 		perror("failed to open signalfd");
 		goto err_signalfd_create;
@@ -233,7 +243,7 @@ static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
 	fd_desc_sig->irqh = NULL;
 	fd_desc_sig->type = IXMAPFWD_SIGNAL;
 
-	ret = epoll_add(fd_ep, fd_desc_sig,
+	ret = ixmapfwd_epoll_add(fd_ep, fd_desc_sig,
 		fd_desc_sig->fd);
 	if(ret < 0){
 		perror("failed to add fd in epoll");
@@ -305,7 +315,7 @@ static int ixmapfwd_irq_setmask(struct ixmapfwd_fd_desc *fd_desc_list,
 	int i, ret;
 
 	for(i = 0; i < num_ports * 2; i++){
-		ret = ixmap_irq_setaffinity(fd_desc_list[i]->irqh, core_id);
+		ret = ixmap_irqdev_setaffinity(fd_desc_list[i].irqh, core_id);
 		if(ret < 0){
 			printf("failed to set affinity\n");
 			goto err_set_affinity;
@@ -318,7 +328,8 @@ err_set_affinity:
 	return -1;
 }
 
-static int ixmapfwd_signalfd_create(){
+static int ixmapfwd_signalfd_create()
+{
 	sigset_t sigset;
 	int signal_fd;
 

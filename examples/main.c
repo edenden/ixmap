@@ -61,10 +61,10 @@ int main(int argc, char **argv)
 		 * However, MTU=1522 is used by default.
 		 * See ixmap_set_rx_buffer_len().
 		 */
-		// ih_list[i]->mtu_frame = mtu_frame;
+		// ixmap_mtu_set(ih_list[i], mtu_frame);
 
 		/* Configuration of promiscuous mode is supported */
-		ih_list[i]->promisc = 1;
+		ixmap_promisc_enable(ih_list[i]);
 
 		ret = ixmap_desc_alloc(ih_list[i],
 			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
@@ -81,8 +81,8 @@ int main(int argc, char **argv)
 		ixmap_irq_enable(ih_list[i]);
 
 		/* calclulate maximum buf_size we should prepare */
-		if(ih_list[i]->buf_size > buf_size)
-			buf_size = ih_list[i]->buf_size;
+		if(ixmap_bufsize_get(ih_list[i]) > buf_size)
+			buf_size = ixmap_bufsize_get(ih_list[i]);
 	}
 
 	threads = malloc(sizeof(struct ixmapfwd_thread) * num_cores);

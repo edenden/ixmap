@@ -1,3 +1,6 @@
+#ifndef _IXMAP_RXINIT_H
+#define _IXMAP_RXINIT_H
+
 #define VLAN_HLEN		4
 #define ETH_FCS_LEN		4
 #define VLAN_ETH_FRAME_LEN	1518
@@ -110,3 +113,4 @@
 #define IXGBE_VMOLR_BAM		0x08000000 /* accept broadcast packets */
 #define IXGBE_VMOLR_MPE		0x10000000 /* multicast promiscuous */
 
+#endif /* _IXMAP_RXINIT_H */

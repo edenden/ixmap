@@ -1,3 +1,6 @@
+#ifndef _IXMAP_H
+#define _IXMAP_H
+
 /*
  * microsecond values for various ITR rates shifted by 2 to fit itr register
  * with the first 3 bits reserved 0
@@ -25,6 +28,11 @@ struct ixmap_buf;
 struct ixmap_instance;
 struct ixmap_bulk;
 
+enum ixmap_irq_direction {
+	IXMAP_IRQ_RX = 0,
+	IXMAP_IRQ_TX,
+};
+
 void ixmap_irq_enable(struct ixmap_handle *ih);
 struct ixmap_instance *ixmap_instance_alloc(struct ixmap_handle **ih_list,
 	int ih_num, int queue_index);
@@ -39,12 +47,17 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 struct ixmap_handle *ixmap_open(char *interface_name,
 	uint32_t num_queues_req, uint32_t budget, uint16_t intr_rate);
 void ixmap_close(struct ixmap_handle *ih);
+void ixmap_promisc_enable(struct ixmap_handle *ih);
+void ixmap_promisc_disable(struct ixmap_handle *ih);
+void ixmap_mtu_set(struct ixmap_handle *ih, unsigned int mtu_frame);
+unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction);
 void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh);
 int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	unsigned int core_id);
+int ixmap_irqdev_fd(struct ixmap_irqdev_handle *irqh);
 
 inline void ixmap_irq_unmask_queues(struct ixmap_instance *instance,
 	struct ixmap_irqdev_handle *irqh);
@@ -75,3 +88,5 @@ inline unsigned long ixmap_count_tx_clean_total(struct ixmap_instance *instance,
 
 void ixmap_configure_rx(struct ixmap_handle *ih);
 void ixmap_configure_tx(struct ixmap_handle *ih);
+
+#endif /* _IXMAP_H */

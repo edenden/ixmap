@@ -1,3 +1,6 @@
+#ifndef _IXMAP_TXINIT_H
+#define _IXMAP_TXINIT_H
+
 /* Transmit registers */
 #define IXGBE_DMATXCTL		0x04A80
 #define IXGBE_RTTDCS		0x04900
@@ -24,3 +27,4 @@
 /* Multiple Transmit Queue Command Register */
 #define IXGBE_MTQC_64Q_1PB	0x0 /* 64 queues 1 pack buffer */
 
+#endif /* _IXMAP_TXINIT_H */

@@ -429,6 +429,29 @@ void ixmap_close(struct ixmap_handle *ih)
 	return;
 }
 
+void ixmap_promisc_enable(struct ixmap_handle *ih)
+{
+	ih->promisc = 1;
+	return;
+}
+
+void ixmap_promisc_disable(struct ixmap_handle *ih)
+{
+	ih->promisc = 0;
+	return;
+}
+
+void ixmap_mtu_set(struct ixmap_handle *ih, unsigned int mtu_frame)
+{
+	ih->mtu_frame = mtu_frame;
+	return;
+}
+
+unsigned int ixmap_bufsize_get(struct ixmap_handle *ih)
+{
+	return ih->buf_size;
+}
+
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction)
@@ -528,4 +551,7 @@ err_set_affinity:
 	return -1;
 }
 
-
+int ixmap_irqdev_fd(struct ixmap_irqdev_handle *irqh)
+{
+	return irqh->fd;
+}
