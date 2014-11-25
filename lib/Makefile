@@ -5,10 +5,10 @@ CC = gcc
 CFLAGS = -Wall -fPIC
 LDFLAGS = -shared 
 TARGET = ixmap
-LIBS = -lpthread
-OBJECTS = ixmap_common.o ixmap_driver.o ixmap_rxinit.o ixmap_txinit.o
+LIBS = 
 MAJOR = 1
 MINOR = 0
+OBJECTS = libixmap.o driver.o rxinit.o txinit.o
 
 .SUFFIXES: .c .o
 

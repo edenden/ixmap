@@ -12,8 +12,8 @@
 #include <sys/signalfd.h>
 #include <pthread.h>
 
-#include "ixmap_lib.h"
-#include "ixmap_driver.h"
+#include "libixmap.h"
+#include "driver.h"
 
 inline void ixmap_irq_unmask_queues(struct ixmap_intance *instance,
 	struct ixmap_irqdev_handle *irqh)

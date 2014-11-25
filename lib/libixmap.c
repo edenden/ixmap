@@ -13,7 +13,13 @@
 #include <signal.h>
 #include <pthread.h>
 
-#include "ixmap_lib.h"
+#include "libixmap.h"
+
+static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask);
+static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
+	unsigned long *addr_dma, unsigned long size);
+static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma);
+
 
 void ixmap_irq_enable(struct ixmap_handle *ih)
 {
@@ -340,8 +346,7 @@ static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
 	return 0;
 }
 
-static int ixmap_dma_unmap(struct ixmap_handle *ih,
-	unsigned long addr_dma)
+static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma)
 {
 	struct uio_ixmap_unmap_req req_unmap;
 
@@ -425,7 +430,8 @@ void ixmap_close(struct ixmap_handle *ih)
 }
 
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
-	unsigned int port_index, unsigned int queue_index, enum ixmap_irq_direction)
+	unsigned int port_index, unsigned int queue_index,
+	enum ixmap_irq_direction direction)
 {
 	struct ixmap_port *port;
 	struct ixmap_irqdev_handle *irqh;
@@ -438,7 +444,7 @@ struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
 		goto err_invalid_queue_index;
 	}
 
-	switch(ixmap_irq_direction){
+	switch(direction){
 	case IXMAP_IRQ_RX:
 		snprintf(filename, sizeof(filename), "/dev/%s-irqrx%d",
 			port->interface_name, queue_index);
@@ -449,7 +455,7 @@ struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
 			port->interface_name, queue_index);
 		qmask = 1 << (queue_index + port->num_queues);
 		break;
-	case default:
+	default:
 		goto err_invalid_direction;
 		break;
 	}
@@ -490,7 +496,7 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	FILE *file;
 	char filename[FILENAME_SIZE];
 	uint32_t mask_low, mask_high;
-	int i, ret;
+	int ret;
 
 	mask_low = core_id <= 31 ? 1 << core_id : 0;
 	mask_high = core_id <= 31 ? 0 : 1 << (core_id - 31);
@@ -509,7 +515,6 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 		goto err_set_affinity;
 	}
 
-	ixgbe_print("irq affinity mask: %08x,%08x\n", mask_high, mask_low);
 	ret = fprintf(file, "%08x,%08x", mask_high, mask_low);
 	if(ret < 0){
 		fclose(file);
@@ -522,3 +527,5 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 err_set_affinity:
 	return -1;
 }
+
+

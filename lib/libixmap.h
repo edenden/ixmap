@@ -151,6 +151,51 @@ enum ixmap_irq_direction {
 	IXMAP_IRQ_TX,
 };
 
+/* Receive Descriptor - Advanced */
+union ixmap_adv_rx_desc {
+	struct {
+		uint64_t pkt_addr; /* Packet buffer address */
+		uint64_t hdr_addr; /* Header buffer address */
+	} read;
+	struct {
+		struct {
+			union {
+				uint32_t data;
+				struct {
+					uint16_t pkt_info; /* RSS, Pkt type */
+					uint16_t hdr_info; /* Splithdr, hdrlen */
+				} hs_rss;
+			} lo_dword;
+			union {
+				uint32_t rss; /* RSS Hash */
+				struct {
+					uint16_t ip_id; /* IP id */
+					uint16_t csum; /* Packet Checksum */
+				} csum_ip;
+			} hi_dword;
+		} lower;
+		struct {
+			uint32_t status_error; /* ext status/error */
+			uint16_t length; /* Packet length */
+			uint16_t vlan; /* VLAN tag */
+		} upper;
+	} wb;  /* writeback */
+};
+
+/* Transmit Descriptor - Advanced */
+union ixmap_adv_tx_desc {
+	struct {
+		uint64_t buffer_addr; /* Address of descriptor's data buf */
+		uint32_t cmd_type_len;
+		uint32_t olinfo_status;
+	} read;
+	struct {
+		uint64_t rsvd; /* Reserved */
+		uint32_t nxtseq_seed;
+		uint32_t status;
+	} wb;
+};
+
 /* Ioctl defines */
 
 #define UIO_IXGBE_INFO		_IOW('E', 201, int)
@@ -198,3 +243,27 @@ struct uio_irq_info_req {
 	uint16_t	entry;
 };
 
+
+static inline uint32_t readl(const volatile void *addr)
+{
+	return htole32( *(volatile uint32_t *) addr );
+}
+
+static inline void writel(uint32_t b, volatile void *addr)
+{
+	*(volatile uint32_t *) addr = htole32(b);
+}
+
+static inline uint32_t IXGBE_READ_REG(struct ixmap_handle *ih, uint32_t reg)
+{
+	uint32_t value = readl(ih->bar + reg);
+	return value;
+}
+
+static inline void IXGBE_WRITE_REG(struct ixmap_handle *ih, uint32_t reg, uint32_t value)
+{
+	writel(value, ih->bar + reg);
+	return;
+}
+
+#define IXGBE_WRITE_FLUSH(a)	IXGBE_READ_REG(a, IXGBE_STATUS)
