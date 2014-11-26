@@ -1,3 +1,6 @@
+#ifndef _IXMAPFWD_FORWARD_H
+#define _IXMAPFWD_FORWARD_H
+
 #define EPOLL_MAXEVENTS 16
 
 enum {
@@ -13,3 +16,5 @@ struct ixmapfwd_fd_desc {
 };
 
 void *process_interrupt(void *data);
+
+#endif /* _IXMAPFWD_FORWARD_H */

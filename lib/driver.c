@@ -106,7 +106,7 @@ struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
 		goto err_alloc_bulk;
 	bulk->count = 0;
 
-	bulk->slot_index = malloc(sizeof(int) * max_bulk_count);
+	bulk->slot_index = malloc(sizeof(int32_t) * max_bulk_count);
 	if(!bulk->slot_index)
 		goto err_alloc_bulk_slot_index;
 
@@ -130,6 +130,43 @@ void ixmap_bulk_release(struct ixmap_bulk *bulk)
 	free(bulk->slot_index);
 	free(bulk);
 
+	return;
+}
+
+unsigned short ixmap_bulk_count_get(struct ixmap_bulk *bulk)
+{
+	return bulk->count;
+}
+
+void ixmap_bulk_count_set(struct ixmap_bulk *bulk, unsigned short count)
+{
+	bulk->count = count;
+	return;
+}
+
+int ixmap_bulk_slot_index_get(struct ixmap_bulk *bulk,
+	unsigned int index)
+{
+	return bulk->slot_index[index];
+}
+
+void ixmap_bulk_slot_index_set(struct ixmap_bulk *bulk,
+	unsigned int index, int slot_index)
+{
+	bulk->slot_index[index] = slot_index;
+	return;
+}
+
+unsigned int ixmap_bulk_slot_size_get(struct ixmap_bulk *bulk,
+	unsigned int index)
+{
+	return bulk->size[index];
+}
+
+void ixmap_bulk_slot_size_set(struct ixmap_bulk *bulk,
+	unsigned int index, unsigned int size)
+{
+	bulk->size[index] = size;
 	return;
 }
 

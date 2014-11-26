@@ -27,20 +27,7 @@ static int ixmapfwd_signalfd_create();
 static void ixmapfwd_print_result(struct ixmapfwd_thread *thread);
 
 #ifdef DEBUG
-static void dump_packet(void *buffer)
-{
-	struct ether_header *eth;
-	eth = (struct ether_header *)buffer;
-
-	printf("\tsrc %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
-		eth->ether_shost[0], eth->ether_shost[1], eth->ether_shost[2],
-		eth->ether_shost[3], eth->ether_shost[4], eth->ether_shost[5]);
-	printf("\tdst %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
-		eth->ether_dhost[0], eth->ether_dhost[1], eth->ether_dhost[2],
-		eth->ether_dhost[3], eth->ether_dhost[4], eth->ether_dhost[5]);
-	printf("\ttype 0x%x\n", eth->ether_type);
-	return;
-}
+static void ixmapfwd_packet_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk);
 #endif
 
 void *process_interrupt(void *data)
@@ -110,6 +97,10 @@ void *process_interrupt(void *data)
 				ret = ixmap_rx_clean(instance, port_index, buf, bulk);
 				ixmap_rx_alloc(instance, port_index, buf);
 
+#ifdef DEBUG
+				ixmapfwd_packet_dump(buf, bulk);
+#endif
+
 				/* XXX: Following is 2ports specific code */
 				ixmap_tx_xmit(instance, !port_index, buf, bulk);
 
@@ -166,6 +157,35 @@ err_alloc_read_buf:
 	pthread_kill(thread->ptid, SIGINT);
 	return NULL;
 }
+
+#ifdef DEBUG
+static void ixmapfwd_packet_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
+{
+	unsigned short count;
+	int slot_index;
+	unsigned int size;
+	struct ether_header *eth;
+	int i;
+
+	count = ixmap_bulk_count_get(bulk);
+	for(i = 0; i < count; i++){
+		slot_index = ixmap_bulk_slot_index_get(bulk, i);
+		size = ixmap_bulk_slot_size_get(bulk, i);
+		eth = (struct ether_header *)ixmap_slot_addr_virt(buf,
+			slot_index);
+
+		printf("packet dump:\n");
+		printf("\tsrc %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
+			eth->ether_shost[0], eth->ether_shost[1], eth->ether_shost[2],
+			eth->ether_shost[3], eth->ether_shost[4], eth->ether_shost[5]);
+		printf("\tdst %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
+			eth->ether_dhost[0], eth->ether_dhost[1], eth->ether_dhost[2],
+			eth->ether_dhost[3], eth->ether_dhost[4], eth->ether_dhost[5]);
+		printf("\ttype 0x%x\n", eth->ether_type);
+		printf("\tsize %d bytes\n", size);
+	}
+}
+#endif
 
 static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
 	struct ixmap_instance *instance, uint32_t num_ports, uint32_t queue_index)

@@ -1,3 +1,6 @@
+#ifndef _IXMAPFWD_MAIN_H
+#define _IXMAPFWD_MAIN_H
+
 //#define DEBUG
 
 #define min(x, y) ({				\
@@ -46,3 +49,5 @@ struct ixmapfwd_thread {
 #define IXGBE_DEFAULT_TXD	512
 #define IXGBE_MAX_TXD		4096
 #define IXGBE_MIN_TXD		64
+
+#endif /* _IXMAPFWD_MAIN_H */

@@ -177,7 +177,7 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 	for(i = 0; i < ih->num_queues; i++, rx_assigned++){
 		int *slot_index;
 
-		slot_index = malloc(sizeof(int) * num_rx_desc);
+		slot_index = malloc(sizeof(int32_t) * num_rx_desc);
 		if(!slot_index){
 			goto err_rx_assign;
 		}
@@ -196,7 +196,7 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 	for(i = 0; i < ih->num_queues; i++, tx_assigned++){
 		int *slot_index;
 
-		slot_index = malloc(sizeof(int) * num_tx_desc);
+		slot_index = malloc(sizeof(int32_t) * num_tx_desc);
 		if(!slot_index){
 			goto err_tx_assign;
 		}
@@ -304,7 +304,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 		buf->addr_dma[i] = addr_dma;
 	}
 
-	free_index = malloc(sizeof(int) * count);
+	free_index = malloc(sizeof(int32_t) * count);
 	if(!free_index)
 		goto err_alloc_free_index;
 

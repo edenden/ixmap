@@ -63,7 +63,7 @@ struct ixmap_ring {
 	uint8_t		*tail;
 	uint16_t	next_to_use;
 	uint16_t	next_to_clean;
-	int		*slot_index;
+	int32_t		*slot_index;
 };
 
 struct ixmap_buf {
@@ -73,12 +73,12 @@ struct ixmap_buf {
 	uint32_t	count;
 
 	uint32_t	free_count;
-	int		*free_index;
+	int32_t		*free_index;
 };
 
 struct ixmap_bulk {
 	uint16_t	count;
-	int		*slot_index;
+	int32_t		*slot_index;
 	uint32_t	*size;
 };
 
