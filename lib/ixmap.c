@@ -359,7 +359,8 @@ static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma)
 }
 
 struct ixmap_handle *ixmap_open(char *interface_name,
-	uint32_t num_queues_req, uint32_t budget, uint16_t intr_rate)
+	unsigned int num_queues_req, unsigned int budget, unsigned short intr_rate,
+	unsigned int mtu_frame, unsigned int promisc)
 {
 	struct ixmap_handle *ih;
 	char filename[FILENAME_SIZE];
@@ -404,9 +405,10 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 		goto err_mmap;
 
 	ih->bar_size = req_info.mmio_size;
-	ih->promisc = 0;
+	ih->promisc = !!promisc;
 	ih->interface_name = interface_name;
 	ih->budget = budget;
+	ih->mtu_frame = mtu_frame;
 
 	return ih;
 
@@ -426,24 +428,6 @@ void ixmap_close(struct ixmap_handle *ih)
 	close(ih->fd);
 	free(ih);
 
-	return;
-}
-
-void ixmap_promisc_enable(struct ixmap_handle *ih)
-{
-	ih->promisc = 1;
-	return;
-}
-
-void ixmap_promisc_disable(struct ixmap_handle *ih)
-{
-	ih->promisc = 0;
-	return;
-}
-
-void ixmap_mtu_set(struct ixmap_handle *ih, unsigned int mtu_frame)
-{
-	ih->mtu_frame = mtu_frame;
 	return;
 }
 

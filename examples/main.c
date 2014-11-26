@@ -29,11 +29,13 @@ int main(int argc, char **argv)
 {
 	struct ixmap_handle **ih_list;
 	struct ixmapfwd_thread *threads;
-	uint32_t buf_size = 0;
-	uint32_t num_cores = 4;
-	uint32_t num_ports = 2;
-	uint32_t budget = 1024;
-	uint16_t intr_rate = IXGBE_20K_ITR;
+	unsigned int buf_size = 0;
+	unsigned int num_cores = 4;
+	unsigned int num_ports = 2;
+	unsigned int budget = 1024;
+	unsigned int promisc = 1;
+	unsigned int mtu_frame = 0; /* MTU=1522 is used by default. */
+	unsigned short intr_rate = IXGBE_20K_ITR;
 	sigset_t sigset;
 	int ret = 0, i, signal;
 	int cores_assigned = 0, ports_assigned = 0;
@@ -49,22 +51,12 @@ int main(int argc, char **argv)
 
 	for(i = 0; i < num_ports; i++, ports_assigned++){
 		ih_list[i] = ixmap_open(ixmap_interface_list[i],
-			num_cores, budget, intr_rate);
+			num_cores, budget, intr_rate, mtu_frame, promisc);
 		if(!ih_list[i]){
 			printf("failed to ixmap_open, idx = %d\n", i);
 			ret = -1;
 			goto err_assign_ports;
 		}
-
-		/*
-		 * Configuration of frame MTU is supported.
-		 * However, MTU=1522 is used by default.
-		 * See ixmap_set_rx_buffer_len().
-		 */
-		// ixmap_mtu_set(ih_list[i], mtu_frame);
-
-		/* Configuration of promiscuous mode is supported */
-		ixmap_promisc_enable(ih_list[i]);
 
 		ret = ixmap_desc_alloc(ih_list[i],
 			IXGBE_MAX_RXD, IXGBE_MAX_TXD);

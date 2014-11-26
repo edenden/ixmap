@@ -45,11 +45,9 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 void ixmap_buf_release(struct ixmap_buf *buf,
 	struct ixmap_handle **ih_list, int ih_num);
 struct ixmap_handle *ixmap_open(char *interface_name,
-	uint32_t num_queues_req, uint32_t budget, uint16_t intr_rate);
+	unsigned int num_queues_req, unsigned int budget, unsigned short intr_rate,
+	unsigned int mtu_frame, unsigned int promisc);
 void ixmap_close(struct ixmap_handle *ih);
-void ixmap_promisc_enable(struct ixmap_handle *ih);
-void ixmap_promisc_disable(struct ixmap_handle *ih);
-void ixmap_mtu_set(struct ixmap_handle *ih, unsigned int mtu_frame);
 unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
 	unsigned int port_index, unsigned int queue_index,
