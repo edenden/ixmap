@@ -87,4 +87,7 @@ inline unsigned long ixmap_count_tx_clean_total(struct ixmap_instance *instance,
 void ixmap_configure_rx(struct ixmap_handle *ih);
 void ixmap_configure_tx(struct ixmap_handle *ih);
 
+inline uint32_t ixmap_read_reg(struct ixmap_handle *ih, uint32_t reg);
+inline void ixmap_write_reg(struct ixmap_handle *ih, uint32_t reg, uint32_t value);
+
 #endif /* _IXMAP_H */

@@ -37,33 +37,6 @@
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
 
-/*
- * ixmap_desc_unused - calculate if we have unused descriptors.
- * "-1" ensures next_to_clean does not overtake next_to_clean.
- */
-static inline uint16_t ixmap_desc_unused(struct ixmap_ring *ring,
-	uint16_t num_desc)
-{
-        uint16_t next_to_clean = ring->next_to_clean;
-        uint16_t next_to_use = ring->next_to_use;
-
-	return next_to_clean > next_to_use
-		? next_to_clean - next_to_use - 1
-		: (num_desc - next_to_use) + next_to_clean - 1;
-}
-
-/* ixmap_test_staterr - tests bits in Rx descriptor status and error fields */
-static inline uint32_t ixmap_test_staterr(union ixmap_adv_rx_desc *rx_desc,
-                                        const uint32_t stat_err_bits)
-{
-	return rx_desc->wb.upper.status_error & htole32(stat_err_bits);
-}
-
-static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value)
-{
-	writel(value, ring->tail);
-}
-
 #if defined(__x86_64__) || defined(__i386__) || defined(__amd64__)
 #define mb()  asm volatile("mfence" ::: "memory")
 #define wmb() asm volatile("sfence" ::: "memory")

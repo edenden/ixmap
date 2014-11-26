@@ -15,6 +15,11 @@
 #include "ixmap.h"
 #include "driver.h"
 
+static inline uint16_t ixmap_desc_unused(struct ixmap_ring *ring,
+	uint16_t num_desc);
+static inline uint32_t ixmap_test_staterr(union ixmap_adv_rx_desc *rx_desc,
+	const uint32_t stat_err_bits);
+static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value);
 static inline int ixmap_slot_assign(struct ixmap_buf *buf);
 static inline void ixmap_slot_attach(struct ixmap_ring *ring,
 	uint16_t desc_index, int slot_index);
@@ -24,6 +29,29 @@ static inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index);
 static inline unsigned long ixmap_slot_addr_dma(struct ixmap_buf *buf,
 	int slot_index, int port_index);
+
+static inline uint16_t ixmap_desc_unused(struct ixmap_ring *ring,
+	uint16_t num_desc)
+{
+        uint16_t next_to_clean = ring->next_to_clean;
+        uint16_t next_to_use = ring->next_to_use;
+
+	return next_to_clean > next_to_use
+		? next_to_clean - next_to_use - 1
+		: (num_desc - next_to_use) + next_to_clean - 1;
+}
+
+static inline uint32_t ixmap_test_staterr(union ixmap_adv_rx_desc *rx_desc,
+	const uint32_t stat_err_bits)
+{
+	return rx_desc->wb.upper.status_error & htole32(stat_err_bits);
+}
+
+static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value)
+{
+	ixmap_writel(value, ring->tail);
+	return;
+}
 
 inline void ixmap_irq_unmask_queues(struct ixmap_instance *instance,
 	struct ixmap_irqdev_handle *irqh)
@@ -35,10 +63,10 @@ inline void ixmap_irq_unmask_queues(struct ixmap_instance *instance,
 
 	mask = (irqh->qmask & 0xFFFFFFFF);
 	if (mask)
-		writel(mask, port->irqreg[0]);
+		ixmap_writel(mask, port->irqreg[0]);
 	mask = (irqh->qmask >> 32);
 	if (mask)
-		writel(mask, port->irqreg[1]);
+		ixmap_writel(mask, port->irqreg[1]);
 
 	return;
 }
@@ -436,3 +464,4 @@ inline unsigned long ixmap_count_tx_clean_total(struct ixmap_instance *instance,
 {
 	return instance->ports[port_index].count_tx_clean_total;
 }
+

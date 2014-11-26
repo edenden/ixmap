@@ -188,76 +188,69 @@ union ixmap_adv_tx_desc {
 	} wb;
 };
 
-/* Ioctl defines */
-
-#define UIO_IXGBE_INFO		_IOW('E', 201, int)
+#define IXMAP_INFO		_IOW('E', 201, int)
 /* MAC and PHY info */
-struct uio_ixmap_info_req {
-	unsigned long	mmio_base;
-	unsigned long	mmio_size;
+struct ixmap_info_req {
+	unsigned long		mmio_base;
+	unsigned long		mmio_size;
 
-	uint16_t	mac_type;
-	uint8_t		mac_addr[ETH_ALEN];
-	uint16_t	phy_type;
+	uint16_t		mac_type;
+	uint8_t			mac_addr[ETH_ALEN];
+	uint16_t		phy_type;
 
-	uint16_t	max_interrupt_rate;
-	uint16_t	num_interrupt_rate;
-	uint32_t	num_rx_queues;
-	uint32_t	num_tx_queues;
-	uint32_t	max_rx_queues;
-	uint32_t	max_tx_queues;
-	uint32_t	max_msix_vectors;
+	uint16_t		max_interrupt_rate;
+	uint16_t		num_interrupt_rate;
+	uint32_t		num_rx_queues;
+	uint32_t		num_tx_queues;
+	uint32_t		max_rx_queues;
+	uint32_t		max_tx_queues;
+	uint32_t		max_msix_vectors;
 };
 
-#define UIO_IXGBE_UP		_IOW('E', 202, int)
-struct uio_ixmap_up_req {
+#define IXMAP_UP		_IOW('E', 202, int)
+struct ixmap_up_req {
 	uint16_t		num_interrupt_rate;
 	uint32_t		num_rx_queues;
 	uint32_t		num_tx_queues;
 };
 
-#define UIO_IXGBE_MAP		_IOW('U', 210, int)
-struct uio_ixmap_map_req {
-        unsigned long addr_virtual;
-        unsigned long addr_dma;
-        unsigned long size;
-        uint8_t cache;
+#define IXMAP_DOWN		_IOW('E', 203, int)
+#define IXMAP_RESET		_IOW('E', 204, int)
+#define IXMAP_CHECK_LINK	_IOW('E', 205, int)
+
+struct ixmap_link_req {
+	uint16_t		speed;
+	uint16_t		duplex;
+	/*
+	 * Indicates that TX/RX flush is necessary
+	 * after link state changed
+	 */
+	uint16_t		flush;
 };
 
-#define UIO_IXGBE_UNMAP		_IOW('U', 211, int)
-struct uio_ixmap_unmap_req {
-        unsigned long addr_dma;
+#define IXMAP_MAP		_IOW('U', 210, int)
+struct ixmap_map_req {
+	unsigned long		addr_virtual;
+	unsigned long		addr_dma;
+	unsigned long		size;
+	uint8_t			cache;
 };
 
-#define UIO_IRQ_INFO		_IOW('E', 201, int)
-struct uio_irq_info_req {
-	uint32_t	vector;
-	uint16_t	entry;
+#define IXMAP_UNMAP		_IOW('U', 211, int)
+struct ixmap_unmap_req {
+	unsigned long		addr_dma;
 };
 
+#define IXMAP_IRQDEV_INFO	_IOW('E', 201, int)
+struct ixmap_irqdev_info_req {
+	uint32_t		vector;
+	uint16_t		entry;
+};
 
-static inline uint32_t readl(const volatile void *addr)
-{
-	return htole32( *(volatile uint32_t *) addr );
-}
-
-static inline void writel(uint32_t b, volatile void *addr)
-{
-	*(volatile uint32_t *) addr = htole32(b);
-}
-
-static inline uint32_t IXGBE_READ_REG(struct ixmap_handle *ih, uint32_t reg)
-{
-	uint32_t value = readl(ih->bar + reg);
-	return value;
-}
-
-static inline void IXGBE_WRITE_REG(struct ixmap_handle *ih, uint32_t reg, uint32_t value)
-{
-	writel(value, ih->bar + reg);
-	return;
-}
-
-#define IXGBE_WRITE_FLUSH(a)	IXGBE_READ_REG(a, IXGBE_STATUS)
+inline uint32_t ixmap_readl(const volatile void *addr);
+inline void ixmap_writel(uint32_t b, volatile void *addr);
+inline uint32_t ixmap_read_reg(struct ixmap_handle *ih, uint32_t reg);
+inline void ixmap_write_reg(struct ixmap_handle *ih, uint32_t reg, uint32_t value);
+inline void ixmap_write_flush(struct ixmap_handle *ih);
 
 #endif /* _IXMAP_H */

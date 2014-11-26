@@ -23,9 +23,9 @@ void ixmap_configure_tx(struct ixmap_handle *ih)
 	ixmap_setup_mtqc(ih);
 
 	/* DMATXCTL.EN must be before Tx queues are enabled */
-	dmatxctl = IXGBE_READ_REG(ih, IXGBE_DMATXCTL);
+	dmatxctl = ixmap_read_reg(ih, IXGBE_DMATXCTL);
 	dmatxctl |= IXGBE_DMATXCTL_TE;
-	IXGBE_WRITE_REG(ih, IXGBE_DMATXCTL, dmatxctl);
+	ixmap_write_reg(ih, IXGBE_DMATXCTL, dmatxctl);
 
 	/* Setup the HW Tx Head and Tail descriptor pointers */
 	for (i = 0; i < ih->num_queues; i++)
@@ -38,20 +38,20 @@ static void ixmap_setup_mtqc(struct ixmap_handle *ih)
 	uint32_t rttdcs, mtqc;
 
 	/* disable the arbiter while setting MTQC */
-	rttdcs = IXGBE_READ_REG(ih, IXGBE_RTTDCS);
+	rttdcs = ixmap_read_reg(ih, IXGBE_RTTDCS);
 	rttdcs |= IXGBE_RTTDCS_ARBDIS;
-	IXGBE_WRITE_REG(ih, IXGBE_RTTDCS, rttdcs);
+	ixmap_write_reg(ih, IXGBE_RTTDCS, rttdcs);
 
 	/*
 	 * set transmit pool layout:
 	 * Though we don't support traffic class(TC)
 	 */
 	mtqc = IXGBE_MTQC_64Q_1PB;
-	IXGBE_WRITE_REG(ih, IXGBE_MTQC, mtqc);
+	ixmap_write_reg(ih, IXGBE_MTQC, mtqc);
 
 	/* re-enable the arbiter */
 	rttdcs &= ~IXGBE_RTTDCS_ARBDIS;
-	IXGBE_WRITE_REG(ih, IXGBE_RTTDCS, rttdcs);
+	ixmap_write_reg(ih, IXGBE_RTTDCS, rttdcs);
 	return;
 }
 
@@ -68,23 +68,23 @@ static void ixmap_configure_tx_ring(struct ixmap_handle *ih,
 	ts.tv_nsec = 1000000;
 
 	/* disable queue to avoid issues while updating state */
-	IXGBE_WRITE_REG(ih, IXGBE_TXDCTL(reg_idx), IXGBE_TXDCTL_SWFLSH);
-	IXGBE_WRITE_FLUSH(ih);
+	ixmap_write_reg(ih, IXGBE_TXDCTL(reg_idx), IXGBE_TXDCTL_SWFLSH);
+	ixmap_write_flush(ih);
 
-	IXGBE_WRITE_REG(ih, IXGBE_TDBAL(reg_idx),
+	ixmap_write_reg(ih, IXGBE_TDBAL(reg_idx),
 			addr_dma & DMA_BIT_MASK(32));
-	IXGBE_WRITE_REG(ih, IXGBE_TDBAH(reg_idx),
+	ixmap_write_reg(ih, IXGBE_TDBAH(reg_idx),
 			addr_dma >> 32);
-	IXGBE_WRITE_REG(ih, IXGBE_TDLEN(reg_idx),
+	ixmap_write_reg(ih, IXGBE_TDLEN(reg_idx),
 			ih->num_tx_desc * sizeof(union ixmap_adv_tx_desc));
 
 	/* disable head writeback */
-	IXGBE_WRITE_REG(ih, IXGBE_TDWBAH(reg_idx), 0);
-	IXGBE_WRITE_REG(ih, IXGBE_TDWBAL(reg_idx), 0);
+	ixmap_write_reg(ih, IXGBE_TDWBAH(reg_idx), 0);
+	ixmap_write_reg(ih, IXGBE_TDWBAL(reg_idx), 0);
 
 	/* reset head and tail pointers */
-	IXGBE_WRITE_REG(ih, IXGBE_TDH(reg_idx), 0);
-	IXGBE_WRITE_REG(ih, IXGBE_TDT(reg_idx), 0);
+	ixmap_write_reg(ih, IXGBE_TDH(reg_idx), 0);
+	ixmap_write_reg(ih, IXGBE_TDT(reg_idx), 0);
 
 	ring->tail = ih->bar + IXGBE_TDT(reg_idx);
 
@@ -109,12 +109,12 @@ static void ixmap_configure_tx_ring(struct ixmap_handle *ih,
 			32;		/* PTHRESH = 32 */
 
 	/* enable queue */
-	IXGBE_WRITE_REG(ih, IXGBE_TXDCTL(reg_idx), txdctl);
+	ixmap_write_reg(ih, IXGBE_TXDCTL(reg_idx), txdctl);
 
 	/* poll to verify queue is enabled */
 	do {
 		nanosleep(&ts, NULL);
-		txdctl = IXGBE_READ_REG(ih, IXGBE_TXDCTL(reg_idx));
+		txdctl = ixmap_read_reg(ih, IXGBE_TXDCTL(reg_idx));
 	} while (--wait_loop && !(txdctl & IXGBE_TXDCTL_ENABLE));
 	if (!wait_loop)
 		printf("Could not enable Tx Queue %d\n", reg_idx);

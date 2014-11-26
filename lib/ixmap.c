@@ -20,6 +20,34 @@ static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
 	unsigned long *addr_dma, unsigned long size);
 static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma);
 
+inline uint32_t ixmap_readl(const volatile void *addr)
+{
+	return htole32( *(volatile uint32_t *) addr );
+}
+
+inline void ixmap_writel(uint32_t b, volatile void *addr)
+{
+	*(volatile uint32_t *) addr = htole32(b);
+	return;
+}
+
+inline uint32_t ixmap_read_reg(struct ixmap_handle *ih, uint32_t reg)
+{
+	uint32_t value = ixmap_readl(ih->bar + reg);
+	return value;
+}
+
+inline void ixmap_write_reg(struct ixmap_handle *ih, uint32_t reg, uint32_t value)
+{
+	ixmap_writel(value, ih->bar + reg);
+	return;
+}
+
+inline void ixmap_write_flush(struct ixmap_handle *ih)
+{
+	ixmap_read_reg(ih, IXGBE_STATUS);
+	return;
+}
 
 void ixmap_irq_enable(struct ixmap_handle *ih)
 {
@@ -32,10 +60,10 @@ void ixmap_irq_enable(struct ixmap_handle *ih)
 	mask &= ~IXGBE_EIMS_TCP_TIMER;
 	mask &= ~IXGBE_EIMS_OTHER;
 
-	IXGBE_WRITE_REG(ih, IXGBE_EIMS, mask);
+	ixmap_write_reg(ih, IXGBE_EIMS, mask);
 
 	ixmap_irq_enable_queues(ih, ~0);
-	IXGBE_WRITE_FLUSH(ih);
+	ixmap_write_flush(ih);
 
 	return;
 }
@@ -46,10 +74,10 @@ static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask)
 
 	mask = (qmask & 0xFFFFFFFF);
 	if (mask)
-		IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(0), mask);
+		ixmap_write_reg(ih, IXGBE_EIMS_EX(0), mask);
 	mask = (qmask >> 32);
 	if (mask)
-		IXGBE_WRITE_REG(ih, IXGBE_EIMS_EX(1), mask);
+		ixmap_write_reg(ih, IXGBE_EIMS_EX(1), mask);
 
 	return;
 }
@@ -332,14 +360,14 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
 	unsigned long *addr_dma, unsigned long size)
 {
-	struct uio_ixmap_map_req req_map;
+	struct ixmap_map_req req_map;
 
 	req_map.addr_virtual = (unsigned long)addr_virtual;
 	req_map.addr_dma = 0;
 	req_map.size = size;
 	req_map.cache = IXGBE_DMA_CACHE_DISABLE;
 
-	if(ioctl(ih->fd, UIO_IXGBE_MAP, (unsigned long)&req_map) < 0)
+	if(ioctl(ih->fd, IXMAP_MAP, (unsigned long)&req_map) < 0)
 		return -1;
 
 	*addr_dma = req_map.addr_dma;
@@ -348,11 +376,11 @@ static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
 
 static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma)
 {
-	struct uio_ixmap_unmap_req req_unmap;
+	struct ixmap_unmap_req req_unmap;
 
 	req_unmap.addr_dma = addr_dma;
 
-	if(ioctl(ih->fd, UIO_IXGBE_UNMAP, (unsigned long)&req_unmap) < 0)
+	if(ioctl(ih->fd, IXMAP_UNMAP, (unsigned long)&req_unmap) < 0)
 		return -1;
 
 	return 0;
@@ -364,8 +392,8 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 {
 	struct ixmap_handle *ih;
 	char filename[FILENAME_SIZE];
-	struct uio_ixmap_info_req req_info;
-	struct uio_ixmap_up_req req_up;
+	struct ixmap_info_req req_info;
+	struct ixmap_up_req req_up;
 
 	ih = malloc(sizeof(struct ixmap_handle));
 	if (!ih)
@@ -378,12 +406,12 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 		goto err_open;
 
 	/* Get device information */
-	memset(&req_info, 0, sizeof(struct uio_ixmap_info_req));
-	if(ioctl(ih->fd, UIO_IXGBE_INFO, (unsigned long)&req_info) < 0)
+	memset(&req_info, 0, sizeof(struct ixmap_info_req));
+	if(ioctl(ih->fd, IXMAP_INFO, (unsigned long)&req_info) < 0)
 		goto err_ioctl_info;
 
 	/* UP the device */
-	memset(&req_up, 0, sizeof(struct uio_ixmap_up_req));
+	memset(&req_up, 0, sizeof(struct ixmap_up_req));
 
 	ih->num_interrupt_rate =
 		min(intr_rate, req_info.max_interrupt_rate);
@@ -395,7 +423,7 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 	req_up.num_rx_queues = ih->num_queues;
 	req_up.num_tx_queues = ih->num_queues;
 
-	if(ioctl(ih->fd, UIO_IXGBE_UP, (unsigned long)&req_up) < 0)
+	if(ioctl(ih->fd, IXMAP_UP, (unsigned long)&req_up) < 0)
 		goto err_ioctl_up;
 
 	/* Map PCI config register space */
@@ -499,7 +527,7 @@ void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh)
 int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	unsigned int core_id)
 {
-	struct uio_irq_info_req req_info;
+	struct ixmap_irqdev_info_req req_info;
 	FILE *file;
 	char filename[FILENAME_SIZE];
 	uint32_t mask_low, mask_high;
@@ -508,10 +536,10 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	mask_low = core_id <= 31 ? 1 << core_id : 0;
 	mask_high = core_id <= 31 ? 0 : 1 << (core_id - 31);
 
-	ret = ioctl(irqh->fd, UIO_IRQ_INFO, (unsigned long)&req_info);
+	ret = ioctl(irqh->fd, IXMAP_IRQDEV_INFO, (unsigned long)&req_info);
 	if(ret < 0){
 		printf("failed to UIO_IRQ_INFO\n");
-		goto err_set_affinity;
+		goto err_irqdev_info;
 	}
 
 	snprintf(filename, sizeof(filename),
@@ -519,12 +547,12 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	file = fopen(filename, "w");
 	if(!file){
 		printf("failed to open smp_affinity\n");
-		goto err_set_affinity;
+		goto err_open_proc;
 	}
 
 	ret = fprintf(file, "%08x,%08x", mask_high, mask_low);
 	if(ret < 0){
-		fclose(file);
+		printf("failed to set affinity\n");
 		goto err_set_affinity;
 	}
 
@@ -532,6 +560,9 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	return 0;
 
 err_set_affinity:
+	fclose(file);
+err_open_proc:
+err_irqdev_info:
 	return -1;
 }
 
