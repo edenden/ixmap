@@ -5,6 +5,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/miscdevice.h>
 #include <linux/skbuff.h>
 #include <linux/ioport.h>
 #include <linux/slab.h>
