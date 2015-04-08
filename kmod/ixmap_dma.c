@@ -81,7 +81,8 @@ dma_addr_t ixmap_dma_map(struct ixmap_adapter *adapter,
 	struct sg_table *sgt;
 	struct scatterlist *sg;
 	unsigned long user_start, user_end, user_offset;
-	unsigned int ret, i, npages;
+	unsigned int i, npages;
+	int ret;
 	dma_addr_t addr_dma;
 
 	user_start = addr_virtual & PAGE_MASK;
