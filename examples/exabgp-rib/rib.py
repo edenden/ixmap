@@ -33,7 +33,7 @@ class Rib:
 		if self.route_insert(node, route) == 0:		
 			if rib == self.rib["unicast-valid"]:
 				print "UPDATE: " + prefix + " " + "new nexthop"
-				self.route_find_updated(rib)
+				self.route_find_updated(self.rib["unicast-invalid"])
 
 	def remove(self, prefix, route):
 		rib = {}
@@ -56,7 +56,7 @@ class Rib:
 				if len(node.data["info"]) == 0:
 					rib.delete(prefix)
 					print "DELETE: " + prefix
-					self.route_find_updated(rib)
+					self.route_find_updated(self.rib["unicast-valid"])
 				else:
 					print "UPDATE: " + prefix + " " + "new nexthop"
 			else:
