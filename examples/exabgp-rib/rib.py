@@ -32,7 +32,8 @@ class Rib:
 
 		if self.route_insert(node, route) == 0:		
 			if rib == self.rib["unicast-valid"]:
-				print "UPDATE: " + prefix + " " + "new nexthop"
+				print "UPDATE: " + prefix + " -> " + \
+					self.route_nexthop(node.data["info"][0])
 				self.route_find_updated(self.rib["unicast-invalid"])
 
 	def remove(self, prefix, route):
@@ -58,7 +59,8 @@ class Rib:
 					print "DELETE: " + prefix
 					self.route_find_updated(self.rib["unicast-valid"])
 				else:
-					print "UPDATE: " + prefix + " " + "new nexthop"
+					print "UPDATE: " + prefix + " -> " + \
+						self.route_nexthop(node.data["info"][0])
 			else:
 				if len(node.data["info"]) == 0:
 					rib.delete(prefix)
@@ -75,7 +77,8 @@ class Rib:
 					print "DELETE: " + prefix
 					self.route_find_updated(self.rib["unicast-valid"])
 				else:
-					print "UPDATE: " + prefix + " " + "new nexthop"
+					print "UPDATE: " + prefix + " -> " + \
+						self.route_nexthop(node.data["info"][0])
 			else:
 				if len(node.data["info"]) == 0:
 					rib_src.delete(prefix)
@@ -87,7 +90,8 @@ class Rib:
 
 		if self.route_insert(node, route) == 0:
 			if rib_dest == self.rib["unicast-valid"]:
-				print "UPDATE: " + prefix + " " + "new nexthop"
+				print "UPDATE: " + prefix + " -> " + \
+					self.route_nexthop(node.data["info"][0])
 				self.route_find_updated(self.rib["unicast-invalid"])
 
 	def route_find_updated(self, rib):
@@ -174,3 +178,8 @@ class Rib:
 
 		return 0
 
+	def route_nexthop(self, route):
+		if route["protocol-id"] == 0:
+			return "connected"
+		else:
+			return route["nexthop"]
