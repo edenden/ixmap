@@ -34,6 +34,7 @@ class Rib:
 			if rib == self.rib["unicast-valid"]:
 				print "UPDATE: " + prefix + " -> " + \
 					self.route_nexthop(node.data["info"][0])
+				self.fib_update(prefix)
 				self.route_find_updated(self.rib["unicast-invalid"])
 
 	def remove(self, prefix, route):
@@ -57,10 +58,12 @@ class Rib:
 				if len(node.data["info"]) == 0:
 					rib.delete(prefix)
 					print "DELETE: " + prefix
+					self.fib_update(prefix)
 					self.route_find_updated(self.rib["unicast-valid"])
 				else:
 					print "UPDATE: " + prefix + " -> " + \
 						self.route_nexthop(node.data["info"][0])
+					self.fib_update(prefix)
 			else:
 				if len(node.data["info"]) == 0:
 					rib.delete(prefix)
@@ -75,10 +78,12 @@ class Rib:
 				if len(node.data["info"]) == 0:
 					rib_src.delete(prefix)
 					print "DELETE: " + prefix
+					self.fib_update(prefix)
 					self.route_find_updated(self.rib["unicast-valid"])
 				else:
 					print "UPDATE: " + prefix + " -> " + \
 						self.route_nexthop(node.data["info"][0])
+					self.fib_update(prefix)
 			else:
 				if len(node.data["info"]) == 0:
 					rib_src.delete(prefix)
@@ -92,6 +97,7 @@ class Rib:
 			if rib_dest == self.rib["unicast-valid"]:
 				print "UPDATE: " + prefix + " -> " + \
 					self.route_nexthop(node.data["info"][0])
+				self.fib_update(prefix)
 				self.route_find_updated(self.rib["unicast-invalid"])
 
 	def route_find_updated(self, rib):
@@ -183,3 +189,26 @@ class Rib:
 			return "connected"
 		else:
 			return route["nexthop"]
+
+	def fib_update(self, prefix):
+		length = 
+
+		if length == 0:
+			node_default = self.rib["unicast-valid"].search_exact("0.0.0.0/0")
+			if not node_default:
+				print "(DELETE) default"
+				return
+
+			nexthop = self.route_nexthop(node_default.data["info"][0])
+			print "(UPDATE) default = " + nexthop
+		elif:
+			node_default = self.rib["unicast-valid"].search_exact("0.0.0.0/0")
+			for destination
+				node = self.rib["unicast-valid"].search_best(destination)
+				if (not node) or (node == node_default):
+					print "(DELETE) " + destination
+					return
+				
+				nexthop = self.route_nexthop(node.data["info"][0])
+				print "(UPDATE) destination = " + nexthop
+		return
