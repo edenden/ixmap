@@ -6,9 +6,17 @@
 #include "main.h"
 #include "hash.h"
 
-unsigned int hash_key(void *key, int key_len)
-{
+static unsigned int hash_key(void *key, int key_len);
 
+static unsigned int hash_key(void *key, int key_len)
+{
+	unsigned int i, sum;
+
+	for(i = 0, sum = 0; i < key_len; i++){
+		sum += ((uint8_t *)key)[i];
+	}
+
+	return sum % HASH_SIZE;
 }
 
 unsigned int hash_add(struct hash_root *root, void *key, int key_len,
@@ -64,15 +72,77 @@ err_alloc_entry:
 
 int hash_delete(struct hash_root *root, void *key, int key_len)
 {
+	struct hash_entry *entry, **prev_ptr;
+	unsigned int hash_key;
 
+	hash_key = hash_key(key, key_len);
+	entry = root->entries[hash_key];
+	prev_ptr = &(root->entries[hash_key])
+
+	if(!entry)
+		goto err_not_found;
+
+	while(memcmp(entry->key, key, key_len)){
+		prev_ptr = &(entry->next);
+		entry = entry->next;
+		if(!entry)
+			goto err_not_found;
+	}
+
+	*prev_ptr = entry->next;
+	free(entry->value);
+	free(entry->key);
+	free(entry);
+
+	return 0;
+
+err_not_found:
+	return -1;
 }
 
-int hash_delete_walk(struct hash_root *root)
+void hash_delete_walk(struct hash_root *root)
 {
+	struct hash_entry *entry, *entry_next;
+	unsigned int i;
 
+	for(i = 0; i < HASH_SIZE; i++){
+		entry = root->entries[i];
+		if(!entry)
+			continue;
+
+		while(entry){
+			entry_next = entry->next;
+
+			free(entry->value);
+			free(entry->key);
+			free(entry);
+
+			entry = entry_next;
+		}
+	}
+
+	return;
 }
 
-void *hash_lookup(void *key, int key_len)
+void *hash_lookup(struct hash_root *root, void *key, int key_len)
 {
+	struct hash_entry *entry;
+	unsigned int hash_key;
 
+	hash_key = hash_key(key, key_len);
+	entry = root->entries[hash_key];
+
+	if(!entry)
+		goto err_not_found;
+
+	while(memcmp(entry->key, key, key_len)){
+		entry = entry->next;
+		if(!entry)
+			goto err_not_found;
+	}
+
+	return entry->value;
+
+err_not_found:
+	return NULL;
 }
