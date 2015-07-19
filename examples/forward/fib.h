@@ -1,16 +1,10 @@
-
-struct fib {
-	struct trie_node *trie_root;
-	struct hash_root *hash_root;
-};
-
 struct fib_entry {
-	uint32_t	prefix[4];
-	unsigned int	prefix_len;
-	uint32_t	nexthop[4];
+	uint32_t		prefix[4];
+	unsigned int		prefix_len;
+	uint32_t		nexthop[4];
 
-	struct fib_entry default;
-	int default_exist;
+	struct fib_entry	default;
+	int			default_exist;
 };
 
 struct fib {
