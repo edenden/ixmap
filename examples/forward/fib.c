@@ -25,6 +25,7 @@ int fib_route_update(struct fib *fib, int family,
 {
 	uint32_t destination[4];
 	struct fib_entry entry, *entry_real;
+	unsigned int port_index;
 	int family_len;
 
 	switch(family){
@@ -36,6 +37,8 @@ int fib_route_update(struct fib *fib, int family,
 			break;
 		default:
 	}
+
+	// TBD: Get the port index here
 
 	memcpy(entry->nexthop, nexthop, family_len >> 3);
 	memcpy(entry->prefix, prefix, family_len >> 3);
