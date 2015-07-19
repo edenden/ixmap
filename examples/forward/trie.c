@@ -7,66 +7,111 @@
 #include "main.h"
 #include "trie.h"
 
+static void trie_betole(int family, uint32_t *value);
+static void trie_letobe(int family, uint32_t *value);
+static uint32_t trie_bit(uint32_t *addr, int digit);
+static void trie_bit_or(uint32_t *addr, int digit, int value);
+
 int main()
 {
 	struct trie_node *root;
-	uint32_t nexthop = 0;
-	char nexthop_a[256];
-	struct gamt_map *gamt;
+	char *nexthop;
 
 	root = trie_alloc_node(NULL);
 
-	trie_add_v4_ascii(root, "10.0.0.0", 24, "0.0.0.1");
-	trie_add_v4_ascii(root, "10.1.0.0", 24, "0.0.0.2");
-	trie_add_v4_ascii(root, "10.0.0.0", 8, "0.0.0.3");
+	trie_add_ascii(root, AF_INET, "10.0.0.0", 24, "0.0.0.1", strlen("0.0.0.1"));
+	trie_add_ascii(root, AF_INET, "10.1.0.0", 24, "0.0.0.2", strlen("0.0.0.2"));
+	trie_add_ascii(root, AF_INET, "10.0.0.0", 8, "0.0.0.3", strlen("0.0.0.3"));
 
-	trie_lookup_v4_ascii(root, "10.1.0.1", &nexthop);
-	nexthop = htonl(nexthop);
-	inet_ntop(AF_INET, &nexthop, nexthop_a, 256);
-	printf("nexthop = %s\n", nexthop_a);
+	trie_lookup_ascii(root, AF_INET, "10.1.0.1", (void **)&nexthop);
+	printf("nexthop = %s\n", nexthop);
 
-	trie_delete_v4_ascii(root, "10.1.0.0", 24);
+	trie_delete_ascii(root, AF_INET, "10.1.0.0", 24);
 
-	trie_lookup_v4_ascii(root, "10.1.0.1", &nexthop);
-	nexthop = htonl(nexthop);
-	inet_ntop(AF_INET, &nexthop, nexthop_a, 256);
-	printf("nexthop = %s\n", nexthop_a);
-
-	gamt = gamt_alloc(root, 32, 6);
+	trie_lookup_ascii(root, AF_INET, "10.1.0.1", (void **)&nexthop);
+	printf("nexthop = %s\n", nexthop);
 
 	return 0;
 }
 
-int trie_lookup_v4_ascii(struct trie_node *root,
-	char *destination_a, uint32_t *nexthop)
+static void trie_betole(int family, uint32_t *value)
 {
-	uint32_t destination;
-
-	inet_pton(AF_INET, destination_a, &destination);
-	destination = ntohl(destination);
-	return trie_lookup_v4(root, destination, nexthop);
+	switch(family){
+		case AF_INET:
+			value[0] = ntohl(value[0]);
+			break;
+		case AF_INET6:
+			value[0] = ntohl(value[0]);
+			value[1] = ntohl(value[1]);
+			value[2] = ntohl(value[2]);
+			value[3] = ntohl(value[3]);
+			break;
+		default:
+			break;
+	}
+	return;
 }
 
-int trie_add_v4_ascii(struct trie_node *root,
-	char *prefix_a, unsigned int prefix_len, char *nexthop_a)
+static void trie_letobe(int family, uint32_t *value)
 {
-	uint32_t prefix, nexthop;
-
-	inet_pton(AF_INET, prefix_a, &prefix);
-	prefix = ntohl(prefix);
-	inet_pton(AF_INET, nexthop_a, &nexthop);
-	nexthop = ntohl(nexthop);
-	return trie_add_v4(root, prefix, prefix_len, nexthop);
+	trie_betole(family, value);
+	return;
 }
 
-int trie_delete_v4_ascii(struct trie_node *root,
+static uint32_t trie_bit(uint32_t *addr, int digit)
+{
+	int index, shift;
+
+	index = digit >> 5;
+	shift = digit % 32;
+
+	return (addr[index] >> shift) & 0x1;
+}
+
+static void trie_bit_or(uint32_t *addr, int digit, int value)
+{
+	int index, shift;
+
+	index = digit >> 5;
+	shift = digit % 32;
+
+	addr[index] |= (value & 0x1) << shift;
+	return;
+}
+
+int trie_lookup_ascii(struct trie_node *root, int family,
+	char *destination_a, void **data)
+{
+	uint32_t destination[4];
+
+	inet_pton(family, destination_a, destination);
+	trie_betole(family, destination);
+
+	return trie_lookup(root, family, destination, data);
+}
+
+int trie_add_ascii(struct trie_node *root, int family,
+	char *prefix_a, unsigned int prefix_len,
+	void *data, unsigned int data_len)
+{
+	uint32_t prefix[4];
+
+	inet_pton(family, prefix_a, prefix);
+	trie_betole(family, prefix);
+
+	return trie_add(root, family, prefix, prefix_len,
+		data, data_len);
+}
+
+int trie_delete_ascii(struct trie_node *root, int family,
 	char *prefix_a, unsigned int prefix_len)
 {
-	uint32_t prefix;
+	uint32_t prefix[4];
 
-	inet_pton(AF_INET, prefix_a, &prefix);
-	prefix = ntohl(prefix);
-	return trie_delete_v4(root, prefix, prefix_len);
+	inet_pton(family, prefix_a, &prefix);
+	trie_betole(family, prefix);
+
+	return trie_delete(root, family, prefix, prefix_len);
 }
 
 struct trie_node *trie_alloc_node(struct trie_node *parent)
@@ -81,19 +126,32 @@ struct trie_node *trie_alloc_node(struct trie_node *parent)
 	return node;
 }
 
-int trie_traverse_v4(struct trie_node *current, uint32_t prefix,
-	unsigned int prefix_len, struct routes_list **list)
+int trie_traverse(struct trie_node *current, int family,
+	uint32_t *prefix, unsigned int prefix_len,
+	struct routes_list **list)
 {
 	struct route *route;
 	struct routes_list *list_new, *list_current;
-	int i;
+	uint32_t prefix_child[4];
+	int i, len_family;
 
+	switch(family){
+		case AF_INET:
+			len_family = 32;
+			break;
+		case AF_INET6:
+			len_family = 128;
+			break;
+		default:
+			break;
+	}
+
+	memcpy(prefix_child, prefix, len_family >> 3);
 	prefix_len++;
-
 	for(i = 0; i < 2; i++){
 		if(current->child[i] != NULL){
-			prefix |= i << (32 - (prefix_len));
-			trie_traverse_v4(current->child[i], prefix, prefix_len, list);
+			trie_bit_or(prefix_child, len_family - prefix_len, i);
+			trie_traverse(current->child[i], family, prefix_child, prefix_len, list);
 		}
 	}
 
@@ -101,9 +159,9 @@ int trie_traverse_v4(struct trie_node *current, uint32_t prefix,
 		route = malloc(sizeof(struct route));
 		list_new = malloc(sizeof(struct routes_list));
 
-		route->prefix = prefix;
+		memcpy(route->prefix, prefix, len_family >> 3);
 		route->prefix_len = prefix_len;
-		route->nexthop = *(uint32_t *)current->data;
+		route->data = current->data;
 
 		list_new->route = route;
 		list_new->next = NULL;
@@ -123,25 +181,34 @@ int trie_traverse_v4(struct trie_node *current, uint32_t prefix,
 	return 0;
 }
 
-int trie_lookup_v4(struct trie_node *root,
-	uint32_t destination, uint32_t *nexthop)
+int trie_lookup(struct trie_node *root, int family,
+	uint32_t *destination, void **data)
 {
 	struct trie_node *current;
-	uint32_t addr, nexthop_last;
+	void *data_last;
 	int len_rest, index, ret;
 
 	current = root;
-	addr = destination;
-	nexthop_last = 0;
-	len_rest = 32;
+	data_last = NULL;
 	ret = 0;
+
+	switch(family){
+		case AF_INET:
+			len_rest = 32;
+			break;
+		case AF_INET6:
+			len_rest = 128;
+			break;
+		default:
+			break;
+	}
 
 	while(len_rest > 0){
 		len_rest--;
-		index = (addr >> len_rest) & 0x1;
+		index = trie_bit(destination, len_rest);
 
 		if(current->child[index] == NULL){
-			if(!nexthop_last){
+			if(!data_last){
 				/* no route found */
 				ret = -1;
 				goto out;
@@ -153,29 +220,39 @@ int trie_lookup_v4(struct trie_node *root,
 		current = current->child[index];
 
 		if(current->data != NULL){
-			nexthop_last = *(uint32_t *)(current->data);
+			data_last = current->data;
 		}
 	}
 
-	*nexthop = nexthop_last;
+	*data = data_last;
 out:
 	return ret;
 }
 
-int trie_add_v4(struct trie_node *root,
-	uint32_t prefix, unsigned int prefix_len, uint32_t nexthop)
+int trie_add(struct trie_node *root, int family,
+	uint32_t *prefix, unsigned int prefix_len,
+	void *data, unsigned int data_len)
 {
 	struct trie_node *current;
-	uint32_t addr;
-	int len_rest, index;
+	int len_rest, len_family, index;
 
 	current = root;
-	addr = prefix;
 	len_rest = prefix_len;
+
+	switch(family){
+		case AF_INET:
+			len_family = 32;
+			break;
+		case AF_INET6:
+			len_family = 128;
+			break;
+		default:
+			break;
+	}
 
 	while(len_rest > 0){
 		len_rest--;
-		index = (addr >> (32 - (prefix_len - len_rest))) & 0x1;
+		index = trie_bit(prefix, (len_family - (prefix_len - len_rest)));
 		
 		if(current->child[index] == NULL){
 			current->child[index] = trie_alloc_node(current);
@@ -184,29 +261,39 @@ int trie_add_v4(struct trie_node *root,
 		current = current->child[index];
 	}
 
-	if(current->data == NULL){
-		current->data = malloc(sizeof(uint32_t));
+	if(current->data != NULL){
+		free(current->data);
 	}
 
-	*(uint32_t *)(current->data) = nexthop;
+	current->data = malloc(data_len);
+	memcpy(current->data, data, data_len);
 	return 0;
 }
 
-int trie_delete_v4(struct trie_node *root,
-	uint32_t prefix, unsigned int prefix_len)
+int trie_delete(struct trie_node *root, int family,
+	uint32_t *prefix, unsigned int prefix_len)
 {
 	struct trie_node *current;
-	uint32_t addr;
-	int len_rest, index, ret;
+	int len_rest, len_family, index, ret;
 
 	current = root;
-	addr = prefix;
 	len_rest = prefix_len;
 	ret = 0;
+
+	switch(family){
+		case AF_INET:
+			len_family = 32;
+			break;
+		case AF_INET6:
+			len_family = 128;
+			break;
+		default:
+			break;
+	}
 	
 	while(len_rest > 0){
 		len_rest--;
-		index = (addr >> (32 - (prefix_len - len_rest))) & 0x1;
+		index = trie_bit(prefix, (len_family - (prefix_len - len_rest)));
 
 		if(current->child[index] == NULL){
 			/* no route found */
@@ -222,7 +309,7 @@ int trie_delete_v4(struct trie_node *root,
 	len_rest = prefix_len;
 
 	while(len_rest > 0){
-		index = (addr >> (32 - len_rest)) & 0x1;
+		index = trie_bit(prefix, (len_family - len_rest));
 		len_rest--;
 
 		if(current->child[0] != NULL

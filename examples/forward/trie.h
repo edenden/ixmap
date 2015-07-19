@@ -8,9 +8,9 @@ struct trie_node {
 };
 
 struct route {
-	uint32_t	prefix;
+	uint32_t	prefix[4];
 	unsigned int	prefix_len;
-	uint32_t	nexthop;
+	void		*data;
 };
 
 struct routes_list {
@@ -18,20 +18,23 @@ struct routes_list {
 	struct routes_list	*next;
 };
 
-int trie_lookup_v4_ascii(struct trie_node *root,
-	char *destination_a, uint32_t *nexthop);
-int trie_add_v4_ascii(struct trie_node *root,
-	char *prefix_a, unsigned int prefix_len, char *nexthop_a);
-int trie_delete_v4_ascii(struct trie_node *root,
+int trie_lookup_ascii(struct trie_node *root, int family,
+	char *destination_a, void **data);
+int trie_add_ascii(struct trie_node *root, int family,
+	char *prefix_a, unsigned int prefix_len,
+	void *data, unsigned int data_len);
+int trie_delete_ascii(struct trie_node *root, int family,
 	char *prefix_a, unsigned int prefix_len);
 struct trie_node *trie_alloc_node(struct trie_node *parent);
-int trie_traverse_v4(struct trie_node *current, uint32_t prefix,
-	unsigned int prefix_len, struct routes_list **list);
-int trie_lookup_v4(struct trie_node *root,
-	uint32_t destination, uint32_t *nexthop);
-int trie_add_v4(struct trie_node *root,
-	uint32_t prefix, unsigned int prefix_len, uint32_t nexthop);
-int trie_delete_v4(struct trie_node *root,
-	uint32_t prefix, unsigned int prefix_len);
+int trie_traverse(struct trie_node *current, int family,
+	uint32_t *prefix, unsigned int prefix_len,
+	struct routes_list **list);
+int trie_lookup(struct trie_node *root, int family,
+	uint32_t *destination, void **data);
+int trie_add(struct trie_node *root, int family,
+	uint32_t *prefix, unsigned int prefix_len,
+	void *data, unsigned int data_len);
+int trie_delete(struct trie_node *root, int family,
+	uint32_t *prefix, unsigned int prefix_len);
 
 #endif /* _TRIE_H */
