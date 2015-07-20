@@ -214,6 +214,7 @@ static void ixmapfwd_packet_forward(struct ixmap_buf *buf,
 	struct ethhdr *eth;
 	struct iphdr *ip;
 	struct fib_entry *entry;
+	unsigned short bulk_count, bulk_count_max;
 
 	/* TEMP */
 	uint8_t src_mac[6];
@@ -240,32 +241,47 @@ static void ixmapfwd_packet_forward(struct ixmap_buf *buf,
 		case ETH_P_IP:
 			ip = (struct iphdr *)(eth + 1);
 			entry = fib_lookup(fib, AF_INET, &ip->daddr);
+
+			bulk_count_max =
+				ixmap_bulk_max_count_get(bulk_tx[entry->port_index]);
+			bulk_count =
+				ixmap_bulk_count_get(bulk_tx[entry->port_index]);
+
+			if(unlikely(bulk_count == bulk_count_max)){
+				goto drop;
+			}
+
 			ret = arp_lookup(arp, entry->nexthop);
 			if(ret < 0){
-				int index, slot_index_append, size_append;
+				int index_arp, slot_index_arp;
 				void *arp_buf;
 				unsigned int arp_buf_size;
 
-				index = ixmap_bulk_append(bulk_tx[entry->port_index]);
-				if(index < 0){
+				index_arp = ixmap_bulk_slot_append(bulk_tx[entry->port_index], buf);
+				if(index_arp < 0){
 					goto drop;
 				}
 
-				slot_index_append =
+				slot_index_arp =
 					ixmap_bulk_slot_index_get(bulk_tx[entry->port_index], index);
 				arp_buf = (void *)ixmap_slot_addr_virt(buf, slot_index_append);
-				arp_buf_size = ixmap_bulk_slot_size_get();
+				arp_buf_size =
+					ixmap_bulk_slot_size_get(bulk_tx[entry->port_index], index);
 				arp_generate
+				goto drop;
 			}
 			break;
 		case ETH_P_IPV6:
+			goto drop;
 			break;
 		default:
+			goto drop;
 			break;
 		}
 
+		continue;
 drop:
-
+		ixmap_bulk_slot_release(bulk_rx, buf, i);
 	}
 }
 

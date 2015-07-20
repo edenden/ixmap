@@ -76,7 +76,9 @@ unsigned int ixmap_bulk_slot_size_get(struct ixmap_bulk *bulk,
 	unsigned int index);
 void ixmap_bulk_slot_size_set(struct ixmap_bulk *bulk,
 	unsigned int index, unsigned int size);
-int ixmap_bulk_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf);
+int ixmap_bulk_slot_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf);
+void ixmap_bulk_slot_release(struct ixmap_bulk *bulk, struct ixmap_buf *buf,
+	unsigned int index);
 void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
 	struct ixmap_buf *buf);
 void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,

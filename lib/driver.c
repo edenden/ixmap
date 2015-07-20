@@ -178,7 +178,7 @@ void ixmap_bulk_slot_size_set(struct ixmap_bulk *bulk,
 	return;
 }
 
-int ixmap_bulk_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf)
+int ixmap_bulk_slot_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf)
 {
 	int index, slot_index;
 
@@ -197,6 +197,13 @@ int ixmap_bulk_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf)
 
 err_slot_alloc:
 	return -1;
+}
+
+void ixmap_bulk_slot_release(struct ixmap_bulk *bulk, struct ixmap_buf *buf,
+	unsigned int index)
+{
+	ixmap_slot_release(buf, bulk->slot_index[index]);
+	return;
 }
 
 void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
