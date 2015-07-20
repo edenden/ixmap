@@ -11,7 +11,7 @@
 
 int arp_generate(void *buf, int buf_len, uint16_t opcode,
 	uint8_t *dest_mac, uint8_t *src_mac,
-	uint32_t dest_ip, uint32_t src_ip)
+	uint32_t *dest_ip, uint32_t *src_ip)
 {
 	struct ethhdr *eth;
 	struct arphdr *arp;
@@ -35,7 +35,7 @@ int arp_generate(void *buf, int buf_len, uint16_t opcode,
 	arp->ar_pro	= htons(ETH_P_IP);
 	arp->ar_hln	= ETH_ALEN;
 	arp->ar_pln	= 4;
-	arp->ar_op	= htons(ARPOP_REQUEST);
+	arp->ar_op	= htons(opcode);
 
 	if(len + 8 + ETH_ALEN * 2 > buf_len){
 		goto err_buf_size;
@@ -44,7 +44,7 @@ int arp_generate(void *buf, int buf_len, uint16_t opcode,
 	memcpy(buf + len, src_mac, ETH_ALEN);
 	len += ETH_ALEN;
 
-	memcpy(buf + len, &src_ip, 4);
+	memcpy(buf + len, src_ip, 4);
 	len += 4;
 
 	if(opcode == ARPOP_REQUEST){
@@ -56,7 +56,7 @@ int arp_generate(void *buf, int buf_len, uint16_t opcode,
 	}
 	len += ETH_ALEN;
 
-	memcpy(buf + len, &dest_ip, 4);
+	memcpy(buf + len, dest_ip, 4);
 	len += 4;
 
 	return len;

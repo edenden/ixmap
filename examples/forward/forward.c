@@ -267,7 +267,14 @@ static void ixmapfwd_packet_forward(struct ixmap_buf *buf,
 				arp_buf = (void *)ixmap_slot_addr_virt(buf, slot_index_append);
 				arp_buf_size =
 					ixmap_bulk_slot_size_get(bulk_tx[entry->port_index], index);
-				arp_generate
+				arp_buf_size = arp_generate(arp_buf, arp_buf_size, ARPOP_REQUEST,
+					NULL, src_mac, entry->nexthop, src_ip);
+
+				ixmap_bulk_count_set(bulk_tx[entry->port_index], ++bulk_count);
+				ixmap_bulk_slot_index_set(bulk_tx[entry->port_index],
+					index_arp, slot_index_arp);
+				ixmap_bulk_slot_size_set(bulk_tx[entry->port_index],
+					index_arp, arp_buf_size);
 				goto drop;
 			}
 			break;
