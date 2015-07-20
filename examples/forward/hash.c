@@ -60,7 +60,7 @@ unsigned int hash_add(struct hash_root *root, void *key, int key_len,
 	}
 	entry_list_current->next = entry;
 
-	return count_collision;
+	return collision;
 
 err_alloc_value:
 	free(entry->key);

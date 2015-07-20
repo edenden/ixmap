@@ -18,8 +18,8 @@ struct routes_list {
 	struct routes_list	*next;
 };
 
-int trie_lookup_ascii(struct trie_node *root, int family,
-	char *destination_a, void **data);
+void *trie_lookup_ascii(struct trie_node *root, int family,
+	char *destination_a);
 int trie_add_ascii(struct trie_node *root, int family,
 	char *prefix_a, unsigned int prefix_len,
 	void *data, unsigned int data_len);
@@ -29,8 +29,8 @@ struct trie_node *trie_alloc_node(struct trie_node *parent);
 int trie_traverse(struct trie_node *current, int family,
 	uint32_t *prefix, unsigned int prefix_len,
 	struct routes_list **list);
-int trie_lookup(struct trie_node *root, int family,
-	uint32_t *destination, void **data);
+void *trie_lookup(struct trie_node *root, int family,
+	uint32_t *destination);
 int trie_add(struct trie_node *root, int family,
 	uint32_t *prefix, unsigned int prefix_len,
 	void *data, unsigned int data_len);
