@@ -9,11 +9,6 @@
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
 
-arp_process()
-{
-
-}
-
 int arp_generate(void *buf, int buf_len, uint16_t opcode,
 	uint8_t *dest_mac, uint8_t *src_mac,
 	uint32_t *dest_ip, uint32_t *src_ip)

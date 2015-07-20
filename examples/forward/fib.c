@@ -1,5 +1,5 @@
 
-int ixmapfwd_fib_import(struct fib *fib, char *command)
+int fib_import(struct fib *fib, char *command)
 {
 	int opcode, family;
 	uint32_t prefix[4], nexthop[4];
@@ -20,7 +20,7 @@ int ixmapfwd_fib_import(struct fib *fib, char *command)
 
 }
 
-int ixmapfwd_fib_route_update(struct fib *fib, int family,
+int fib_route_update(struct fib *fib, int family,
 	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop)
 {
 	struct fib_entry entry;
@@ -54,7 +54,7 @@ err_invalid_family:
 	return -1;
 }
 
-int ixmapfwd_fib_route_delete(struct fib *fib, int family,
+int fib_route_delete(struct fib *fib, int family,
 	uint32_t *prefix, unsigned int prefix_len)
 {
 	unsigned int family_len;
@@ -77,7 +77,7 @@ err_invalid_family:
 	return -1;
 }
 
-struct ixmapfwd_fib_entry *fib_lookup(struct fib *fib, int family,
+struct fib_entry *fib_lookup(struct fib *fib, int family,
 	uint32_t *destination)
 {
 	unsigned int family_len;
