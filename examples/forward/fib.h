@@ -7,7 +7,4 @@ struct fib_entry {
 
 struct fib {
 	struct trie_node	*trie_node;
-	struct hash_root	*hash_root;
-	struct fib_entry	default;
-	int			default_exist;
 };
