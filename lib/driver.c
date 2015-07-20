@@ -227,6 +227,29 @@ void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
 	}
 }
 
+int ixmap_tx_alloc(struct ixmap_instance *instance, struct ixmap_buf *buf,
+	uint16_t max_allocation, struct ixmap_bulk *bulk)
+{
+	unsigned int total_allocated = 0;
+
+	do{
+		int slot_index;
+
+		slot_index = ixmap_slot_assign(buf);
+		if(slot_index < 0){
+			instance->count_tx_alloc_failed +=
+				(max_allocation - total_allocated);
+			break;
+                }
+
+		bulk->slot_index[total_allocated] = slot_index;
+		bulk->size[total_allocated] = buf->buf_size;
+	}while(likely(total_allocated < max_allocation));
+
+	bulk->count = total_allocated;
+	return total_allocated;
+}
+
 void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 	struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 {
@@ -488,6 +511,11 @@ inline unsigned long ixmap_count_rx_clean_total(struct ixmap_instance *instance,
 	unsigned int port_index)
 {
 	return instance->ports[port_index].count_rx_clean_total;
+}
+
+inline unsigned long ixmap_count_tx_alloc_failed(struct ixmap_instance *instance)
+{
+	return instance->count_tx_alloc_failed;
 }
 
 inline unsigned long ixmap_count_tx_xmit_failed(struct ixmap_instance *instance,

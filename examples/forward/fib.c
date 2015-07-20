@@ -40,10 +40,10 @@ int fib_route_update(struct fib *fib, int family,
 
 	// TBD: Get the port index here
 
-	memcpy(entry->nexthop, nexthop, family_len >> 3);
-	memcpy(entry->prefix, prefix, family_len >> 3);
-	entry->prefix_len = prefix_len;
-	entry->port_index = port_index;
+	memcpy(entry.nexthop, nexthop, family_len >> 3);
+	memcpy(entry.prefix, prefix, family_len >> 3);
+	entry.prefix_len = prefix_len;
+	entry.port_index = port_index;
 
 	trie_add(fib->trie_root, family_len, prefix, prefix_len,
 		&entry, sizeof(struct fib_entry));

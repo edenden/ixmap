@@ -66,16 +66,16 @@ err_buf_size:
 	return -1;
 }
 
-int arp_learn(void *buf, int buf_len,
-	uint8_t *src_mac, uint32_t src_ip)
+int arp_learn(struct ixmap_handle *ih, struct arp *arp,
+	void *buf, int buf_len, uint8_t *src_mac, uint32_t src_ip)
 {
+	struct arp_entry entry;
 	struct ethhdr *eth;
 	struct arphdr *arp;
 	uint8_t arp_dest_mac[6];
 	uint8_t arp_src_mac[6];
 	uint32_t arp_dest_ip;
 	uint32_t arp_src_ip;
-	char addrstr[256];
 	int len = 0;
 
 	eth = (struct ethhdr *)buf;
@@ -103,15 +103,14 @@ int arp_learn(void *buf, int buf_len,
 	memcpy(&arp_dest_ip, buf + len, 4);
 	len += 4;
 
-	// learn here
-	inet_ntop(AF_INET, &arp_src_ip, addrstr, sizeof(addrstr));
-	printf("learned ip = %s, mac = %02x:%02x:%02x:%02x:%02x:%02x\n",
-		addrstr, arp_src_mac[0], arp_src_mac[1], arp_src_mac[2],
-		arp_src_mac[3], arp_src_mac[4], arp_src_mac[5]);
-
+	memcpy(entry.mac_addr, arp_src_mac, ETH_ALEN);
+	hash_add(arp_table->root, &arp_src_ip, sizeof(uint32_t),
+		&entry, sizeof(struct arp_entry));
+	
 	if(arp->ar_op == htons(ARPOP_REQUEST)){
 		if(!memcmp(&src_ip, &arp_dest_ip, 4)){
-			len = arp_generate(buf, 2048, ARPOP_REPLY,
+			buf_len = ixmap_bufsize_get(ih);
+			len = arp_generate(buf, buf_len, ARPOP_REPLY,
 				arp_src_mac, src_mac, arp_dest_ip, src_ip);
 			return len;
 		}
@@ -123,7 +122,7 @@ err_buf_size:
 	return -1;
 }
 
-int arp_lookup()
+int arp_lookup(struct arp *arp)
 {
 
 }

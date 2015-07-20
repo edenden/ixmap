@@ -130,6 +130,7 @@ struct ixmap_port {
 
 struct ixmap_instance {
 	struct ixmap_port 	*ports;
+	unsigned long		count_tx_alloc_failed;
 };
 
 enum {
