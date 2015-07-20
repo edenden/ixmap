@@ -75,10 +75,9 @@ unsigned int ixmap_bulk_slot_size_get(struct ixmap_bulk *bulk,
 	unsigned int index);
 void ixmap_bulk_slot_size_set(struct ixmap_bulk *bulk,
 	unsigned int index, unsigned int size);
+int ixmap_bulk_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf);
 void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
 	struct ixmap_buf *buf);
-int ixmap_tx_alloc(struct ixmap_instance *instance, struct ixmap_buf *buf,
-	uint16_t max_allocation, struct ixmap_bulk *bulk);
 void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 	struct ixmap_buf *buf, struct ixmap_bulk *bulk);
 int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
@@ -91,7 +90,6 @@ inline unsigned long ixmap_count_rx_alloc_failed(struct ixmap_instance *instance
 	unsigned int port_index);
 inline unsigned long ixmap_count_rx_clean_total(struct ixmap_instance *instance,
 	unsigned int port_index);
-inline unsigned long ixmap_count_tx_alloc_failed(struct ixmap_instance *instance);
 inline unsigned long ixmap_count_tx_xmit_failed(struct ixmap_instance *instance,
 	unsigned int port_index);
 inline unsigned long ixmap_count_tx_clean_total(struct ixmap_instance *instance,

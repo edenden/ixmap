@@ -35,12 +35,13 @@ void *process_interrupt(void *data)
 	struct ixmapfwd_thread *thread = data;
 	struct ixmap_instance *instance;
 	struct ixmap_buf *buf;
-	struct ixmap_bulk *bulk_rx, *bulk_tx;
+	struct ixmap_bulk *bulk_rx, **bulk_tx_list;
 	struct ixmapfwd_fd_desc *fd_desc_list, *fd_desc;
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int read_size, fd_ep, i, ret, num_fd;
 	unsigned int port_index;
 	uint8_t *read_buf;
+	int bulk_tx_assigned = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
 	instance = thread->instance;
@@ -58,9 +59,15 @@ void *process_interrupt(void *data)
 	if(!bulk_rx)
 		goto err_bulk_rx_alloc;
 
-	bulk_tx = ixmap_bulk_alloc(instance, thread->num_ports);
-	if(!bulk_tx)
-		goto err_bulk_tx_alloc;
+	bulk_tx_list = malloc(sizeof(struct ixmap_bulk) * thread->num_ports);
+	if(!bulk_tx_list)
+		goto err_bulk_tx_list_alloc;
+
+	for(i = 0; i < thread->num_ports; i++, bulk_tx_assigned++){
+		bulk_tx_list[i] = ixmap_bulk_alloc(instance, thread->num_ports);
+		if(!bulk_tx_list[i])
+			goto err_bulk_tx_alloc;
+	}
 
 	/* Prepare each fd in epoll */
 	fd_ep = ixmapfwd_epoll_prepare(&fd_desc_list,
@@ -105,8 +112,12 @@ void *process_interrupt(void *data)
 				ixmapfwd_packet_dump(buf, bulk_rx);
 #endif
 
-				/* XXX: Following is 2ports specific code */
-				ixmap_tx_xmit(instance, !port_index, buf, bulk_tx);
+				ixmapfwd_packet_forward(bulk_rx, bulk_tx_list);
+				for(i = 0; i < thread->num_ports; i++){
+					if(bulk > 0){
+						ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
+					}
+				}
 
 				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);
@@ -150,8 +161,12 @@ out:
 err_ixgbe_irq_setmask:
 	ixmapfwd_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 err_ixgbe_epoll_prepare:
-	ixmap_bulk_release(bulk_tx);
 err_bulk_tx_alloc:
+	for(i = 0; i < bulk_tx_assigned; i++){
+		ixmap_bulk_release(bulk_tx_list[i]);
+	}
+	free(bulk_tx_list);
+err_bulk_tx_alloc_list:
 	ixmap_bulk_release(bulk_rx);
 err_bulk_rx_alloc:
 	free(read_buf);
