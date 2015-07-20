@@ -100,11 +100,14 @@ struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
 			max_bulk_count = instance->ports[i].budget;
 		}
 	}
+	max_bulk_count += IXMAP_BULK_RESERVED;
 
 	bulk = malloc(sizeof(struct ixmap_bulk));
 	if(!bulk)
 		goto err_alloc_bulk;
+
 	bulk->count = 0;
+	bulk->max_count = max_bulk_count;
 
 	bulk->slot_index = malloc(sizeof(int32_t) * max_bulk_count);
 	if(!bulk->slot_index)
@@ -142,6 +145,11 @@ void ixmap_bulk_count_set(struct ixmap_bulk *bulk, unsigned short count)
 {
 	bulk->count = count;
 	return;
+}
+
+unsigned short ixmap_bulk_max_count_get(struct ixmap_bulk *bulk)
+{
+	return bulk->max_count;
 }
 
 int ixmap_bulk_slot_index_get(struct ixmap_bulk *bulk,

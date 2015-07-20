@@ -205,6 +205,70 @@ static void ixmapfwd_packet_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 }
 #endif
 
+static void ixmapfwd_packet_forward(struct ixmap_buf *buf,
+	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
+{
+	unsigned short count;
+	int slot_index, i, ret;
+	unsigned int size;
+	struct ethhdr *eth;
+	struct iphdr *ip;
+	struct fib_entry *entry;
+
+	/* TEMP */
+	uint8_t src_mac[6];
+	uint32_t src_ip;
+
+	src_mac[0] = 0x9c; src_mac[1] = 0xb6; src_mac[2] = 0x54;
+	src_mac[3] = 0xbb; src_mac[4] = 0xfb; src_mac[5] = 0xe8;
+	inet_pton(AF_INET, "203.178.138.110", &src_ip);
+
+	count = ixmap_bulk_count_get(bulk_rx);
+	for(i = 0; i < count; i++){
+		slot_index = ixmap_bulk_slot_index_get(bulk, i);
+		size = ixmap_bulk_slot_size_get(bulk, i);
+
+		eth = (struct ethhdr *)ixmap_slot_addr_virt(buf, slot_index);
+		switch(ntohs(eth->h_proto)){
+		case ETH_P_ARP:
+			ret = arp_learn(eth, size, src_mac, src_ip);
+			if(ret > 0){
+
+			}
+			goto drop;
+			break;
+		case ETH_P_IP:
+			ip = (struct iphdr *)(eth + 1);
+			entry = fib_lookup(fib, AF_INET, &ip->daddr);
+			ret = arp_lookup(arp, entry->nexthop);
+			if(ret < 0){
+				int index, slot_index_append, size_append;
+				void *arp_buf;
+				unsigned int arp_buf_size;
+
+				index = ixmap_bulk_append(bulk_tx[entry->port_index]);
+				if(index < 0){
+					goto drop;
+				}
+
+				slot_index_append =
+					ixmap_bulk_slot_index_get(bulk_tx[entry->port_index], index);
+				arp_buf = (void *)ixmap_slot_addr_virt(buf, slot_index_append);
+				arp_buf_size = ixmap_bulk_slot_size_get();
+				arp_generate
+			}
+			break;
+		case ETH_P_IPV6:
+			break;
+		default:
+			break;
+		}
+
+drop:
+
+	}
+}
+
 static int ixmapfwd_epoll_prepare(struct ixmapfwd_fd_desc **_fd_desc_list,
 	struct ixmap_instance *instance, uint32_t num_ports, uint32_t queue_index)
 {

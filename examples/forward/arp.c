@@ -109,6 +109,7 @@ int arp_learn(struct ixmap_handle *ih, struct arp *arp,
 	
 	if(arp->ar_op == htons(ARPOP_REQUEST)){
 		if(!memcmp(&src_ip, &arp_dest_ip, 4)){
+			return 1;
 			buf_len = ixmap_bufsize_get(ih);
 			len = arp_generate(buf, buf_len, ARPOP_REPLY,
 				arp_src_mac, src_mac, arp_dest_ip, src_ip);
