@@ -232,6 +232,9 @@ int ixmap_tx_alloc(struct ixmap_instance *instance, struct ixmap_buf *buf,
 {
 	unsigned int total_allocated = 0;
 
+	if(!max_allocation)
+		goto out;
+
 	do{
 		int slot_index;
 
@@ -246,6 +249,7 @@ int ixmap_tx_alloc(struct ixmap_instance *instance, struct ixmap_buf *buf,
 		bulk->size[total_allocated] = buf->buf_size;
 	}while(likely(total_allocated < max_allocation));
 
+out:
 	bulk->count = total_allocated;
 	return total_allocated;
 }

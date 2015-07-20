@@ -35,7 +35,7 @@ void *process_interrupt(void *data)
 	struct ixmapfwd_thread *thread = data;
 	struct ixmap_instance *instance;
 	struct ixmap_buf *buf;
-	struct ixmap_bulk *bulk;
+	struct ixmap_bulk *bulk_rx, *bulk_tx;
 	struct ixmapfwd_fd_desc *fd_desc_list, *fd_desc;
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int read_size, fd_ep, i, ret, num_fd;
@@ -54,9 +54,13 @@ void *process_interrupt(void *data)
 		goto err_alloc_read_buf;
 
 	/* Prepare bulk array */
-	bulk = ixmap_bulk_alloc(instance, thread->num_ports);
-	if(!bulk)
-		goto err_bulk_alloc;
+	bulk_rx = ixmap_bulk_alloc(instance, thread->num_ports);
+	if(!bulk_rx)
+		goto err_bulk_rx_alloc;
+
+	bulk_tx = ixmap_bulk_alloc(instance, thread->num_ports);
+	if(!bulk_tx)
+		goto err_bulk_tx_alloc;
 
 	/* Prepare each fd in epoll */
 	fd_ep = ixmapfwd_epoll_prepare(&fd_desc_list,
@@ -94,15 +98,15 @@ void *process_interrupt(void *data)
 				port_index = ixmap_port_index(fd_desc->irqh);
 
 				/* Rx descripter cleaning */
-				ret = ixmap_rx_clean(instance, port_index, buf, bulk);
+				ret = ixmap_rx_clean(instance, port_index, buf, bulk_rx);
 				ixmap_rx_alloc(instance, port_index, buf);
 
 #ifdef DEBUG
-				ixmapfwd_packet_dump(buf, bulk);
+				ixmapfwd_packet_dump(buf, bulk_rx);
 #endif
 
 				/* XXX: Following is 2ports specific code */
-				ixmap_tx_xmit(instance, !port_index, buf, bulk);
+				ixmap_tx_xmit(instance, !port_index, buf, bulk_tx);
 
 				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);
@@ -116,9 +120,6 @@ void *process_interrupt(void *data)
 
 				/* Tx descripter cleaning */
 				ret = ixmap_tx_clean(instance, port_index, buf);
-
-				/* XXX: Following is 2ports specific code */
-				ixmap_rx_alloc(instance, !port_index, buf);
 
 				if(ret < ixmap_budget(instance, port_index)){
 					ret = read(fd_desc->fd, read_buf, read_size);
@@ -149,8 +150,10 @@ out:
 err_ixgbe_irq_setmask:
 	ixmapfwd_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 err_ixgbe_epoll_prepare:
-	ixmap_bulk_release(bulk);
-err_bulk_alloc:
+	ixmap_bulk_release(bulk_tx);
+err_bulk_tx_alloc:
+	ixmap_bulk_release(bulk_rx);
+err_bulk_rx_alloc:
 	free(read_buf);
 err_alloc_read_buf:
 	printf("thread execution failed\n");
