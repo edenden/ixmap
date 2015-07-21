@@ -83,7 +83,7 @@ static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
 		continue;
 
 packet_drop:
-		ixmap_bulk_slot_release(bulk_rx, buf, i);
+		ixmap_slot_release(buf, slot_index);
 	}
 }
 
@@ -98,6 +98,12 @@ int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 	ret = arp_learn(slot_buf, slot_size, src_mac, src_ip);
 	if(ret < 0){
 		goto packet_drop;
+	}
+
+	bulk_tx_count_max = ixmap_bulk_max_count_get(bulk_tx[fib_entry->port_index]);
+	bulk_tx_count = ixmap_bulk_count_get(bulk_tx[fib_entry->port_index]);
+	if(unlikely(bulk_tx_count == bulk_tx_count_max)){
+		goto err_bulk_tx_full;
 	}
 
 	index_arp = ixmap_bulk_slot_append(bulk_tx[port_index], buf);
@@ -123,8 +129,7 @@ int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 	return -1;
 
 err_arp_generate:
-	ixmap_bulk_slot_release(
-		bulk_tx[port_index], buf, index_arp);
+	ixmap_bulk_slot_pop(bulk_tx[port_index], buf);
 err_arp_append:
 packet_drop:
 	return -1;
@@ -199,8 +204,7 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	return 0;
 
 err_arp_generate:
-	ixmap_bulk_slot_release(
-		bulk_tx[entry->port_index], buf, index_arp);
+	ixmap_bulk_slot_pop(bulk_tx[entry->port_index], buf);
 err_arp_append:
 err_bulk_tx_full:
 packet_drop:

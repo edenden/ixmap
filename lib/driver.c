@@ -25,10 +25,12 @@ static inline void ixmap_slot_attach(struct ixmap_ring *ring,
 	uint16_t desc_index, int slot_index);
 static inline int ixmap_slot_detach(struct ixmap_ring *ring,
 	uint16_t desc_index);
-static inline void ixmap_slot_release(struct ixmap_buf *buf,
+inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index);
 static inline unsigned long ixmap_slot_addr_dma(struct ixmap_buf *buf,
 	int slot_index, int port_index);
+inline void *ixmap_slot_addr_virt(struct ixmap_buf *buf,
+	uint16_t slot_index);
 
 static inline uint16_t ixmap_desc_unused(struct ixmap_ring *ring,
 	uint16_t num_desc)
@@ -182,12 +184,11 @@ int ixmap_bulk_slot_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf)
 {
 	int index, slot_index;
 
+	index = bulk->count;
 	slot_index = ixmap_slot_assign(buf);
 	if(slot_index < 0){
 		goto err_slot_alloc;
 	}
-
-	index = bulk->count;
 
 	bulk->slot_index[index] = slot_index;
 	bulk->size[index] = buf->buf_size;
@@ -199,10 +200,16 @@ err_slot_alloc:
 	return -1;
 }
 
-void ixmap_bulk_slot_release(struct ixmap_bulk *bulk, struct ixmap_buf *buf,
-	unsigned int index)
+void ixmap_bulk_slot_pop(struct ixmap_bulk *bulk, struct ixmap_buf *buf)
 {
-	ixmap_slot_release(buf, bulk->slot_index[index]);
+	int index, slot_index;
+
+	index = bulk->count;
+	slot_index = bulk->slot_index[index];
+
+	ixmap_slot_release(buf, slot_index);
+
+	bulk->count--;
 	return;
 }
 
@@ -358,9 +365,6 @@ int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
 		union ixmap_adv_rx_desc *rx_desc;
 		uint16_t next_to_clean;
 		int slot_index;
-#ifdef DEBUG
-		void *packet;
-#endif
 
 		if(unlikely(rx_ring->next_to_clean == rx_ring->next_to_use)){
 			break;
@@ -399,10 +403,6 @@ int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
 			bulk->size[total_rx_packets]);
 
 		/* XXX: Should we prefetch the packet buffer ? */
-#ifdef DEBUG
-		packet = ixmap_slot_addr_virt(buf, slot_index);
-		dump_packet(packet);
-#endif
 
 		next_to_clean = rx_ring->next_to_clean + 1;
 		rx_ring->next_to_clean = 
@@ -487,7 +487,7 @@ static inline int ixmap_slot_detach(struct ixmap_ring *ring,
 	return slot_index;
 }
 
-static inline void ixmap_slot_release(struct ixmap_buf *buf,
+inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index)
 {
 	buf->free_index[buf->free_count] = slot_index;
