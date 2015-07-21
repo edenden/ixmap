@@ -108,7 +108,7 @@ void *thread_process_interrupt(void *data)
 				packet_dump(buf, bulk_rx);
 #endif
 
-				packet_process(bulk_rx, bulk_tx_list);
+				packet_process(buf, port_index, bulk_rx, bulk_tx_list);
 				for(i = 0; i < thread->num_ports; i++){
 					if(bulk > 0){
 						ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);

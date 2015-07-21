@@ -107,17 +107,10 @@ int arp_learn(struct ixmap_handle *ih, struct arp *arp,
 	hash_add(arp_table->root, &arp_src_ip, sizeof(uint32_t),
 		&entry, sizeof(struct arp_entry));
 	
-	if(arp->ar_op == htons(ARPOP_REQUEST)){
-		if(!memcmp(&src_ip, &arp_dest_ip, 4)){
-			return 1;
-			buf_len = ixmap_bufsize_get(ih);
-			len = arp_generate(buf, buf_len, ARPOP_REPLY,
-				arp_src_mac, src_mac, arp_dest_ip, src_ip);
-			return len;
-		}
+	if(arp->ar_op == htons(ARPOP_REQUEST)
+	&& !memcmp(&src_ip, &arp_dest_ip, 4)){
+		return 0;
 	}
-
-	return 0;
 
 err_buf_size:
 	return -1;
