@@ -102,7 +102,8 @@ void packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 		goto err_arp_generate;
 	}
 
-	ret = ixmap_bulk_slot_push(bulk_tx[port_index], slot_index_new, ret);
+	ret = ixmap_bulk_slot_push(bulk_tx[port_index],
+		slot_index_new, ret);
 	if(ret < 0){
 		goto err_slot_push;
 	}
@@ -155,7 +156,8 @@ void packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 			goto err_arp_generate;
 		}
 
-		ret = ixmap_bulk_slot_push(bulk_tx[fib_entry->port_index], slot_index_new, ret);
+		ret = ixmap_bulk_slot_push(bulk_tx[fib_entry->port_index],
+			slot_index_new, ret);
 		if(ret < 0){
 			goto err_slot_push;
 		}
