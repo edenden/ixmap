@@ -72,8 +72,6 @@ static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
 			ixmap_slot_release(buf, slot_index);
 			break;
 		}
-
-		continue;
 	}
 }
 
