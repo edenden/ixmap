@@ -52,45 +52,32 @@ static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
 
 	count = ixmap_bulk_slot_count(bulk_rx);
 	for(i = 0; i < count; i++){
-		ret = ixmap_bulk_slot_get(bulk_rx, i, &slot_index, &slot_size);
-		if(ret < 0){
-			goto out;
-		}
+		ixmap_bulk_slot_get(bulk_rx, i, &slot_index, &slot_size);
 		slot_buf = ixmap_slot_addr_virt(buf, slot_index);
 
 		eth = (struct ethhdr *)slot_buf;
 		switch(ntohs(eth->h_proto)){
 		case ETH_P_ARP:
-			ret = packet_arp_process();
-			if(ret < 0){
-				goto packet_drop;
-			}
+			packet_arp_process();
 			break;
 		case ETH_P_IP:
-			ret = packet_ip_process(buf, slot_buf, slot_index,
+			packet_ip_process(buf, slot_buf, slot_index,
 				slot_size, bulk_rx, bulk_tx);
-			if(ret < 0){
-				goto packet_drop;
-			}
 			break;
 		case ETH_P_IPV6:
 			packet_ip6_process();
-			goto packet_drop;
+			ixmap_slot_release(buf, slot_index);
 			break;
 		default:
-			goto packet_drop;
+			ixmap_slot_release(buf, slot_index);
 			break;
 		}
 
-out:
 		continue;
-
-packet_drop:
-		ixmap_slot_release(buf, slot_index);
 	}
 }
 
-int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
+void packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 	void *slot_buf, int slot_index, unsigned int slot_size,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
 {
@@ -122,17 +109,19 @@ int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 		goto err_slot_push;
 	}
 
-packet_drop:
-	return -1;
+	ixmap_slot_release(buf, slot_index);
+	return;
 
 err_slot_push:
 err_arp_generate:
 	ixmap_slot_release(buf, slot_index_new);
 err_slot_assign:
-	return -1;
+packet_drop:
+	ixmap_slot_release(buf, slot_index);
+	return;
 }
 
-int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
+void packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	void *slot_buf, int slot_index, unsigned int slot_size,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
 {
@@ -140,10 +129,9 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	struct iphdr *ip;
 	struct fib_entry *fib_entry;
 	struct arp_entry *arp_entry;
-	unsigned short bulk_tx_count, bulk_tx_count_max;
-	int index_arp, slot_index_arp, ret;
-	void *slot_buf_arp;
-	unsigned int slot_size_arp;
+	int slot_index_new, ret;
+	void *slot_buf_new;
+	unsigned int slot_size_new;
 
 	eth = (struct ethhdr *)slot_buf;
 	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
@@ -153,32 +141,27 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 		goto packet_drop;
 	}
 
-	bulk_tx_count_max = ixmap_bulk_max_count_get(bulk_tx[fib_entry->port_index]);
-	bulk_tx_count = ixmap_bulk_count_get(bulk_tx[fib_entry->port_index]);
-	if(unlikely(bulk_tx_count == bulk_tx_count_max)){
-		goto err_bulk_tx_full;
-	}
-
 	arp_entry = arp_lookup(arp, fib_entry->nexthop);
 	if(!arp_entry){
-		index_arp = ixmap_bulk_slot_append(bulk_tx[entry->port_index], buf);
-		if(index_arp < 0){
-			goto err_arp_append;
+		slot_index_new = ixmap_slot_assign(buf);
+		if(slot_index_new < 0){
+			goto err_slot_assign;
 		}
 
-		slot_index_arp = ixmap_bulk_slot_index_get(
-					bulk_tx[entry->port_index], index_arp);
-		slot_buf_arp = ixmap_slot_addr_virt(buf, slot_index_arp);
-		slot_size_arp = ixmap_bulk_slot_size_get(
-					bulk_tx[entry->port_index], index_arp);
-		ret = arp_generate(slot_buf_arp, slot_size_arp, ARPOP_REQUEST,
+		slot_buf_new = ixmap_slot_addr_virt(buf, slot_index_new);
+		slot_size_new = ixmap_slot_size(buf);
+
+		ret = arp_generate(slot_buf_new, slot_size_new, ARPOP_REQUEST,
 			NULL, src_mac, entry->nexthop, src_ip);
 		if(ret < 0){
 			goto err_arp_generate;
 		}
 
-		ixmap_bulk_slot_size_set(bulk_tx[entry->port_index],
-			index_arp, ret);
+		ret = ixmap_bulk_slot_push(bulk_tx[fib_entry->port_index], slot_index_new, ret);
+		if(ret < 0){
+			goto err_slot_push;
+		}
+
 		goto packet_drop;
 	}
 
@@ -192,20 +175,21 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	}
 	ip->check--;
 
-	ixmap_bulk_slot_index_set(bulk_tx[entry->port_index],
-		bulk_tx_count, slot_index);
-	ixmap_bulk_slot_size_set(bulk_tx[entry->port_index],
-		bulk_tx_count, slot_size);
-	ixmap_bulk_count_set(bulk_tx[entry->port_index], ++bulk_tx_count);
+	ret = ixmap_bulk_slot_push(bulk_tx[fib_entry->port_index],
+			slot_index, slot_size);
+	if(ret < 0){
+		goto packet_drop;
+	}
 
-	return 0;
+	return;
 
+err_slot_push:
 err_arp_generate:
-	ixmap_bulk_slot_pop(bulk_tx[entry->port_index], buf);
-err_arp_append:
-err_bulk_tx_full:
+	ixmap_slot_release(buf, slot_index_new);
+err_slot_assign:
 packet_drop:
-	return -1;
+	ixmap_slot_release(buf, slot_index);
+	return;
 }
 
 void packet_ip6_process()

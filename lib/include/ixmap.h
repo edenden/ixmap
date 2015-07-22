@@ -67,7 +67,7 @@ struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
 void ixmap_bulk_release(struct ixmap_bulk *bulk);
 
 unsigned short ixmap_bulk_slot_count(struct ixmap_bulk *bulk);
-int ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
+void ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
 	int *slot_index, unsigned int *slot_size);
 int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
 	int slot_index, unsigned int slot_size);

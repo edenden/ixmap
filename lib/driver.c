@@ -143,20 +143,13 @@ unsigned short ixmap_bulk_slot_count(struct ixmap_bulk *bulk)
 	return bulk->count;
 }
 
-int ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
+void ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
 	int *slot_index, unsigned int *slot_size)
 {
-	if(unlikely(index >= bulk->count)){
-		goto err_invalid_index;
-	}
-
 	*slot_index = bulk->slot_index[index];
 	*slot_index = bulk->slot_size[index];
 
-	return 0;
-
-err_invalid_index:
-	return -1;
+	return;
 }
 
 int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
