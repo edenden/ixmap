@@ -58,24 +58,28 @@ static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
 		eth = (struct ethhdr *)slot_buf;
 		switch(ntohs(eth->h_proto)){
 		case ETH_P_ARP:
-			packet_arp_process();
+			ret = packet_arp_process(buf, port_index, slot_buf,
+				slot_index, slot_size, bulk_rx, bulk_tx);
 			break;
 		case ETH_P_IP:
-			packet_ip_process(buf, slot_buf, slot_index,
-				slot_size, bulk_rx, bulk_tx);
+			ret = packet_ip_process(buf, port_index, slot_buf,
+				slot_index, slot_size, bulk_rx, bulk_tx);
 			break;
 		case ETH_P_IPV6:
 			packet_ip6_process();
-			ixmap_slot_release(buf, slot_index);
+			ret = -1;
 			break;
 		default:
-			ixmap_slot_release(buf, slot_index);
+			ret = -1;
 			break;
 		}
+
+		if(ret < 0)
+			ixmap_slot_release(buf, slot_index);
 	}
 }
 
-void packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
+int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 	void *slot_buf, int slot_index, unsigned int slot_size,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
 {
@@ -108,19 +112,17 @@ void packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 		goto err_slot_push;
 	}
 
-	ixmap_slot_release(buf, slot_index);
-	return;
+	return -1;
 
 err_slot_push:
 err_arp_generate:
 	ixmap_slot_release(buf, slot_index_new);
 err_slot_assign:
 packet_drop:
-	ixmap_slot_release(buf, slot_index);
-	return;
+	return -1;
 }
 
-void packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
+int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	void *slot_buf, int slot_index, unsigned int slot_size,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
 {
@@ -181,15 +183,14 @@ void packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 		goto packet_drop;
 	}
 
-	return;
+	return 0;
 
 err_slot_push:
 err_arp_generate:
 	ixmap_slot_release(buf, slot_index_new);
 err_slot_assign:
 packet_drop:
-	ixmap_slot_release(buf, slot_index);
-	return;
+	return -1;
 }
 
 void packet_ip6_process()
