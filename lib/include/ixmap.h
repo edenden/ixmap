@@ -88,6 +88,7 @@ inline void *ixmap_slot_addr_virt(struct ixmap_buf *buf,
 inline int ixmap_slot_assign(struct ixmap_buf *buf);
 inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index);
+inline unsigned int ixmap_slot_size(struct ixmap_buf *buf);
 
 inline unsigned long ixmap_count_rx_alloc_failed(struct ixmap_instance *instance,
 	unsigned int port_index);
