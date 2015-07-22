@@ -80,7 +80,7 @@ struct ixmap_bulk {
 	uint16_t	count;
 	uint16_t	max_count;
 	int32_t		*slot_index;
-	uint32_t	*size;
+	uint32_t	*slot_size;
 };
 
 struct ixmap_handle {

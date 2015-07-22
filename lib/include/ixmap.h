@@ -65,19 +65,15 @@ inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh);
 struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
 	unsigned int num_ports);
 void ixmap_bulk_release(struct ixmap_bulk *bulk);
-unsigned short ixmap_bulk_max_count_get(struct ixmap_bulk *bulk);
-unsigned short ixmap_bulk_count_get(struct ixmap_bulk *bulk);
-void ixmap_bulk_count_set(struct ixmap_bulk *bulk, unsigned short count);
-int ixmap_bulk_slot_index_get(struct ixmap_bulk *bulk,
-	unsigned int index);
-void ixmap_bulk_slot_index_set(struct ixmap_bulk *bulk,
-	unsigned int index, int slot_index);
-unsigned int ixmap_bulk_slot_size_get(struct ixmap_bulk *bulk,
-	unsigned int index);
-void ixmap_bulk_slot_size_set(struct ixmap_bulk *bulk,
-	unsigned int index, unsigned int size);
-int ixmap_bulk_slot_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf);
-void ixmap_bulk_slot_pop(struct ixmap_bulk *bulk, struct ixmap_buf *buf);
+
+unsigned short ixmap_bulk_slot_count(struct ixmap_bulk *bulk);
+int ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
+	int *slot_index, unsigned int *slot_size);
+int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
+	int slot_index, unsigned int slot_size);
+int ixmap_bulk_slot_pop(struct ixmap_bulk *bulk,
+	int *slot_index, unsigned int *slot_size);
+
 void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
 	struct ixmap_buf *buf);
 void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
@@ -87,9 +83,9 @@ int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
 int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index,
 	struct ixmap_buf *buf);
 
-/* TBD: un-export following 2 functions from user-side */
 inline void *ixmap_slot_addr_virt(struct ixmap_buf *buf,
 	uint16_t slot_index);
+inline int ixmap_slot_assign(struct ixmap_buf *buf);
 inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index);
 

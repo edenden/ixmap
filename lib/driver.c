@@ -20,7 +20,7 @@ static inline uint16_t ixmap_desc_unused(struct ixmap_ring *ring,
 static inline uint32_t ixmap_test_staterr(union ixmap_adv_rx_desc *rx_desc,
 	const uint32_t stat_err_bits);
 static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value);
-static inline int ixmap_slot_assign(struct ixmap_buf *buf);
+inline int ixmap_slot_assign(struct ixmap_buf *buf);
 static inline void ixmap_slot_attach(struct ixmap_ring *ring,
 	uint16_t desc_index, int slot_index);
 static inline int ixmap_slot_detach(struct ixmap_ring *ring,
@@ -115,8 +115,8 @@ struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
 	if(!bulk->slot_index)
 		goto err_alloc_bulk_slot_index;
 
-	bulk->size = malloc(sizeof(uint32_t) * max_bulk_count);
-	if(!bulk->size)
+	bulk->slot_size = malloc(sizeof(uint32_t) * max_bulk_count);
+	if(!bulk->slot_size)
 		goto err_alloc_bulk_size;
 
 	return bulk;
@@ -131,86 +131,72 @@ err_alloc_bulk:
 
 void ixmap_bulk_release(struct ixmap_bulk *bulk)
 {
-	free(bulk->size);
+	free(bulk->slot_size);
 	free(bulk->slot_index);
 	free(bulk);
 
 	return;
 }
 
-unsigned short ixmap_bulk_count_get(struct ixmap_bulk *bulk)
+unsigned short ixmap_bulk_slot_count(struct ixmap_bulk *bulk)
 {
 	return bulk->count;
 }
 
-void ixmap_bulk_count_set(struct ixmap_bulk *bulk, unsigned short count)
+int ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
+	int *slot_index, unsigned int *slot_size)
 {
-	bulk->count = count;
-	return;
-}
-
-unsigned short ixmap_bulk_max_count_get(struct ixmap_bulk *bulk)
-{
-	return bulk->max_count;
-}
-
-int ixmap_bulk_slot_index_get(struct ixmap_bulk *bulk,
-	unsigned int index)
-{
-	return bulk->slot_index[index];
-}
-
-void ixmap_bulk_slot_index_set(struct ixmap_bulk *bulk,
-	unsigned int index, int slot_index)
-{
-	bulk->slot_index[index] = slot_index;
-	return;
-}
-
-unsigned int ixmap_bulk_slot_size_get(struct ixmap_bulk *bulk,
-	unsigned int index)
-{
-	return bulk->size[index];
-}
-
-void ixmap_bulk_slot_size_set(struct ixmap_bulk *bulk,
-	unsigned int index, unsigned int size)
-{
-	bulk->size[index] = size;
-	return;
-}
-
-int ixmap_bulk_slot_append(struct ixmap_bulk *bulk, struct ixmap_buf *buf)
-{
-	int index, slot_index;
-
-	index = bulk->count;
-	slot_index = ixmap_slot_assign(buf);
-	if(slot_index < 0){
-		goto err_slot_alloc;
+	if(unlikely(index >= bulk->count)){
+		goto err_invalid_index;
 	}
 
-	bulk->slot_index[index] = slot_index;
-	bulk->size[index] = buf->buf_size;
+	*slot_index = bulk->slot_index[index];
+	*slot_index = bulk->slot_size[index];
 
-	bulk->count++;
-	return index;
+	return 0;
 
-err_slot_alloc:
+err_invalid_index:
 	return -1;
 }
 
-void ixmap_bulk_slot_pop(struct ixmap_bulk *bulk, struct ixmap_buf *buf)
+int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
+	int slot_index, unsigned int slot_size)
 {
-	int index, slot_index;
+	int index;
 
+	if(unlikely(bulk->count == bulk->max_count)){
+		goto err_bulk_full;
+	}
 	index = bulk->count;
-	slot_index = bulk->slot_index[index];
 
-	ixmap_slot_release(buf, slot_index);
+	bulk->slot_index[index] = slot_index;
+	bulk->slot_size[index] = slot_size;
+	bulk->count++;
 
+	return 0;
+
+err_bulk_full:
+	return -1;
+}
+
+int ixmap_bulk_slot_pop(struct ixmap_bulk *bulk,
+	int *slot_index, unsigned int *slot_size)
+{
+	int index;
+
+	if(unlikely(!bulk->count)){
+		goto err_bulk_empty;
+	}
+	index = bulk->count;
+
+	*slot_index = bulk->slot_index[index];
+	*slot_size = bulk->slot_size[index];
 	bulk->count--;
-	return;
+
+	return 0;
+
+err_bulk_empty:
+	return -1;
 }
 
 void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
@@ -298,15 +284,15 @@ void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 		uint16_t next_to_use;
 		int slot_index;
 		uint64_t addr_dma;
-		uint32_t size;
+		uint32_t slot_size;
 		uint32_t cmd_type;
 		uint32_t olinfo_status;
 
 		tx_desc = IXGBE_TX_DESC(tx_ring, tx_ring->next_to_use);
 
 		slot_index = bulk->slot_index[total_xmit];
-		size = bulk->size[total_xmit];
-		if(unlikely(size > IXGBE_MAX_DATA_PER_TXD))
+		slot_size = bulk->slot_size[total_xmit];
+		if(unlikely(slot_size > IXGBE_MAX_DATA_PER_TXD))
 			continue;
 
 		ixmap_slot_attach(tx_ring, tx_ring->next_to_use, slot_index);
@@ -315,8 +301,8 @@ void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 		ixmap_print("Tx: packet sending DMAaddr = %p size = %d\n",
 			(void *)addr_dma, size);
 
-		cmd_type = size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS | tx_flags;
-		olinfo_status = size << IXGBE_ADVTXD_PAYLEN_SHIFT;
+		cmd_type = slot_size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS | tx_flags;
+		olinfo_status = slot_size << IXGBE_ADVTXD_PAYLEN_SHIFT;
 
 		tx_desc->read.buffer_addr = htole64(addr_dma);
 		tx_desc->read.cmd_type_len = htole32(cmd_type);
@@ -397,10 +383,10 @@ int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
 		/* retrieve a buffer address from the ring */
 		slot_index = ixmap_slot_detach(rx_ring, rx_ring->next_to_clean);
 		bulk->slot_index[total_rx_packets] = slot_index;
-		bulk->size[total_rx_packets] =
+		bulk->slot_size[total_rx_packets] =
 			le16toh(rx_desc->wb.upper.length);
 		ixmap_print("Rx: packet received size = %d\n",
-			bulk->size[total_rx_packets]);
+			bulk->slot_size[total_rx_packets]);
 
 		/* XXX: Should we prefetch the packet buffer ? */
 
@@ -457,7 +443,7 @@ int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index,
 	return total_tx_packets;
 }
 
-static inline int ixmap_slot_assign(struct ixmap_buf *buf)
+inline int ixmap_slot_assign(struct ixmap_buf *buf)
 {
 	int slot_index = -1;
 
