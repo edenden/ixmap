@@ -19,12 +19,12 @@ static unsigned int hash_key(void *key, int key_len)
 	return sum % HASH_SIZE;
 }
 
-unsigned int hash_add(struct hash_root *root, void *key, int key_len,
+int hash_add(struct hash *hash, void *key, int key_len,
 	void *value, int value_len)
 {
-	struct hash_entry *entry, *entry_list_current;
-	unsigned int collision;
+	struct hash_entry *entry;
 	unsigned int hash_key;
+	int count = 0;
 	
 	entry = (struct hash_entry *)malloc(sizeof(struct hash_entry));
 	if(!entry)
@@ -41,27 +41,36 @@ unsigned int hash_add(struct hash_root *root, void *key, int key_len,
 	memcpy(entry->key, key, key_len);
 	entry->key_len = key_len;
 	memcpy(entry->value, value, value_len); 
-	entry->next = NULL;
 
 	hash_key = hash_key(key, key_len);
-	collision = 0;
+	while(count++ < HASH_COLLISION){
+		if(hash->entries[hash_key]){
+			if(hash->entries[hash_key]->key_len == key_len
+			&& !memcmp(hash->entries[hash_key]->key, key, key_len)){
+				free(hash->entries[hash_key]->value);
+				free(hash->entries[hash_key]->key);
+				free(hash->entries[hash_key]);
+				break;
+			}
+		}else{
+			break;
+		}
 
-	if(!root->entries[hash_key]){
-		root->entries[hash_key] = entry;
-		return collision;
+		hash_key++;
+		if(hash_key == HASH_SIZE){
+			hash_key = 0;
+		}
 	}
 
-	entry_list_current = root->entries[hash_key];
-	collision++;
-
-	while(entry_list_current->next){
-		entry_list_current = entry_list_current->next;
-		collision++;
+	if(count > HASH_COLLISION){
+		goto err_hash_collision;
 	}
-	entry_list_current->next = entry;
 
-	return collision;
+	hash->entries[hash_key] = entry;
+	return 0;
 
+err_hash_collision:
+	free(entry->value);
 err_alloc_value:
 	free(entry->key);
 err_alloc_key:
@@ -70,26 +79,33 @@ err_alloc_entry:
 	return -1;
 }
 
-int hash_delete(struct hash_root *root, void *key, int key_len)
+int hash_delete(struct hash *hash, void *key, int key_len)
 {
-	struct hash_entry *entry, **prev_ptr;
+	struct hash_entry *entry;
 	unsigned int hash_key;
+	int count = 0;
 
 	hash_key = hash_key(key, key_len);
-	entry = root->entries[hash_key];
-	prev_ptr = &(root->entries[hash_key])
+	while(count++ < HASH_COLLISION){
+		if(hash->entries[hash_key]){
+			if(hash->entries[hash_key]->key_len == key_len
+			&& !memcmp(hash->entries[hash_key]->key, key, key_len)){
+                                break;
+                        }
+                }
 
-	if(!entry)
-		goto err_not_found;
-
-	while(memcmp(entry->key, key, key_len)){
-		prev_ptr = &(entry->next);
-		entry = entry->next;
-		if(!entry)
-			goto err_not_found;
+		hash_key++;
+		if(hash_key == HASH_SIZE){
+			hash_key = 0;
+		}
 	}
 
-	*prev_ptr = entry->next;
+	if(count > HASH_COLLISION){
+		goto err_not_found;
+	}
+
+	entry = hash->entries[hash_key];
+	hash->entries[hash_key] = NULL;
 	free(entry->value);
 	free(entry->key);
 	free(entry);
@@ -100,49 +116,53 @@ err_not_found:
 	return -1;
 }
 
-void hash_delete_walk(struct hash_root *root)
+void hash_delete_walk(struct hash *hash)
 {
-	struct hash_entry *entry, *entry_next;
+	struct hash_entry *entry;
 	unsigned int i;
 
 	for(i = 0; i < HASH_SIZE; i++){
-		entry = root->entries[i];
-		if(!entry)
-			continue;
-
-		while(entry){
-			entry_next = entry->next;
-
+		if(hash->entries[i]){
+			entry = hash->entries[i];
+			hash->entries[i] = NULL;
 			free(entry->value);
 			free(entry->key);
 			free(entry);
-
-			entry = entry_next;
 		}
 	}
 
 	return;
 }
 
-void *hash_lookup(struct hash_root *root, void *key, int key_len)
+void *hash_lookup(struct hash *hash, void *key, int key_len)
 {
 	struct hash_entry *entry;
 	unsigned int hash_key;
+	int count = 0;
 
 	hash_key = hash_key(key, key_len);
-	entry = root->entries[hash_key];
+	while(count++ < HASH_COLLISION){
+		if(hash->entries[hash_key]){
+			if(hash->entries[hash_key]->key_len == key_len
+			&& !memcmp(hash->entries[hash_key]->key, key, key_len)){
+				break;
+			}
+		}
 
-	if(!entry)
-		goto err_not_found;
-
-	while(memcmp(entry->key, key, key_len)){
-		entry = entry->next;
-		if(!entry)
-			goto err_not_found;
+		hash_key++;
+		if(hash_key == HASH_SIZE){
+			hash_key = 0;
+		}
 	}
 
-	return entry->value;
+	if(count > HASH_COLLISION){
+		goto err_not_found;
+	}
+
+        entry = hash->entries[hash_key];
+	return entry;
 
 err_not_found:
-	return NULL;
+        return NULL;
 }
+

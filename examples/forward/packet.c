@@ -100,7 +100,7 @@ int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 	slot_buf_new = ixmap_slot_addr_virt(buf, slot_index_new);
 	slot_size_new = ixmap_slot_size(buf);
 
-	ret = arp_generate(slot_buf_new, slot_size_new, ARPOP_REPLY,
+	ret = arp_generate(ARPOP_REPLY, slot_buf_new, slot_size_new,
 		NULL, src_mac, entry->nexthop, src_ip);
 	if(ret < 0){
 		goto err_arp_generate;
@@ -152,7 +152,7 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 		slot_buf_new = ixmap_slot_addr_virt(buf, slot_index_new);
 		slot_size_new = ixmap_slot_size(buf);
 
-		ret = arp_generate(slot_buf_new, slot_size_new, ARPOP_REQUEST,
+		ret = arp_generate(ARPOP_REQUEST, slot_buf_new, slot_size_new,
 			NULL, src_mac, entry->nexthop, src_ip);
 		if(ret < 0){
 			goto err_arp_generate;
@@ -195,5 +195,23 @@ packet_drop:
 
 void packet_ip6_process()
 {
+	struct ethhdr *eth;
+	struct ip6_hdr *ip6;
+	struct fib_entry *fib_entry;
+	struct arp_entry *arp_entry;
+	int slot_index_new, ret;
+	void *slot_buf_new;
+	unsigned int slot_size_new;
+
+	eth = (struct ethhdr *)slot_buf;
+	ip6 = (struct ip6_hdr *)(slot_buf + sizeof(struct ethhdr));
+
+	fib_entry = fib_lookup(fib, AF_INET6, &ip6->ip6_dst);
+	if(!fib_entry){
+		goto packet_drop;
+	}
+
+
+
 	return;
 }
