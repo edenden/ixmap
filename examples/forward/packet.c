@@ -211,7 +211,5 @@ void packet_ip6_process()
 		goto packet_drop;
 	}
 
-
-
 	return;
 }
