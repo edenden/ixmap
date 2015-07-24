@@ -5,8 +5,8 @@ CC = gcc
 CFLAGS = -Wall
 LDFLAGS =
 TARGET = ixmapfwd
-LIBS = -lpthread -lixmap
-OBJECTS = main.o forward.o
+LIBS = -lpthread -lurcu -lixmap
+OBJECTS = main.o thread.o
 
 .SUFFIXES: .c .o
 

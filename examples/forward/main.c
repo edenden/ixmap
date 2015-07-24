@@ -12,10 +12,11 @@
 #include <net/ethernet.h>
 #include <signal.h>
 #include <pthread.h>
+#include <urcu.h>
 #include <ixmap.h>
 
 #include "main.h"
-#include "forward.h"
+#include "thread.h"
 
 static int buf_count = 16384;
 static char *ixmap_interface_list[2];
@@ -76,6 +77,8 @@ int main(int argc, char **argv)
 		if(ixmap_bufsize_get(ih_list[i]) > buf_size)
 			buf_size = ixmap_bufsize_get(ih_list[i]);
 	}
+
+	rcu_init();
 
 	threads = malloc(sizeof(struct ixmapfwd_thread) * num_cores);
 	if(!threads){
@@ -153,7 +156,7 @@ static int ixmapfwd_thread_create(struct ixmapfwd_thread *thread,
 	thread->num_ports = num_ports;
 	thread->ptid = pthread_self();
 
-	ret = pthread_create(&thread->tid, NULL, process_interrupt, thread);
+	ret = pthread_create(&thread->tid, NULL, thread_process_interrupt, thread);
 	if(ret < 0){
 		perror("failed to create thread");
 		goto err_pthread_create;

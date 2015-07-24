@@ -15,6 +15,6 @@ struct ixmapfwd_fd_desc {
 	struct ixmap_irqdev_handle	*irqh;
 };
 
-void *process_interrupt(void *data);
+void *thread_process_interrupt(void *data);
 
 #endif /* _IXMAPFWD_THREAD_H */

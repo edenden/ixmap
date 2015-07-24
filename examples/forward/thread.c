@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <sys/signalfd.h>
 #include <pthread.h>
+#include <urcu.h>
 #include <ixmap.h>
 
 #include "main.h"
@@ -55,9 +56,9 @@ void *thread_process_interrupt(void *data)
 	if(!bulk_rx)
 		goto err_bulk_rx_alloc;
 
-	bulk_tx_list = malloc(sizeof(struct ixmap_bulk) * thread->num_ports);
+	bulk_tx_list = malloc(sizeof(struct ixmap_bulk *) * thread->num_ports);
 	if(!bulk_tx_list)
-		goto err_bulk_tx_list_alloc;
+		goto err_bulk_tx_alloc_list;
 
 	for(i = 0; i < thread->num_ports; i++, bulk_tx_assigned++){
 		bulk_tx_list[i] = ixmap_bulk_alloc(instance, thread->num_ports);
@@ -85,6 +86,8 @@ void *thread_process_interrupt(void *data)
 	for(i = 0; i < thread->num_ports; i++){
 		ixmap_rx_alloc(instance, i, buf);
 	}
+
+	rcu_register_thread();
 
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
@@ -149,7 +152,11 @@ void *thread_process_interrupt(void *data)
 
 out:
 	thread_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
-	ixmap_bulk_release(bulk);
+	for(i = 0; i < bulk_tx_assigned; i++){
+		ixmap_bulk_release(bulk_tx_list[i]);
+	}
+	free(bulk_tx_list);
+	ixmap_bulk_release(bulk_rx);
 	free(read_buf);
 	thread_print_result(thread);
 	return NULL;
