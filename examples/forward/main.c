@@ -79,6 +79,7 @@ int main(int argc, char **argv)
 	}
 
 	rcu_init();
+	rcu_register_thread();
 
 	threads = malloc(sizeof(struct ixmapfwd_thread) * num_cores);
 	if(!threads){
@@ -136,6 +137,8 @@ err_assign_cores:
 err_ixmap_set_signal:
 	free(threads);
 err_alloc_threads:
+	rcu_unregister_thread();
+	rcu_exit();
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
 		ixmap_desc_release(ih_list[i]);

@@ -151,6 +151,7 @@ void *thread_process_interrupt(void *data)
 	}
 
 out:
+	rcu_unregister_thread();
 	thread_epoll_destroy(fd_desc_list, fd_ep, thread->num_ports);
 	for(i = 0; i < bulk_tx_assigned; i++){
 		ixmap_bulk_release(bulk_tx_list[i]);
