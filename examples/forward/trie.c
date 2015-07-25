@@ -8,7 +8,7 @@
 #include "trie.h"
 
 static uint32_t trie_bit(uint32_t *addr, int digit);
-static void trie_bit_or(uint32_t *addr, int digit, int value);
+static int _trie_traverse(struct trie_node *node, struct node_list *list_root);
 
 static uint32_t trie_bit(uint32_t *addr, int digit)
 {
@@ -18,17 +18,6 @@ static uint32_t trie_bit(uint32_t *addr, int digit)
 	shift = digit % 32;
 
 	return (addr[index] >> shift) & 0x1;
-}
-
-static void trie_bit_or(uint32_t *addr, int digit, int value)
-{
-	int index, shift;
-
-	index = digit >> 5;
-	shift = digit % 32;
-
-	addr[index] |= (value & 0x1) << shift;
-	return;
 }
 
 struct trie_node *trie_alloc_node(struct trie_node *parent)
@@ -48,48 +37,79 @@ err_alloc_node:
 	return NULL;
 }
 
-/* TBD: support RCU */
-int trie_traverse(struct trie_node *current, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, struct routes_list **list)
+static int _trie_traverse(struct trie_node *node, struct node_list *list_root)
 {
-	struct route *route;
-	struct routes_list *list_new, *list_current;
-	uint32_t prefix_child[4];
-	int i;
+	struct node_list *list;
+	struct trie_node *child;
+	int ret, i;
 
-	memcpy(prefix_child, prefix, family_len >> 3);
-	prefix_len++;
-	for(i = 0; i < 2; i++){
-		if(current->child[i] != NULL){
-			trie_bit_or(prefix_child, family_len - prefix_len, i);
-			trie_traverse(current->child[i], family, prefix_child, prefix_len, list);
-		}
+	if(node->data != NULL){
+		list = malloc(sizeof(struct node_list));
+		if(!list)
+			goto err_alloc_list;
+
+		list->node = node;
+		list->next = NULL;
+
+		list_root->last->next = list;
+		list_root->last = list;
 	}
 
-	if(current->data != NULL){
-		route = malloc(sizeof(struct route));
-		list_new = malloc(sizeof(struct routes_list));
+	for(i = 0; i < 2; i++){
+		child = node->child[i];
 
-		memcpy(route->prefix, prefix, family_len >> 3);
-		route->prefix_len = prefix_len;
-		route->data = current->data;
-
-		list_new->route = route;
-		list_new->next = NULL;
-
-		if(*list == NULL){
-			*list = list_new;
-		}else{
-			list_current = *list;
-			while(list_current->next != NULL){
-				list_current = list_current->next;
-			}
-
-			list_current->next = list_new;
+		if(child != NULL){
+			ret = _trie_traverse(child, list_root);
+			if(ret < 0)
+				goto err_recursive;
 		}
 	}
 
 	return 0;
+
+err_recursive:
+err_alloc_list:
+	return -1;
+}
+
+struct node_list *trie_traverse(struct trie *trie, unsigned int family_len,
+	uint32_t *prefix, unsigned int prefix_len)
+{
+	struct trie_node *node;
+	struct node_list list_root, *list, *list_next;
+	int rest_len, ret;
+
+	node = trie->node;
+	rest_len = prefix_len;
+	list_root.node = NULL;
+	list_root.next = NULL;
+	list_root.last = &list_root;
+
+	while(rest_len > 0){
+		rest_len--;
+		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
+
+		node = node->child[index];
+		if(node == NULL){
+			/* no route found */
+			goto err_noroute_found;
+		}
+	}
+
+	ret = _trie_traverse(node, &list_root);
+	if(ret < 0){
+		list = list_root.next;
+		while(list){
+			list_next = list->next;
+			free(list);
+			list = list_next;
+		}
+		list_root.next = NULL;
+	}
+
+err_noroute_found:
+	list = list_root.next;
+	return list;
 }
 
 void *trie_lookup(struct trie *trie, unsigned int family_len,
@@ -97,16 +117,16 @@ void *trie_lookup(struct trie *trie, unsigned int family_len,
 {
 	struct trie_node *node;
 	void *data, *data_ptr;
-	int len_rest, index, ret;
+	int rest_len, index, ret;
 
 	node = trie->node;
 	data = NULL;
-	len_rest = family_len;
+	rest_len = family_len;
 	ret = 0;
 
-	while(len_rest > 0){
-		len_rest--;
-		index = trie_bit(destination, len_rest);
+	while(rest_len > 0){
+		rest_len--;
+		index = trie_bit(destination, rest_len);
 
 		node = node->child[index];
 		if(node == NULL){
@@ -136,7 +156,7 @@ int trie_add(struct trie *trie, unsigned int family_len,
 {
 	struct trie_node *node, *node_parent;
 	void *data_new, *data_ptr;
-	int len_rest, index;
+	int rest_len, index;
 
 	data_new = malloc(data_len);
 	if(!data_new)
@@ -144,12 +164,12 @@ int trie_add(struct trie *trie, unsigned int family_len,
 	memcpy(data_new, data, data_len);
 
 	node = trie->node;
-	len_rest = prefix_len;
+	rest_len = prefix_len;
 	ixmapfwd_mutex_lock(&trie->mutex);
 
-	while(len_rest > 0){
-		len_rest--;
-		index = trie_bit(prefix, (family_len - (prefix_len - len_rest)));
+	while(rest_len > 0){
+		rest_len--;
+		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
 		node_parrent = node;
 		node = node->child[index];
 
@@ -186,22 +206,21 @@ int trie_delete(struct trie *trie, unsigned int family_len,
 {
 	struct trie_node *node, *node_parent;
 	void *data;
-	int len_rest, index;
+	int rest_len, index;
 
 	node = trie->node;
-	len_rest = prefix_len;
+	rest_len = prefix_len;
 	ixmapfwd_mutex_lock(&trie->mutex);
 
-	while(len_rest > 0){
-		len_rest--;
-		index = trie_bit(prefix, (family_len - (prefix_len - len_rest)));
+	while(rest_len > 0){
+		rest_len--;
+		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
 
-		if(node->child[index] == NULL){
+		node = node->child[index];
+		if(node == NULL){
 			/* no route found */
 			goto err_noroute_found;
                 }
-
-		node = node->child[index];
 	}
 	
 	data = node->data;
@@ -210,11 +229,11 @@ int trie_delete(struct trie *trie, unsigned int family_len,
 	if(data){
 		free(data);
 	}
-	len_rest = prefix_len;
+	rest_len = prefix_len;
 
-	while(len_rest > 0){
-		index = trie_bit(prefix, (family_len - len_rest));
-		len_rest--;
+	while(rest_len > 0){
+		index = trie_bit(prefix, (family_len - rest_len));
+		rest_len--;
 
 		if(node->child[0] != NULL
 		|| node->child[1] != NULL

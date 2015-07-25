@@ -12,15 +12,10 @@ struct trie {
 	struct trie_node	*node;
 };
 
-struct route {
-	uint32_t	prefix[4];
-	unsigned int	prefix_len;
-	void		*data;
-};
-
-struct routes_list {
-	struct route		*route;
-	struct routes_list	*next;
+struct node_list {
+	struct trie_node	*node;
+	struct node_list	*next;
+	struct node_list	*last;
 };
 
 void *trie_lookup_ascii(struct trie_node *root, int family,
