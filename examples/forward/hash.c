@@ -51,7 +51,7 @@ int hash_add(struct hash *hash, void *key, int key_len,
 		if(entry){
 			if(entry->key_len == key_len
 			&& !memcmp(entry->key, key, key_len)){
-				hash->entries[hash_key] = entry_new;
+				rcu_set_pointer(hash->entries[hash_key], entry_new);
 				synchronize_rcu();
 				free(entry->value);
 				free(entry->key);
@@ -59,7 +59,7 @@ int hash_add(struct hash *hash, void *key, int key_len,
 				break;
 			}
 		}else{
-			hash->entries[hash_key] = entry_new;
+			rcu_set_pointer(hash->entries[hash_key], entry_new);
 			ret = 0;
 			break;
 		}
@@ -102,7 +102,7 @@ int hash_delete(struct hash *hash, void *key, int key_len)
 		if(entry){
 			if(entry->key_len == key_len
 			&& !memcmp(entry->key, key, key_len)){
-				hash->entries[hash_key] = NULL;
+				rcu_set_pointer(hash->entries[hash_key], NULL);
 				synchronize_rcu();
 				free(entry->value);
 				free(entry->key);
@@ -140,7 +140,7 @@ void hash_delete_walk(struct hash *hash)
 		entry = hash->entries[i];
 
 		if(entry){
-			hash->entries[i] = NULL;
+			rcu_set_pointer(hash->entries[i], NULL);
 			synchronize_rcu();
 			free(entry->value);
 			free(entry->key);

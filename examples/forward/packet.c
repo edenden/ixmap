@@ -137,6 +137,8 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	eth = (struct ethhdr *)slot_buf;
 	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
 
+	rcu_read_lock();
+	
 	fib_entry = fib_lookup(fib, AF_INET, &ip->daddr);
 	if(!fib_entry){
 		goto packet_drop;
@@ -182,6 +184,7 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	if(ret < 0){
 		goto packet_drop;
 	}
+	rcu_read_unlock();
 
 	return 0;
 
@@ -190,6 +193,7 @@ err_arp_generate:
 	ixmap_slot_release(buf, slot_index_new);
 err_slot_assign:
 packet_drop:
+	rcu_read_unlock();
 	return -1;
 }
 

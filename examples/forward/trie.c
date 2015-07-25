@@ -157,7 +157,7 @@ int trie_add(struct trie *trie, unsigned int family_len,
 	void *data, unsigned int data_len)
 {
 	struct trie_node *node, *node_parent;
-	void *data_new, *data_ptr;
+	void *data_new;
 	int rest_len, index;
 
 	data_new = malloc(data_len);
@@ -180,16 +180,15 @@ int trie_add(struct trie *trie, unsigned int family_len,
 			if(!node)
 				goto err_alloc_child;
 
-			node_parrent->child[index] = node;
+			rcu_set_pointer(node_parrent->child[index], node);
 		}
 
 	}
 
-	data_ptr = node->data;
-	node->data = data_new;
-	if(data_ptr){
+	rcu_xchg_pointer(node->data, data_new)
+	if(data_new){
 		synchronize_rcu();
-		free(data_ptr);
+		free(data_new);
 	}
 
 	ixmapfwd_mutex_unlock(&trie->mutex);
@@ -207,7 +206,7 @@ int trie_delete(struct trie *trie, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len)
 {
 	struct trie_node *node, *node_parent;
-	void *data;
+	void *data = NULL;
 	int rest_len, index;
 
 	node = trie->node;
@@ -225,10 +224,9 @@ int trie_delete(struct trie *trie, unsigned int family_len,
                 }
 	}
 	
-	data = node->data;
-	node->data = NULL;
-	synchronize_rcu();
+	rcu_xchg_pointer(node->data, data);
 	if(data){
+		synchronize_rcu();
 		free(data);
 	}
 	rest_len = prefix_len;
@@ -244,7 +242,7 @@ int trie_delete(struct trie *trie, unsigned int family_len,
 		}
 
 		node_parent = node->parent;
-		node_parent->child[index] = NULL;
+		rcu_set_pointer(node_parent->child[index], NULL);
 		synchronize_rcu();
 		free(node);
 
