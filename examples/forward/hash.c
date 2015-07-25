@@ -60,7 +60,6 @@ int hash_add(struct hash *hash, void *key, int key_len,
 			}
 		}else{
 			rcu_set_pointer(hash->entries[hash_key], entry_new);
-			ret = 0;
 			break;
 		}
 
