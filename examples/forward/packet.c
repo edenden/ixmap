@@ -44,7 +44,7 @@ static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
 
 	/* TEMP */
 	uint8_t src_mac[6];
-	uint32_t src_ip;
+	struct in_addr src_ip;
 
 	src_mac[0] = 0x9c; src_mac[1] = 0xb6; src_mac[2] = 0x54;
 	src_mac[3] = 0xbb; src_mac[4] = 0xfb; src_mac[5] = 0xe8;
@@ -217,3 +217,40 @@ void packet_ip6_process()
 
 	return;
 }
+
+uint16_t packet_ip6_icmp_csum(struct ip6_hdr *ip6,
+	struct icmp6_hdr *icmp6){
+        unsigned long sum = 0;
+	uint32_t payload_len;
+	uint16_t *payload;
+
+	for(i = 0; i < sizeof(struct in6_addr); i += 2){
+		sum += *(uint16_t *)((void *)&ip6->ip6_src + i);
+        }
+
+	for(i = 0; i < sizeof(struct in6_addr); i += 2){
+		sum += *(uint16_t *)((void *)&ip6->ip6_dst + i);
+	}
+
+	payload_len = ntohs(ip6->ip6_plen);
+	sum += payload_len >> 16;
+	sum += payload_len & 0x0000FFFF;
+	sum += ip6->ip6_nxt;
+
+	payload = (unsigned short *)icmp6;
+        while (payload_len > 1) {
+                sum += *payload;
+                payload++;
+                payload_len -= 2;
+        }
+
+        if(payload_len){
+		sum += *(uint8_t *)payload;
+        }
+
+        sum = (sum & 0xffff) + (sum >> 16);
+        sum = (sum & 0xffff) + (sum >> 16);
+
+        return ~sum;
+}
+

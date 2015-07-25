@@ -11,14 +11,14 @@
 
 int arp_generate(uint16_t opcode, void *buf, int buf_len,
 	uint8_t *dst_mac, uint8_t *src_mac,
-	uint32_t *dst_ip, uint32_t *src_ip)
+	struct in_addr *dst_ip, struct in_addr *src_ip)
 {
 	struct ethhdr *eth;
 	struct arphdr *arp;
 	uint8_t *arp_dst_mac;
 	uint8_t *arp_src_mac;
-	uint32_t *arp_dst_ip;
-	uint32_t *arp_src_ip;
+	struct in_addr *arp_dst_ip;
+	struct in_addr *arp_src_ip;
 	int len = 0;
 
 	eth = (struct ethhdr *)buf;
@@ -38,18 +38,19 @@ int arp_generate(uint16_t opcode, void *buf, int buf_len,
 	arp_src_mac = (uint8_t *)(buf + len);
 	len += ETH_ALEN;
 
-	arp_src_ip = (uint32_t *)(buf + len);
+	arp_src_ip = (struct in_addr *)(buf + len);
 	len += 4;
 
 	arp_dst_mac = (uint8_t *)(buf + len);
 	len += ETH_ALEN;
 
-	arp_dst_ip = (uint32_t *)(buf + len);
+	arp_dst_ip = (struct in_addr *)(buf + len);
 	len += 4;
 
 	/* ARP payload setup */
+	*arp_src_ip = *src_ip;
+	*arp_dst_ip = *dst_ip;
 	memcpy(arp_src_mac, src_mac, ETH_ALEN);
-	memcpy(arp_src_ip, src_ip, 4);
 	if(opcode == ARPOP_REQUEST){
 		memset(arp_dst_mac, 0, ETH_ALEN);
 	}else if(opcode == ARPOP_REPLY){
@@ -57,13 +58,12 @@ int arp_generate(uint16_t opcode, void *buf, int buf_len,
 	}else{
 		goto err_unsupp_opcode;
 	}
-	memcpy(arp_dst_ip, dest_ip, 4);
 
 	/* ARP header setup */
 	arp->ar_hrd     = htons(ARPHRD_ETHER);
 	arp->ar_pro     = htons(ETH_P_IP);
 	arp->ar_hln     = ETH_ALEN;
-	arp->ar_pln     = 4;
+	arp->ar_pln     = sizeof(struct in_addr);
 	arp->ar_op      = htons(opcode);
 
 	/* ETHER header setup */
@@ -79,15 +79,15 @@ err_buf_size:
 }
 
 int arp_learn(struct arp *arp, void *buf, int buf_len,
-	uint8_t *src_mac, uint32_t *src_ip)
+	uint8_t *src_mac, struct in_addr *src_ip)
 {
 	struct arp_entry entry;
 	struct ethhdr *eth;
 	struct arphdr *arp;
 	uint8_t *arp_dst_mac;
 	uint8_t *arp_src_mac;
-	uint32_t *arp_dst_ip;
-	uint32_t *arp_src_ip;
+	struct in_addr *arp_dst_ip;
+	struct in_addr *arp_src_ip;
 	int ret, len = 0;
 
 	eth = (struct ethhdr *)buf;
@@ -106,24 +106,24 @@ int arp_learn(struct arp *arp, void *buf, int buf_len,
 	arp_src_mac = (uint8_t *)(buf + len);
 	len += ETH_ALEN;
 
-	arp_src_ip = (uint32_t *)(buf + len);
+	arp_src_ip = (struct in_addr *)(buf + len);
 	len += 4;
 
 	arp_dst_mac = (uint8_t *)(buf + len);
 	len += ETH_ALEN;
 
-	arp_dst_ip = (uint32_t *)(buf + len);
+	arp_dst_ip = (struct in_addr *)(buf + len);
 	len += 4;
 
 	memcpy(entry.mac_addr, arp_src_mac, ETH_ALEN);
-	ret = hash_add(arp->root, arp_src_ip, sizeof(uint32_t),
+	ret = hash_add(arp->root, arp_src_ip, sizeof(struct in_addr),
 		&entry, sizeof(struct arp_entry));
 	if(ret < 0){
 		goto err_hash_add;
 	}
 	
 	if(arp->ar_op == htons(ARPOP_REQUEST)
-	&& !memcmp(src_ip, arp_dst_ip, 4)){
+	&& *src_ip == *arp_dst_ip){
 		return 0;
 	}
 
@@ -134,12 +134,12 @@ err_buf_size:
 	return -1;
 }
 
-struct arp_entry *arp_lookup(struct arp *arp, uint32_t *dst_ip)
+struct arp_entry *arp_lookup(struct arp *arp, struct in_addr *dst_ip)
 {
 	struct arp_entry *arp_entry;
 
 	arp_entry = (struct arp_entry *)hash_lookup(
-		arp->hash_root, dst_ip, sizeof(uint32_t));
+		arp->hash_root, dst_ip, sizeof(struct in_addr));
 	return arp_entry;
 }
 
