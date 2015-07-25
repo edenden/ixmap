@@ -13,7 +13,7 @@ struct trie {
 };
 
 struct node_list {
-	struct trie_node	*node;
+	void			*data;
 	struct node_list	*next;
 	struct node_list	*last;
 };
