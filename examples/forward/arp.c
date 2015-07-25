@@ -9,9 +9,8 @@
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
 
-int arp_generate(uint16_t opcode, void *buf, int buf_len,
-	uint8_t *dst_mac, uint8_t *src_mac,
-	struct in_addr *dst_ip, struct in_addr *src_ip)
+int arp_generate(void *buf, int buf_len, struct in_addr *dst_ip,
+	struct in_addr *src_ip, uint8_t *src_mac)
 {
 	struct ethhdr *eth;
 	struct arphdr *arp;
@@ -51,20 +50,14 @@ int arp_generate(uint16_t opcode, void *buf, int buf_len,
 	*arp_src_ip = *src_ip;
 	*arp_dst_ip = *dst_ip;
 	memcpy(arp_src_mac, src_mac, ETH_ALEN);
-	if(opcode == ARPOP_REQUEST){
-		memset(arp_dst_mac, 0, ETH_ALEN);
-	}else if(opcode == ARPOP_REPLY){
-		memcpy(arp_dst_mac, dst_mac, ETH_ALEN);
-	}else{
-		goto err_unsupp_opcode;
-	}
+	memset(arp_dst_mac, 0, ETH_ALEN);
 
 	/* ARP header setup */
 	arp->ar_hrd     = htons(ARPHRD_ETHER);
 	arp->ar_pro     = htons(ETH_P_IP);
 	arp->ar_hln     = ETH_ALEN;
 	arp->ar_pln     = sizeof(struct in_addr);
-	arp->ar_op      = htons(opcode);
+	arp->ar_op      = htons(ARPOP_REQUEST);
 
 	/* ETHER header setup */
 	memset(eth->h_dest, 0xFF, ETH_ALEN);
@@ -73,13 +66,12 @@ int arp_generate(uint16_t opcode, void *buf, int buf_len,
 
 	return len;
 
-err_unsupp_opcode:
 err_buf_size:
 	return -1;
 }
 
 int arp_receive(struct arp *arp, void *buf, int buf_len,
-	uint8_t *src_mac, struct in_addr *src_ip)
+	struct in_addr *src_ip, uint8_t *src_mac)
 {
 	struct arp_entry entry;
 	struct ethhdr *eth;
@@ -122,12 +114,7 @@ int arp_receive(struct arp *arp, void *buf, int buf_len,
 		goto err_hash_add;
 	}
 	
-	if(arp->ar_op == htons(ARPOP_REQUEST)
-	&& *src_ip == *arp_dst_ip){
-		return 0;
-	}
-
-	return -1;
+	return 0;
 
 err_hash_add:
 err_buf_size:

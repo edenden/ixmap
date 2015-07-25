@@ -79,46 +79,18 @@ static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
 	}
 }
 
-int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
-	void *slot_buf, int slot_index, unsigned int slot_size,
-	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
+int packet_arp_process(void *slot_buf, unsigned int slot_size)
 {
-	int slot_index_new, ret;
-	void *slot_buf_new;
-	unsigned int slot_size_new;
+	int ret;
 
 	ret = arp_receive(slot_buf, slot_size, src_mac, src_ip);
 	if(ret < 0){
-		goto packet_drop;
-	}
-
-	slot_index_new = ixmap_slot_assign(buf);
-	if(slot_index_new < 0){
-		goto err_slot_assign;
-	}
-
-	slot_buf_new = ixmap_slot_addr_virt(buf, slot_index_new);
-	slot_size_new = ixmap_slot_size(buf);
-
-	ret = arp_generate(ARPOP_REPLY, slot_buf_new, slot_size_new,
-		NULL, src_mac, entry->nexthop, src_ip);
-	if(ret < 0){
-		goto err_arp_generate;
-	}
-
-	ret = ixmap_bulk_slot_push(bulk_tx[port_index],
-		slot_index_new, ret);
-	if(ret < 0){
-		goto err_slot_push;
+		goto err_arp_recv;
 	}
 
 	return -1;
 
-err_slot_push:
-err_arp_generate:
-	ixmap_slot_release(buf, slot_index_new);
-err_slot_assign:
-packet_drop:
+err_arp_recv:
 	return -1;
 }
 
@@ -154,8 +126,8 @@ int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 		slot_buf_new = ixmap_slot_addr_virt(buf, slot_index_new);
 		slot_size_new = ixmap_slot_size(buf);
 
-		ret = arp_generate(ARPOP_REQUEST, slot_buf_new, slot_size_new,
-			NULL, src_mac, entry->nexthop, src_ip);
+		ret = arp_generate(slot_buf_new, slot_size_new,
+			entry->nexthop, src_ip, src_mac);
 		if(ret < 0){
 			goto err_arp_generate;
 		}
