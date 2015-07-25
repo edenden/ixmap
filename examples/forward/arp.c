@@ -78,7 +78,7 @@ err_buf_size:
 	return -1;
 }
 
-int arp_learn(struct arp *arp, void *buf, int buf_len,
+int arp_receive(struct arp *arp, void *buf, int buf_len,
 	uint8_t *src_mac, struct in_addr *src_ip)
 {
 	struct arp_entry entry;

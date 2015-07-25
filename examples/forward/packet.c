@@ -87,7 +87,7 @@ int packet_arp_process(struct ixmap_buf *buf, unsigned int port_index,
 	void *slot_buf_new;
 	unsigned int slot_size_new;
 
-	ret = arp_learn(slot_buf, slot_size, src_mac, src_ip);
+	ret = arp_receive(slot_buf, slot_size, src_mac, src_ip);
 	if(ret < 0){
 		goto packet_drop;
 	}
