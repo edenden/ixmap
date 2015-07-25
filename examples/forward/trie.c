@@ -56,7 +56,7 @@ static int _trie_traverse(struct trie_node *node, struct node_list *list_root)
 	}
 
 	for(i = 0; i < 2; i++){
-		child = node->child[i];
+		child = rcu_dereference(node->child[i]);
 
 		if(child != NULL){
 			ret = _trie_traverse(child, list_root);
@@ -90,7 +90,7 @@ struct node_list *trie_traverse(struct trie *trie, unsigned int family_len,
 		rest_len--;
 		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
 
-		node = node->child[index];
+		node = rcu_dereference(node->child[index]);
 		if(node == NULL){
 			/* no route found */
 			goto err_noroute_found;
@@ -130,7 +130,7 @@ void *trie_lookup(struct trie *trie, unsigned int family_len,
 		rest_len--;
 		index = trie_bit(destination, rest_len);
 
-		node = node->child[index];
+		node = rcu_dereference(node->child[index]);
 		if(node == NULL){
 			if(!data){
 				/* no route found */
@@ -173,8 +173,8 @@ int trie_add(struct trie *trie, unsigned int family_len,
 		rest_len--;
 		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
 		node_parrent = node;
-		node = node->child[index];
 
+		node = node->child[index];
 		if(node == NULL){
 			node = trie_alloc_node(parrent);
 			if(!node)

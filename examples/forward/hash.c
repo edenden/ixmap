@@ -160,7 +160,7 @@ void *hash_lookup(struct hash *hash, void *key, int key_len)
 
 	hash_key = hash_key(key, key_len);
 	while(count++ < HASH_COLLISION){
-		entry = hash->entries[hash_key];
+		entry = rcu_dereference(hash->entries[hash_key]);
 
 		if(entry){
 			if(entry->key_len == key_len
