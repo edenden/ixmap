@@ -223,3 +223,21 @@ static int ixmapfwd_set_signal(sigset_t *sigset)
 
 	return 0;
 }
+
+void ixmapfwd_mutex_lock(pthread_mutex_t *mutex){
+	int ret;
+
+	ret = pthread_mutex_lock(mutex);
+	if(ret)
+		perror("failed to lock");
+	}
+}
+
+void ixmapfwd_mutex_unlock(pthread_mutex_t *mutex){
+	int ret;
+
+	ret = pthread_mutex_unlock(mutex);
+	if(ret){
+		perror("failed to unlock");
+	}
+}

@@ -7,6 +7,11 @@ struct trie_node {
 	void		*data;
 };
 
+struct trie {
+	pthread_mutex_t		mutex;
+	struct trie_node	*node;
+};
+
 struct route {
 	uint32_t	prefix[4];
 	unsigned int	prefix_len;

@@ -11,6 +11,7 @@ struct hash_entry {
 };
 
 struct hash {
+	pthread_mutex_t		mutex;
 	struct hash_entry	*entries[HASH_SIZE];
 };
 

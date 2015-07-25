@@ -48,6 +48,7 @@ err_alloc_node:
 	return NULL;
 }
 
+/* TBD: support RCU */
 int trie_traverse(struct trie_node *current, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len, struct routes_list **list)
 {
@@ -91,14 +92,14 @@ int trie_traverse(struct trie_node *current, unsigned int family_len,
 	return 0;
 }
 
-void *trie_lookup(struct trie_node *root, unsigned int family_len,
+void *trie_lookup(struct trie *trie, unsigned int family_len,
 	uint32_t *destination)
 {
-	struct trie_node *current;
-	void *data;
+	struct trie_node *node;
+	void *data, *data_ptr;
 	int len_rest, index, ret;
 
-	current = root;
+	node = trie->node;
 	data = NULL;
 	len_rest = family_len;
 	ret = 0;
@@ -107,7 +108,8 @@ void *trie_lookup(struct trie_node *root, unsigned int family_len,
 		len_rest--;
 		index = trie_bit(destination, len_rest);
 
-		if(current->child[index] == NULL){
+		node = node->child[index];
+		if(node == NULL){
 			if(!data){
 				/* no route found */
 				goto err_noroute_found;
@@ -116,10 +118,9 @@ void *trie_lookup(struct trie_node *root, unsigned int family_len,
 			break;
 		}
 
-		current = current->child[index];
-
-		if(current->data != NULL){
-			data = current->data;
+		data_ptr = node->data;
+		if(data_ptr != NULL){
+			data = data_ptr;
 		}
 	}
 
@@ -129,91 +130,111 @@ err_noroute_found:
 	return NULL;
 }
 
-int trie_add(struct trie_node *root, unsigned int family_len,
+int trie_add(struct trie *trie, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len,
 	void *data, unsigned int data_len)
 {
-	struct trie_node *current;
+	struct trie_node *node, *node_parent;
+	void *data_new, *data_ptr;
 	int len_rest, index;
 
-	current = root;
+	data_new = malloc(data_len);
+	if(!data_new)
+		goto err_alloc_data;
+	memcpy(data_new, data, data_len);
+
+	node = trie->node;
 	len_rest = prefix_len;
+	ixmapfwd_mutex_lock(&trie->mutex);
 
 	while(len_rest > 0){
 		len_rest--;
 		index = trie_bit(prefix, (family_len - (prefix_len - len_rest)));
-		
-		if(current->child[index] == NULL){
-			current->child[index] = trie_alloc_node(current);
-			if(!current->child[index])
+		node_parrent = node;
+		node = node->child[index];
+
+		if(node == NULL){
+			node = trie_alloc_node(parrent);
+			if(!node)
 				goto err_alloc_child;
+
+			node_parrent->child[index] = node;
 		}
 
-		current = current->child[index];
 	}
 
-	if(current->data != NULL){
-		free(current->data);
+	data_ptr = node->data;
+	node->data = data_new;
+	if(data_ptr){
+		synchronize_rcu();
+		free(data_ptr);
 	}
 
-	current->data = malloc(data_len);
-	if(!current->data){
-		goto err_alloc_data;
-	}
-
-	memcpy(current->data, data, data_len);
-
+	ixmapfwd_mutex_unlock(&trie->mutex);
 	return 0;
 
 err_alloc_child;
 	/* TBD: free allocated nodes */
+	ixmapfwd_mutex_unlock(&trie->mutex);
+	free(data_new);
 err_alloc_data:
 	return -1;
 }
 
-int trie_delete(struct trie_node *root, unsigned int family_len,
+int trie_delete(struct trie *trie, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len)
 {
-	struct trie_node *current;
+	struct trie_node *node, *node_parent;
+	void *data;
 	int len_rest, index;
 
-	current = root;
+	node = trie->node;
 	len_rest = prefix_len;
+	ixmapfwd_mutex_lock(&trie->mutex);
 
 	while(len_rest > 0){
 		len_rest--;
 		index = trie_bit(prefix, (family_len - (prefix_len - len_rest)));
 
-		if(current->child[index] == NULL){
+		if(node->child[index] == NULL){
 			/* no route found */
 			goto err_noroute_found;
                 }
 
-		current = current->child[index];
+		node = node->child[index];
 	}
 	
-	free(current->data);
-	current->data = NULL;
+	data = node->data;
+	node->data = NULL;
+	synchronize_rcu();
+	if(data){
+		free(data);
+	}
 	len_rest = prefix_len;
 
 	while(len_rest > 0){
 		index = trie_bit(prefix, (family_len - len_rest));
 		len_rest--;
 
-		if(current->child[0] != NULL
-		|| current->child[1] != NULL
-		|| current->data != NULL){
+		if(node->child[0] != NULL
+		|| node->child[1] != NULL
+		|| node->data != NULL){
 			break;
 		}
 
-		current = current->parent;
-		free(current->child[index]);
-		current->child[index] = NULL;
+		node_parent = node->parent;
+		node_parent->child[index] = NULL;
+		synchronize_rcu();
+		free(node);
+
+		node = node_parent;
 	}
 
+	ixmapfwd_mutex_unlock(&trie->mutex);
 	return 0;
 
 err_noroute_found:
+	ixmapfwd_mutex_unlock(&trie->mutex);
 	return -1;
 }
 
