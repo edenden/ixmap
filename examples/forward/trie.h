@@ -12,10 +12,10 @@ struct trie {
 	struct trie_node	*node;
 };
 
-struct node_list {
+struct node_data_list {
 	void			*data;
-	struct node_list	*next;
-	struct node_list	*last;
+	struct node_data_list	*next;
+	struct node_data_list	*last;
 };
 
 #endif /* _TRIE_H */

@@ -8,7 +8,7 @@
 #include "trie.h"
 
 static uint32_t trie_bit(uint32_t *addr, int digit);
-static int _trie_traverse(struct trie_node *node, struct node_list *list_root);
+static int _trie_traverse(struct trie_node *node, struct node_data_list *list_root);
 
 static uint32_t trie_bit(uint32_t *addr, int digit)
 {
@@ -37,16 +37,16 @@ err_alloc_node:
 	return NULL;
 }
 
-static int _trie_traverse(struct trie_node *node, struct node_list *list_root)
+static int _trie_traverse(struct trie_node *node, struct node_data_list *list_root)
 {
-	struct node_list *list;
+	struct node_data_list *list;
 	struct trie_node *child;
 	void *data;
 	int ret, i;
 
 	data = rcu_dereference(node->data);
 	if(data != NULL){
-		list = malloc(sizeof(struct node_list));
+		list = malloc(sizeof(struct node_data_list));
 		if(!list)
 			goto err_alloc_list;
 
@@ -75,11 +75,11 @@ err_alloc_list:
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-struct node_list *trie_traverse(struct trie *trie, unsigned int family_len,
+struct node_data_list *trie_traverse(struct trie *trie, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len)
 {
 	struct trie_node *node;
-	struct node_list list_root, *list, *list_next;
+	struct node_data_list list_root, *list, *list_next;
 	int rest_len, ret;
 
 	node = trie->node;
