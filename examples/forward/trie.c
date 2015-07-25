@@ -72,6 +72,7 @@ err_alloc_list:
 	return -1;
 }
 
+/* rcu_read_lock needs to be hold by caller from readside */
 struct node_list *trie_traverse(struct trie *trie, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len)
 {
@@ -112,6 +113,7 @@ err_noroute_found:
 	return list;
 }
 
+/* rcu_read_lock needs to be hold by caller from readside */
 void *trie_lookup(struct trie *trie, unsigned int family_len,
 	uint32_t *destination)
 {

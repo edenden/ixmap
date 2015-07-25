@@ -152,6 +152,7 @@ void hash_delete_walk(struct hash *hash)
 	return;
 }
 
+/* rcu_read_lock needs to be hold by caller from readside */
 void *hash_lookup(struct hash *hash, void *key, int key_len)
 {
 	struct hash_entry *entry, *entry_ret = NULL;
