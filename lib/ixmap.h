@@ -104,7 +104,7 @@ struct ixmap_handle {
 	uint32_t		promisc;
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
-	uint8_t			mac_addr[6];
+	uint8_t			mac_addr[ETH_ALEN];
 };
 
 struct ixmap_irqdev_handle {
@@ -123,7 +123,7 @@ struct ixmap_port {
 	uint32_t		num_rx_desc;
 	uint32_t		num_queues;
 	uint32_t		budget;
-	uint8_t			mac_addr[6];
+	uint8_t			mac_addr[ETH_ALEN];
 
 	unsigned long		count_rx_alloc_failed;
 	unsigned long		count_rx_clean_total;
