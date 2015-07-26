@@ -30,7 +30,7 @@ struct tun_port {
 };
 
 struct tun_instance {
-	struct tun_port		*port;
+	struct tun_port		*ports;
 };
 
 struct ixmapfwd_thread {
