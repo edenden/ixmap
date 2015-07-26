@@ -113,6 +113,8 @@ struct ixmap_instance *ixmap_instance_alloc(struct ixmap_handle **ih_list,
 		instance->ports[i].count_rx_clean_total = 0;
 		instance->ports[i].count_tx_xmit_failed = 0;
 		instance->ports[i].count_tx_clean_total = 0;
+
+		memcpy(instance->ports[i].mac_addr, ih_list[i]->mac_addr, ETH_ALEN);
 	}
 
 	return instance;
@@ -437,6 +439,7 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 	ih->interface_name = interface_name;
 	ih->budget = budget;
 	ih->mtu_frame = mtu_frame;
+	memcpy(ih->mac_addr, req_info.mac_addr, ETH_ALEN);
 
 	return ih;
 
@@ -462,6 +465,16 @@ void ixmap_close(struct ixmap_handle *ih)
 unsigned int ixmap_bufsize_get(struct ixmap_handle *ih)
 {
 	return ih->buf_size;
+}
+
+uint8_t *ixmap_macaddr_get(struct ixmap_handle *ih)
+{
+	return ih->mac_addr;
+}
+
+unsigned int ixmap_mtu_get(struct ixmap_handle *ih)
+{
+	return ih->mtu_frame;
 }
 
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,

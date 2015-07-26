@@ -28,8 +28,9 @@ static int ixmapfwd_set_signal(sigset_t *sigset);
 
 int main(int argc, char **argv)
 {
-	struct ixmap_handle **ih_list;
-	struct ixmapfwd_thread *threads;
+	struct ixmap_handle	**ih_list;
+	struct ixmapfwd_thread	*threads;
+	struct tun_handle	**th_list;
 	unsigned int buf_size = 0;
 	unsigned int num_cores = 4;
 	unsigned int num_ports = 2;
@@ -48,6 +49,12 @@ int main(int argc, char **argv)
 	if(!ih_list){
 		ret = -1;
 		goto err_ih_list;
+	}
+
+	th_list = malloc(sizeof(struct tun_handle *) * num_ports);
+	if(!th_list){
+		ret = -1;
+		goto err_th_list;
 	}
 
 	for(i = 0; i < num_ports; i++, ports_assigned++){
@@ -76,6 +83,17 @@ int main(int argc, char **argv)
 		/* calclulate maximum buf_size we should prepare */
 		if(ixmap_bufsize_get(ih_list[i]) > buf_size)
 			buf_size = ixmap_bufsize_get(ih_list[i]);
+
+		th_list[i] = tun_open(ixmap_interface_list[i],
+			ixmap_macaddr_get(ih_list[i]),
+			ixmap_mtu_get(ih_list[i]));
+		if(!th_list[i]){
+			printf("failed to tun_open\n");
+			ixmap_desc_release(ih_list[i]);
+			ixmap_close(ih_list[i]);
+			ret = -1;
+			goto err_assign_ports;
+		}
 	}
 
 	rcu_init();
@@ -112,8 +130,18 @@ int main(int argc, char **argv)
 			goto err_assign_cores;
 		}
 
+		threads[i].instance_tun = tun_instance_alloc(th_list, num_ports);
+		if(!threads[i].instance_tun){
+			printf("failed to tun_instance_alloc, idx = %d\n", i);
+			ixmap_instance_release(threads[i].instance);
+			ixmap_buf_release(threads[i].buf, ih_list, num_ports);
+			ret = -1;
+			goto err_assign_cores;
+		}
+
 		ret = ixmapfwd_thread_create(&threads[i], i, num_ports);
 		if(ret < 0){
+			tun_instance_release(threads[i].instance_tun);
 			ixmap_instance_release(threads[i].instance);
 			ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 			ret = -1;
@@ -131,6 +159,7 @@ int main(int argc, char **argv)
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixmapfwd_thread_kill(&threads[i]);
+		tun_instance_release(threads[i].instance_tun);
 		ixmap_instance_release(threads[i].instance);
 		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 	}
@@ -141,9 +170,12 @@ err_alloc_threads:
 	rcu_exit();
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
+		tun_close(th_list[i]);
 		ixmap_desc_release(ih_list[i]);
 		ixmap_close(ih_list[i]);
 	}
+	free(th_list);
+err_tun_list:
 	free(ih_list);
 err_ih_list:
 	return ret;

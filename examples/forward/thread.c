@@ -34,6 +34,7 @@ void *thread_process_interrupt(void *data)
 	struct ixmap_buf *buf;
 	struct ixmap_bulk *bulk_rx, **bulk_tx_list;
 	struct ixmapfwd_fd_desc *fd_desc_list, *fd_desc;
+	struct tun_instance *instance_tun;
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int read_size, fd_ep, i, ret, num_fd;
 	unsigned int port_index;
@@ -43,6 +44,7 @@ void *thread_process_interrupt(void *data)
 	ixgbe_print("thread %d started\n", thread->index);
 	instance = thread->instance;
 	buf = thread->buf;
+	instance_tun = thread->instance_tun;
 
 	/* Prepare read buffer */
 	read_size = max(sizeof(uint32_t),
@@ -111,7 +113,7 @@ void *thread_process_interrupt(void *data)
 				packet_dump(buf, bulk_rx);
 #endif
 
-				packet_process(buf, port_index, bulk_rx, bulk_tx_list);
+				packet_process(buf, port_index, bulk_rx, bulk_tx_list, instance_tun);
 				for(i = 0; i < thread->num_ports; i++){
 					if(bulk > 0){
 						ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);

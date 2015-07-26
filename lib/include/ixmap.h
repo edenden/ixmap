@@ -49,6 +49,8 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 	unsigned int mtu_frame, unsigned int promisc);
 void ixmap_close(struct ixmap_handle *ih);
 unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);
+uint8_t *ixmap_macaddr_get(struct ixmap_handle *ih);
+unsigned int ixmap_mtu_get(struct ixmap_handle *ih);
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction);

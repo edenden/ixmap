@@ -34,7 +34,8 @@ static void packet_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 #endif
 
 static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
-	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
+	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx,
+	struct tun_instance *instance_tun)
 {
 	unsigned short count;
 	int slot_index, i, ret;
