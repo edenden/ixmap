@@ -7,14 +7,14 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-int netlink_process(char *buffer, int recv_len)
+void netlink_process(uint8_t *buf, int read_size)
 {
 	struct nlmsghdr *nlh;
 	int ret;
 
-	nlh = (struct nlmsghdr *)buffer;
+	nlh = (struct nlmsghdr *)buf;
 
-	while(NLMSG_OK(nlh, recv_len)){
+	while(NLMSG_OK(nlh, read_size)){
 		switch(nlh->nlmsg_type){
 		case RTM_NEWROUTE:
 		case RTM_DELROUTE:
@@ -29,13 +29,13 @@ int netlink_process(char *buffer, int recv_len)
 			break;
 		}
 
-		nlh = NLMSG_NEXT(nlh, recv_len);
+		nlh = NLMSG_NEXT(nlh, read_size);
 	}
 
-	return 0;
+	return;
 }
 
-int netlink_route(struct nlmsghdr *nlh){
+void netlink_route(struct nlmsghdr *nlh){
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
 	int route_attr_len;
@@ -80,15 +80,14 @@ int netlink_route(struct nlmsghdr *nlh){
 		printf("route del: %s/%d -> %s\n", dst_ip, prefix_len, gw_ip);
 		break;
 	default:
-		printf("unknown type\n");
 		break;
 	}
 
 ign_route_table:
-	return 0;
+	return;
 }
 
-int netlink_neigh(struct nlmsghdr *nlh)
+void netlink_neigh(struct nlmsghdr *nlh)
 {
 	struct ndmsg *neigh_entry;
 	struct rtattr *route_attr;
@@ -131,9 +130,8 @@ int netlink_neigh(struct nlmsghdr *nlh)
 		printf("neigh del: %s -> %s\n", dst_ip, dst_mac);
 		break;
 	default:
-		printf("unknown type\n");
 		break;
 	}
 
-	return 0;
+	return;
 }

@@ -38,10 +38,11 @@ int main(int argc, char **argv)
 	unsigned int promisc = 1;
 	unsigned int mtu_frame = 0; /* MTU=1522 is used by default. */
 	unsigned short intr_rate = IXGBE_20K_ITR;
-	int ret = 0, i, fd_ep, num_fd;
+	int ret = 0, i, fd_ep, num_fd, read_size;
 	int cores_assigned = 0, ports_assigned = 0;
 	struct epoll_desc *ep_desc_list, *ep_desc;
 	struct epoll_event events[EPOLL_MAXEVENTS];
+	uint8_t *read_buf;
 
 	ixmap_interface_list[0] = "ixgbe0";
 	ixmap_interface_list[1] = "ixgbe1";
@@ -105,6 +106,13 @@ int main(int argc, char **argv)
 		ret = -1;
 		goto err_alloc_threads;
 	}
+
+	/* Prepare read buffer */
+	read_size = max(sysconf(_SC_PAGE_SIZE),
+		sizeof(struct signalfd_siginfo));
+	read_buf = malloc(read_size);
+	if(!read_buf)
+		goto err_alloc_read_buf;
 
 	/* Prepare each fd in epoll */
 	fd_ep = ixmapfwd_fd_prepare(&ep_desc_list);
@@ -191,6 +199,8 @@ err_assign_cores:
 	}
 	ixmapfwd_fd_destroy(ep_desc_list, fd_ep);
 err_fd_prepare:
+	free(read_buf);
+err_alloc_read_buf:
 	free(threads);
 err_alloc_threads:
 	rcu_unregister_thread();
