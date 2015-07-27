@@ -36,7 +36,7 @@ void *thread_process_interrupt(void *data)
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int read_size, fd_ep, i, ret, num_fd;
 	unsigned int port_index;
-	uint8_t *read_buf;
+	uint8_t read_buf[READ_BUF];
 	int bulk_tx_assigned = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
@@ -46,7 +46,12 @@ void *thread_process_interrupt(void *data)
 
 	/* Prepare read buffer */
 	read_size = max(sizeof(uint32_t),
-			sizeof(struct signalfd_siginfo));
+		sizeof(struct signalfd_siginfo));
+	for(i = 0; i < thread->num_ports; i++){
+		/* calclulate maximum buf_size we should prepare */
+		if(instance_tun->ports[i].mtu > read_size)
+			read_size = instance_tun->ports[i].mtu;
+        }
 	read_buf = malloc(read_size);
 	if(!read_buf)
 		goto err_alloc_read_buf;
@@ -101,14 +106,13 @@ void *thread_process_interrupt(void *data)
 				ixmap_rx_alloc(instance, port_index, buf);
 
 #ifdef DEBUG
-				packet_dump(buf, bulk_rx);
+				forward_dump(buf, bulk_rx);
 #endif
 
-				packet_process(buf, port_index, bulk_rx, bulk_tx_list, instance_tun);
+				forward_process(buf, port_index,
+					bulk_rx, bulk_tx_list, instance_tun);
 				for(i = 0; i < thread->num_ports; i++){
-					if(bulk > 0){
-						ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
-					}
+					ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
 				}
 
 				if(ret < ixmap_budget(instance, port_index)){
@@ -132,7 +136,17 @@ void *thread_process_interrupt(void *data)
 				}
 				break;
 			case EPOLL_TUN:
+				port_index = *(unsigned int *)ep_desc->data;
 
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					continue;
+
+				forward_process_tun(port_index,
+					read_buf, read_size, bulk_tx_list);
+				for(i = 0; i < thread->num_ports; i++){
+					ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
+				}
 				break;
 			case EPOLL_SIGNAL:
 				ret = read(ep_desc->fd, read_buf, read_size);

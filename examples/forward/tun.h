@@ -4,6 +4,7 @@
 struct tun_handle {
 	int		fd;
         unsigned int	ifindex;
+	unsigned int	mtu_frame;
 };
 
 struct tun_handle *tun_open(char *if_name, uint8_t *src_mac,

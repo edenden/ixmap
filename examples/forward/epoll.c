@@ -127,12 +127,37 @@ void epoll_desc_release_signalfd(struct epoll_desc *ep_desc)
 	return;
 }
 
-int epoll_desc_alloc_tun()
+int epoll_desc_alloc_tun(struct tun_instance *instance_tun,
+	unsigned int port_index)
 {
+	struct epoll_desc *ep_desc;
+	unsigned int *data;
 
+	ep_desc = malloc(sizeof(struct epoll_desc));
+	if(!ep_desc)
+		goto err_alloc_ep_desc;
+
+	data = (unsigned int *)malloc(sizeof(unsigned int));
+	if(!data)
+		goto err_alloc_data;
+	*data = port_index;
+
+	ep_desc->fd = instance_tun->ports[port_index].fd;
+	ep_desc->type = EPOLL_TUN;
+	ep_desc->data = data;
+	ep_desc->next = NULL;
+
+	return ep_desc;
+
+err_alloc_data:
+	free(ep_desc);
+err_alloc_ep_desc:
+	return NULL;
 }
 
-int epoll_desc_release_tun()
+void epoll_desc_release_tun(struct epoll_desc *ep_desc)
 {
-
+	free(ep_desc->data);
+	free(ep_desc);
+	return;
 }

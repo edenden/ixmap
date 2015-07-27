@@ -39,9 +39,15 @@ struct tun_handle *tun_open(char *if_name, uint8_t *src_mac,
 	if(ret < 0)
 		goto err_tun_mac;
 
+	ret = tun_ifindex(sock, if_name);
+	if(ret < 0)
+		goto err_tun_ifindex;
+	tun->ifindex = ret;
+
 	ret = tun_mtu(sock, if_name, mtu_frame);
 	if(ret < 0)
 		goto err_tun_mtu;
+	tun->mtu = mtu_frame;
 
 	ret = tun_up(sock, if_name);
 	if(ret < 0)
@@ -159,6 +165,26 @@ err_tun_ioctl:
 	return -1;
 }
 
+static int tun_ifindex(int fd, char *if_name)
+{
+	struct ifreq ifr;
+	int ret;
+
+	memset(&ifr, 0, sizeof(struct ifreq));
+	strncpy(ifr.ifr_name, if_name, IFNAMSIZ);
+
+	ret = ioctl(fd, SIOCGIFINDEX, (void *)&ifr);
+	if(ret < 0) {
+		perror("tun ifindex");
+		goto err_tun_ioctl;
+	}
+
+	return 0;
+
+err_tun_ioctl:
+	return -1;
+}
+
 struct tun_instance *tun_instance_alloc(struct tun_handle **th_list,
 	int tun_num)
 {
@@ -178,6 +204,7 @@ struct tun_instance *tun_instance_alloc(struct tun_handle **th_list,
 	for(i = 0; i < ih_num; i++){
 		instance->ports[i].fd = th_list[i]->fd;
 		instance->ports[i].ifindex = th_list[i]->fd;
+		instance->ports[i].mtu = th_list[i]->mtu_frame;
 	}
 
 	return instance;

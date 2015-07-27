@@ -27,6 +27,7 @@
 struct tun_port {
 	int			fd;
 	unsigned int		ifindex;
+	unsigned int		mtu;
 };
 
 struct tun_instance {

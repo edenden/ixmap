@@ -33,7 +33,7 @@ static void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 }
 #endif
 
-static void forward_process(struct ixmap_buf *buf, unsigned int port_index,
+void forward_process(struct ixmap_buf *buf, unsigned int port_index,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx,
 	struct tun_instance *instance_tun)
 {
@@ -59,12 +59,12 @@ static void forward_process(struct ixmap_buf *buf, unsigned int port_index,
 		eth = (struct ethhdr *)slot_buf;
 		switch(ntohs(eth->h_proto)){
 		case ETH_P_ARP:
-			ret = packet_arp_process(buf, port_index, slot_buf,
-				slot_index, slot_size, bulk_rx, bulk_tx);
+			ret = packet_arp_process(port_index, slot_buf,
+				slot_size, instance_tun);
 			break;
 		case ETH_P_IP:
-			ret = packet_ip_process(buf, port_index, slot_buf,
-				slot_index, slot_size, bulk_rx, bulk_tx);
+			ret = packet_ip_process(port_index, slot_buf,
+				slot_size, instance_tun);
 			break;
 		case ETH_P_IPV6:
 			packet_ip6_process();
@@ -75,37 +75,84 @@ static void forward_process(struct ixmap_buf *buf, unsigned int port_index,
 			break;
 		}
 
+		if(ret < 0){
+			goto packet_drop;
+		}
+
+		ret = ixmap_bulk_slot_push(bulk_tx[ret],
+			slot_index, slot_size);
 		if(ret < 0)
-			ixmap_slot_release(buf, slot_index);
+			goto packet_drop;
+
+		continue;
+packet_drop:
+		ixmap_slot_release(buf, slot_index);
 	}
+
+	return;
 }
 
-int forward_arp_process(void *slot_buf, unsigned int slot_size)
+void forward_process_tun(unsigned int port_index,
+	uint8_t *read_buf, int read_size, struct ixmap_bulk **bulk_tx)
 {
-	int ret;
+	int slot_index, ret;
+	void *slot_buf;
+	unsigned int slot_size;
 
-	ret = arp_receive(slot_buf, slot_size, src_mac, src_ip);
-	if(ret < 0){
-		goto err_arp_recv;
+	slot_index = ixmap_slot_assign(buf);
+	if(slot_index < 0){
+		goto err_slot_assign;
 	}
+
+	slot_buf = ixmap_slot_addr_virt(buf, slot_index);
+	slot_size = ixmap_slot_size(buf);
+
+	if(read_size > slot_size)
+		goto err_slot_size;
+
+	memcpy(slot_buf, read_buf, read_size);
+
+	ret = ixmap_bulk_slot_push(bulk_tx[port_index],
+		slot_index, read_size);
+	if(ret < 0){
+		goto err_slot_push;
+	}
+
+	return;
+
+err_slot_push:
+err_slot_size:
+	ixmap_slot_release(buf, slot_index);
+err_slot_assign:
+	return;
+}
+
+int forward_arp_process(unsigned int port_index,
+	void *slot_buf, unsigned int slot_size,
+	struct tun_instance *instance_tun)
+{
+	int fd, ret;
+
+	fd = instance_tun->ports[port_index].fd;
+	ret = write(fd, slot_buf, slot_size);
+	if(ret < 0)
+		goto err_write_tun;
 
 	return -1;
 
-err_arp_recv:
+err_write_tun:
 	return -1;
 }
 
-int forward_ip_process(struct ixmap_buf *buf, unsigned int port_index,
-	void *slot_buf, int slot_index, unsigned int slot_size,
-	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
+int forward_ip_process(unsigned int port_index,
+	void *slot_buf, unsigned int slot_size,
+	struct tun_instance *instance_tun)
 {
 	struct ethhdr *eth;
 	struct iphdr *ip;
 	struct fib_entry *fib_entry;
-	struct arp_entry *arp_entry;
-	int slot_index_new, ret;
-	void *slot_buf_new;
-	unsigned int slot_size_new;
+	struct neigh_entry *neigh_entry;
+	int fd, ret;
 
 	eth = (struct ethhdr *)slot_buf;
 	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
@@ -117,27 +164,12 @@ int forward_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 		goto packet_drop;
 	}
 
-	arp_entry = arp_lookup(arp, fib_entry->nexthop);
-	if(!arp_entry){
-		slot_index_new = ixmap_slot_assign(buf);
-		if(slot_index_new < 0){
-			goto err_slot_assign;
-		}
-
-		slot_buf_new = ixmap_slot_addr_virt(buf, slot_index_new);
-		slot_size_new = ixmap_slot_size(buf);
-
-		ret = arp_generate(slot_buf_new, slot_size_new,
-			entry->nexthop, src_ip, src_mac);
-		if(ret < 0){
-			goto err_arp_generate;
-		}
-
-		ret = ixmap_bulk_slot_push(bulk_tx[fib_entry->port_index],
-			slot_index_new, ret);
-		if(ret < 0){
-			goto err_slot_push;
-		}
+	neigh_entry = neigh_lookup(neigh, fib_entry->nexthop);
+	if(!neigh_entry){
+		fd = instance_tun->ports[port_index].fd;
+		ret = write(fd, slot_buf, slot_size);
+		if(ret < 0)
+			goto err_write_tun;
 
 		goto packet_drop;
 	}
@@ -152,19 +184,12 @@ int forward_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	}
 	ip->check--;
 
-	ret = ixmap_bulk_slot_push(bulk_tx[fib_entry->port_index],
-			slot_index, slot_size);
-	if(ret < 0){
-		goto packet_drop;
-	}
+	ret = fib_entry->port_index;
 	rcu_read_unlock();
 
-	return 0;
+	return ret;
 
-err_slot_push:
-err_arp_generate:
-	ixmap_slot_release(buf, slot_index_new);
-err_slot_assign:
+err_write_tun:
 packet_drop:
 	rcu_read_unlock();
 	return -1;

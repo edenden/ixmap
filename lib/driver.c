@@ -263,7 +263,7 @@ void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 	tx_ring = port->tx_ring;
 
 	/* Nothing to do */
-	if(unlikely(!bulk->count))
+	if(!bulk->count)
 		return;
 
 	/* set type for advanced descriptor with frame checksum insertion */
