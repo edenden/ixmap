@@ -6,5 +6,5 @@ struct fib_entry {
 };
 
 struct fib {
-	struct trie_node	*trie_node;
+	struct trie_tree	*tree;
 };

@@ -3,8 +3,35 @@
 #include <string.h>
 #include <stdint.h>
 
+struct neigh_table *neigh_alloc()
+{
+	struct neigh_table *neigh;
+
+	neigh = malloc(sizeof(struct neigh_table));
+	if(!neigh)
+		goto err_neigh_alloc;
+
+	neigh->table = hash_alloc();
+	if(!neigh->table)
+		goto err_hash_alloc;
+
+	return neigh;
+
+err_hash_alloc:
+	free(neigh);
+err_neigh_alloc:
+	return NULL;
+}
+
+void neigh_release(struct neigh_table *neigh)
+{
+	hash_release(neigh->table);
+	free(neigh);
+	return;
+}
+
 int neigh_add(struct neigh_table *neigh, uint8_t *src_mac,
-	struct in_addr *src_ip;)
+	struct in_addr *src_ip)
 {
 	struct neigh_entry entry;
 	int ret;

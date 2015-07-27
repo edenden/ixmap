@@ -10,7 +10,7 @@ struct hash_entry {
 	void			*value;
 };
 
-struct hash {
+struct hash_table {
 	pthread_mutex_t		mutex;
 	struct hash_entry	*entries[HASH_SIZE];
 };

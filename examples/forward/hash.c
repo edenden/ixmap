@@ -7,6 +7,7 @@
 #include "hash.h"
 
 static unsigned int hash_key(void *key, int key_len);
+static void hash_delete_all(struct hash_table *table);
 
 static unsigned int hash_key(void *key, int key_len)
 {
@@ -19,7 +20,31 @@ static unsigned int hash_key(void *key, int key_len)
 	return sum % HASH_SIZE;
 }
 
-int hash_add(struct hash *hash, void *key, int key_len,
+struct hash_table *hash_alloc()
+{
+	struct hash_table *table;
+
+	table = malloc(sizeof(struct hash_table));
+	if(!table)
+		goto err_hash_alloc;
+
+	memset(table, 0, sizeof(struct hash_table));
+	pthread_mutex_init(&table->mutex, NULL);
+
+	return table;
+
+err_hash_alloc:
+	return NULL;
+}
+
+void hash_release(struct hash_table *table)
+{
+	hash_delete_all(table);
+	free(table);
+	return;
+}
+
+int hash_add(struct hash_table *table, void *key, int key_len,
 	void *value, int value_len)
 {
 	struct hash_entry *entry_new, *entry;
@@ -43,15 +68,15 @@ int hash_add(struct hash *hash, void *key, int key_len,
 	memcpy(entry_new->value, value, value_len); 
 
 	hash_key = hash_key(key, key_len);
-	ixmapfwd_mutex_lock(&hash->mutex);
+	ixmapfwd_mutex_lock(&table->mutex);
 
 	while(count++ < HASH_COLLISION){
-		entry = hash->entries[hash_key];
+		entry = table->entries[hash_key];
 
 		if(entry){
 			if(entry->key_len == key_len
 			&& !memcmp(entry->key, key, key_len)){
-				rcu_set_pointer(hash->entries[hash_key], entry_new);
+				rcu_set_pointer(table->entries[hash_key], entry_new);
 				synchronize_rcu();
 				free(entry->value);
 				free(entry->key);
@@ -59,7 +84,7 @@ int hash_add(struct hash *hash, void *key, int key_len,
 				break;
 			}
 		}else{
-			rcu_set_pointer(hash->entries[hash_key], entry_new);
+			rcu_set_pointer(table->entries[hash_key], entry_new);
 			break;
 		}
 
@@ -73,11 +98,11 @@ int hash_add(struct hash *hash, void *key, int key_len,
 		goto err_hash_full;
 	}
 
-	ixmapfwd_mutex_unlock(&hash->mutex);
+	ixmapfwd_mutex_unlock(&table->mutex);
 	return 0;
 	
 err_hash_full:
-	ixmapfwd_mutex_unlock(&hash->mutex);
+	ixmapfwd_mutex_unlock(&table->mutex);
 	free(entry_new->value);
 err_alloc_value:
 	free(entry_new->key);
@@ -87,21 +112,21 @@ err_alloc_entry:
 	return -1;
 }
 
-int hash_delete(struct hash *hash, void *key, int key_len)
+int hash_delete(struct hash_table *table, void *key, int key_len)
 {
 	struct hash_entry *entry;
 	unsigned int hash_key;
 	int ret = -1, count = 0;
 
 	hash_key = hash_key(key, key_len);
-	ixmapfwd_mutex_lock(&hash->mutex);
+	ixmapfwd_mutex_lock(&table->mutex);
 
 	while(count++ < HASH_COLLISION){
-		entry = hash->entries[hash_key];
+		entry = table->entries[hash_key];
 		if(entry){
 			if(entry->key_len == key_len
 			&& !memcmp(entry->key, key, key_len)){
-				rcu_set_pointer(hash->entries[hash_key], NULL);
+				rcu_set_pointer(table->entries[hash_key], NULL);
 				synchronize_rcu();
 				free(entry->value);
 				free(entry->key);
@@ -120,26 +145,26 @@ int hash_delete(struct hash *hash, void *key, int key_len)
 		goto err_not_found;
 	}
 
-	ixmapfwd_mutex_unlock(&hash->mutex);
+	ixmapfwd_mutex_unlock(&table->mutex);
 	return 0;
 
 err_not_found:
-	ixmapfwd_mutex_unlock(&hash->mutex);
+	ixmapfwd_mutex_unlock(&table->mutex);
 	return -1;
 }
 
-void hash_delete_walk(struct hash *hash)
+static void hash_delete_all(struct hash_table *table)
 {
 	struct hash_entry *entry;
 	unsigned int i;
 
-	ixmapfwd_mutex_lock(&hash->mutex);
+	ixmapfwd_mutex_lock(&table->mutex);
 
 	for(i = 0; i < HASH_SIZE; i++){
-		entry = hash->entries[i];
+		entry = table->entries[i];
 
 		if(entry){
-			rcu_set_pointer(hash->entries[i], NULL);
+			rcu_set_pointer(table->entries[i], NULL);
 			synchronize_rcu();
 			free(entry->value);
 			free(entry->key);
@@ -147,12 +172,12 @@ void hash_delete_walk(struct hash *hash)
 		}
 	}
 
-	ixmapfwd_mutex_unlock(&hash->mutex);
+	ixmapfwd_mutex_unlock(&table->mutex);
 	return;
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-void *hash_lookup(struct hash *hash, void *key, int key_len)
+void *hash_lookup(struct hash_table *table, void *key, int key_len)
 {
 	struct hash_entry *entry, *entry_ret = NULL;
 	unsigned int hash_key;
@@ -160,7 +185,7 @@ void *hash_lookup(struct hash *hash, void *key, int key_len)
 
 	hash_key = hash_key(key, key_len);
 	while(count++ < HASH_COLLISION){
-		entry = rcu_dereference(hash->entries[hash_key]);
+		entry = rcu_dereference(table->entries[hash_key]);
 
 		if(entry){
 			if(entry->key_len == key_len

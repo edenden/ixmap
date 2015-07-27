@@ -7,7 +7,7 @@ struct trie_node {
 	void		*data;
 };
 
-struct trie {
+struct trie_tree {
 	pthread_mutex_t		mutex;
 	struct trie_node	*node;
 };

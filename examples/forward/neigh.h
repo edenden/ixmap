@@ -2,7 +2,7 @@
 #define _IXMAPFWD_NEIGH_H
 
 struct neigh_table {
-	struct hash_root *hash_root;
+	struct hash_table *table;
 };
 
 struct neigh_entry {

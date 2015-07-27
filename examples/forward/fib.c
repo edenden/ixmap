@@ -1,23 +1,28 @@
-
-int fib_import(struct fib *fib, char *command)
+struct fib *fib_alloc()
 {
-	int opcode, family;
-	uint32_t prefix[4], nexthop[4];
-	unsigned int prefix_len;
+        struct fib *fib;
 
-	switch(opcode){
-	case FIB_ADD:
-		fib_route_update(fib, family, prefix, prefix_len, nexthop);
-		break;
-	case FIB_DELETE:
-		fib_route_delete(fib, family, prefix, prefix_len);
-		break;
-	default:
-	}
+	fib = malloc(sizeof(struct fib));
+	if(!fib)
+		goto err_fib_alloc;
 
+	fib->tree = trie_alloc();
+	if(!fib->tree)
+		goto err_trie_alloc;
 
-        return 0;
+	return fib;
 
+err_trie_alloc:
+	free(fib);
+err_fib_alloc:
+	return NULL;
+}
+
+void fib_release(struct fib *fib)
+{
+	trie_release(fib->tree);
+	free(fib);
+	return;
 }
 
 int fib_route_update(struct fib *fib, int family,
