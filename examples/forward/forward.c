@@ -5,7 +5,7 @@
 #include <ixmap.h>
 
 #ifdef DEBUG
-static void packet_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
+static void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 {
 	unsigned short count;
 	int slot_index;
@@ -33,7 +33,7 @@ static void packet_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 }
 #endif
 
-static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
+static void forward_process(struct ixmap_buf *buf, unsigned int port_index,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx,
 	struct tun_instance *instance_tun)
 {
@@ -80,7 +80,7 @@ static void packet_process(struct ixmap_buf *buf, unsigned int port_index,
 	}
 }
 
-int packet_arp_process(void *slot_buf, unsigned int slot_size)
+int forward_arp_process(void *slot_buf, unsigned int slot_size)
 {
 	int ret;
 
@@ -95,7 +95,7 @@ err_arp_recv:
 	return -1;
 }
 
-int packet_ip_process(struct ixmap_buf *buf, unsigned int port_index,
+int forward_ip_process(struct ixmap_buf *buf, unsigned int port_index,
 	void *slot_buf, int slot_index, unsigned int slot_size,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx)
 {
@@ -170,7 +170,7 @@ packet_drop:
 	return -1;
 }
 
-void packet_ip6_process()
+void forward_ip6_process()
 {
 	struct ethhdr *eth;
 	struct ip6_hdr *ip6;
@@ -189,41 +189,5 @@ void packet_ip6_process()
 	}
 
 	return;
-}
-
-uint16_t packet_ip6_icmp_csum(struct ip6_hdr *ip6,
-	struct icmp6_hdr *icmp6){
-        unsigned long sum = 0;
-	uint32_t payload_len;
-	uint16_t *payload;
-
-	for(i = 0; i < sizeof(struct in6_addr); i += 2){
-		sum += *(uint16_t *)((void *)&ip6->ip6_src + i);
-        }
-
-	for(i = 0; i < sizeof(struct in6_addr); i += 2){
-		sum += *(uint16_t *)((void *)&ip6->ip6_dst + i);
-	}
-
-	payload_len = ntohs(ip6->ip6_plen);
-	sum += payload_len >> 16;
-	sum += payload_len & 0x0000FFFF;
-	sum += ip6->ip6_nxt;
-
-	payload = (unsigned short *)icmp6;
-        while (payload_len > 1) {
-                sum += *payload;
-                payload++;
-                payload_len -= 2;
-        }
-
-        if(payload_len){
-		sum += *(uint8_t *)payload;
-        }
-
-        sum = (sum & 0xffff) + (sum >> 16);
-        sum = (sum & 0xffff) + (sum >> 16);
-
-        return ~sum;
 }
 
