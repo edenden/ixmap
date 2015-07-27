@@ -36,7 +36,7 @@ void *thread_process_interrupt(void *data)
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	int read_size, fd_ep, i, ret, num_fd;
 	unsigned int port_index;
-	uint8_t read_buf[READ_BUF];
+	uint8_t *read_buf;
 	int bulk_tx_assigned = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
@@ -144,7 +144,7 @@ void *thread_process_interrupt(void *data)
 					continue;
 
 				forward_process_tun(port_index,
-					read_buf, read_size, bulk_tx_list);
+					read_buf, ret, bulk_tx_list);
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
 				}

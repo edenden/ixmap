@@ -7,51 +7,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 4095
-
-int main(int argc, char **argv)
-{
-	int sock, recv_len, send_len, ret;
-	struct sockaddr_nl addr;
-	char buffer[BUFFER_SIZE];
-	struct nlmsghdr *nlh;
-
-	memset(&addr, 0, sizeof(struct sockaddr_nl));
-
-	sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-	if(sock < 0)
-		goto err_sock_open;
-
-	addr.nl_family = AF_NETLINK;
-	addr.nl_groups = RTMGRP_NEIGH | RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE;
-
-	ret = bind(sock, (struct sockaddr *)&addr, sizeof(addr));
-	if(ret < 0)
-		goto err_bind;
-
-	while (1){
-		recv_len = recv(sock, buffer, sizeof(buffer), 0);
-		if(recv_len < 0)
-			goto err_recv;
-
-		nlh = (struct nlmsghdr *)buffer;
-		printf("nlmsg received type = %d, len = %d\n",
-			nlh->nlmsg_type, recv_len);
-		netlink_process(buffer, recv_len);
-	}
-
-	close(sock);
-	return 0;
-
-err_recv:
-err_netlink_send:
-err_netlink_gen:
-err_bind:
-	close(sock);
-err_sock_open:
-	return -1;
-}
-
 int netlink_process(char *buffer, int recv_len)
 {
 	struct nlmsghdr *nlh;

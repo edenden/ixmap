@@ -162,7 +162,10 @@ int main(int argc, char **argv)
 			
 			switch(ep_desc->type){
 			case EPOLL_NETLINK:
-
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					continue;
+				netlink_process(read_buf, ret);
 				break;
 			case EPOLL_SIGNAL:
 				ret = read(ep_desc->fd, read_buf, read_size);
