@@ -200,7 +200,7 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 	ep_desc_last = &ep_desc_root;
 
 	/* epoll fd preparing */
-	fd_ep = epoll_open();
+	fd_ep = epoll_create(EPOLL_MAXEVENTS);
 	if(fd_ep < 0){
 		perror("failed to make epoll fd");
 		goto err_epoll_open;

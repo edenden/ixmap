@@ -181,6 +181,96 @@ err_ih_list:
 	return ret;
 }
 
+static int ixmapfwd_fd_prepare(struct epoll_desc **ep_desc_list)
+{
+	struct epoll_desc ep_desc_root, *ep_desc_last;
+	sigset_t sigset;
+	struct sockaddr_nl addr;
+	int fd_ep, num_fd, i, ret;
+
+	memset(&ep_desc_root, 0, sizeof(struct epoll_desc));
+	ep_desc_last = &ep_desc_root;
+
+	/* epoll fd preparing */
+	fd_ep = epoll_create(EPOLL_MAXEVENTS);
+	if(fd_ep < 0){
+		perror("failed to make epoll fd");
+		goto err_epoll_open;
+	}
+
+	/* signalfd preparing */
+	ret = ixmapfwd_set_signal(&sigset);
+	if(ret != 0){
+		goto err_set_signal;
+	}
+
+	ep_desc_last->next = epoll_desc_alloc_signalfd(&sigset);
+	if(!ep_desc_last->next)
+		goto err_epoll_desc_signalfd;
+
+	ep_desc_last = ep_desc_last->next;
+	ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+	if(ret < 0){
+		perror("failed to add fd in epoll");
+		goto err_epoll_add_signalfd;
+	}
+
+	/* netlink preparing */
+	memset(&addr, 0, sizeof(struct sockaddr_nl));
+	addr.nl_family = AF_NETLINK;
+	addr.nl_groups = RTMGRP_NEIGH | RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE;
+
+	ep_desc_last->next = epoll_desc_alloc_netlink(&addr);
+	if(!ep_desc_last->next)
+		goto err_epoll_desc_netlink;
+
+	ep_desc_last = ep_desc_last->next;
+	ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+	if(ret < 0){
+		perror("failed to add fd in epoll");
+		goto err_epoll_add_netlink;
+	}
+
+	*ep_desc_list = ep_desc_root.next;
+	return fd_ep;
+
+err_epoll_add_netlink:
+err_epoll_desc_netlink:
+err_epoll_add_signalfd:
+err_epoll_desc_signalfd:
+err_set_signal:
+	thread_fd_destroy(ep_desc_root.next, fd_ep, num_ports);
+err_epoll_open:
+	return -1;
+}
+
+static void ixmapfwd_fd_destroy(struct epoll_desc *ep_desc_list,
+	int fd_ep)
+{
+	struct epoll_desc *ep_desc, *ep_desc_next;
+
+	ep_desc = ep_desc_list;
+	while(ep_desc){
+		ep_desc_next = ep_desc->next;
+
+		switch(ep_desc->type){
+		case EPOLL_SIGNAL:
+			epoll_desc_release_signalfd(ep_desc);
+			break;
+		case EPOLL_NETLINK:
+			epoll_desc_release_netlink(ep_desc);
+			break;
+		default:
+			break;
+		}
+
+		ep_desc = ep_desc_next;
+	}
+
+	close(fd_ep);
+	return;
+}
+
 static int ixmapfwd_thread_create(struct ixmapfwd_thread *thread,
 	int thread_index, unsigned int num_ports)
 {
