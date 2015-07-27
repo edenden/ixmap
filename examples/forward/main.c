@@ -38,9 +38,10 @@ int main(int argc, char **argv)
 	unsigned int promisc = 1;
 	unsigned int mtu_frame = 0; /* MTU=1522 is used by default. */
 	unsigned short intr_rate = IXGBE_20K_ITR;
-	sigset_t sigset;
-	int ret = 0, i, signal;
+	int ret = 0, i, fd_ep, num_fd;
 	int cores_assigned = 0, ports_assigned = 0;
+	struct epoll_desc *ep_desc_list, *ep_desc;
+	struct epoll_event events[EPOLL_MAXEVENTS];
 
 	ixmap_interface_list[0] = "ixgbe0";
 	ixmap_interface_list[1] = "ixgbe1";
@@ -105,11 +106,11 @@ int main(int argc, char **argv)
 		goto err_alloc_threads;
 	}
 
-	ret = ixmapfwd_set_signal(&sigset);
-	if(ret != 0){
-		printf("failed to ixmap_set_signal\n");
-		ret = -1;
-		goto err_ixmap_set_signal;
+	/* Prepare each fd in epoll */
+	fd_ep = ixmapfwd_fd_prepare(&ep_desc_list);
+	if(fd_ep < 0){
+		printf("failed to epoll prepare\n");
+		goto err_fd_prepare;
 	}
 
 	for(i = 0; i < num_cores; i++, cores_assigned++){
@@ -150,10 +151,32 @@ int main(int argc, char **argv)
 	}
 
 	while(1){
-		if(sigwait(&sigset, &signal) == 0){
-			break;
+		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
+		if(num_fd < 0){
+			perror("epoll error");
+			continue;
+		}
+
+		for(i = 0; i < num_fd; i++){
+			ep_desc = (struct epoll_desc *)events[i].data.ptr;
+			
+			switch(ep_desc->type){
+			case EPOLL_NETLINK:
+
+				break;
+			case EPOLL_SIGNAL:
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					continue;
+				goto out;
+				break;
+			default:
+				break;
+			}
 		}
 	}
+
+out:
 	ret = 0;
 
 err_assign_cores:
@@ -163,7 +186,8 @@ err_assign_cores:
 		ixmap_instance_release(threads[i].instance);
 		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 	}
-err_ixmap_set_signal:
+	ixmapfwd_fd_destroy(ep_desc_list, fd_ep);
+err_fd_prepare:
 	free(threads);
 err_alloc_threads:
 	rcu_unregister_thread();

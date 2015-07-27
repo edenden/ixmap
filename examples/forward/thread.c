@@ -95,10 +95,10 @@ void *thread_process_interrupt(void *data)
 
 		for(i = 0; i < num_fd; i++){
 			ep_desc = (struct epoll_desc *)events[i].data.ptr;
-			irqh = (struct ixmap_irqdev_handle *)ep_desc->data;
 			
 			switch(ep_desc->type){
 			case EPOLL_IRQ_RX:
+				irqh = (struct ixmap_irqdev_handle *)ep_desc->data;
 				port_index = ixmap_port_index(irqh);
 
 				/* Rx descripter cleaning */
@@ -123,6 +123,7 @@ void *thread_process_interrupt(void *data)
 				}
 				break;
 			case EPOLL_IRQ_TX:
+				irqh = (struct ixmap_irqdev_handle *)ep_desc->data;
 				port_index = ixmap_port_index(irqh);
 
 				/* Tx descripter cleaning */
