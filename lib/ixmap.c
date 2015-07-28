@@ -467,7 +467,7 @@ unsigned int ixmap_bufsize_get(struct ixmap_handle *ih)
 	return ih->buf_size;
 }
 
-uint8_t *ixmap_macaddr_get(struct ixmap_handle *ih)
+uint8_t *ixmap_macaddr_default(struct ixmap_handle *ih)
 {
 	return ih->mac_addr;
 }

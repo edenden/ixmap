@@ -114,7 +114,7 @@ void *thread_process_interrupt(void *data)
 #endif
 
 				forward_process(buf, port_index, bulk_rx, bulk_tx_list,
-					instance_tun, neigh, fib);
+					instance, instance_tun, neigh, fib);
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
 				}

@@ -436,6 +436,12 @@ int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index,
 	return total_tx_packets;
 }
 
+uint8_t *ixmap_macaddr(struct ixmap_instance *instance,
+	unsigned int port_index)
+{
+	return instance->ports[port_index].mac_addr;
+}
+
 inline int ixmap_slot_assign(struct ixmap_buf *buf)
 {
 	int slot_index = -1;

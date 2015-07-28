@@ -95,7 +95,7 @@ void netlink_neigh(struct nlmsghdr *nlh, struct neigh_table *neigh)
 	int ifindex;
 	int family;
 	uint32_t dst_addr[4];
-	uint8_t mac_addr[ETH_ALEN];
+	uint8_t dst_mac[ETH_ALEN];
 
 	neigh_entry = (struct ndmsg *)NLMSG_DATA(nlh);
 	family		= neigh_entry->ndm_family;
@@ -111,7 +111,7 @@ void netlink_neigh(struct nlmsghdr *nlh, struct neigh_table *neigh)
 				RTA_PAYLOAD(route_attr));
 			break;
 		case NDA_LLADDR:
-			memcpy(mac_addr, RTA_DATA(route_attr),
+			memcpy(dst_mac, RTA_DATA(route_attr),
 				RTA_PAYLOAD(route_attr));
 			break;
 		default:
@@ -123,7 +123,7 @@ void netlink_neigh(struct nlmsghdr *nlh, struct neigh_table *neigh)
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:
-		neigh_add(neigh, family, dst_addr, mac_addr);
+		neigh_add(neigh, family, dst_addr, dst_mac, src_mac);
 		break;
 	case RTM_DELNEIGH:
 		neigh_delete(neigh, family, dst_addr);

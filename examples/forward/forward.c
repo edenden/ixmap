@@ -35,22 +35,14 @@ static void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 
 void forward_process(struct ixmap_buf *buf, unsigned int port_index,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx,
-	struct tun_instance *instance_tun, struct neigh_table *neigh,
-	struct fib *fib)
+	struct ixmap_instance *instance, struct tun_instance *instance_tun,
+	struct neigh_table *neigh, struct fib *fib)
 {
 	unsigned short count;
 	int slot_index, i, ret;
 	unsigned int slot_size;
 	void *slot_buf;
 	struct ethhdr *eth;
-
-	/* TEMP */
-	uint8_t src_mac[6];
-	struct in_addr src_ip;
-
-	src_mac[0] = 0x9c; src_mac[1] = 0xb6; src_mac[2] = 0x54;
-	src_mac[3] = 0xbb; src_mac[4] = 0xfb; src_mac[5] = 0xe8;
-	inet_pton(AF_INET, "203.178.138.110", &src_ip);
 
 	count = ixmap_bulk_slot_count(bulk_rx);
 	for(i = 0; i < count; i++){
@@ -65,7 +57,7 @@ void forward_process(struct ixmap_buf *buf, unsigned int port_index,
 			break;
 		case ETH_P_IP:
 			ret = packet_ip_process(port_index, slot_buf,
-				slot_size, instance_tun);
+				slot_size, instance, instance_tun);
 			break;
 		case ETH_P_IPV6:
 			packet_ip6_process();
@@ -147,6 +139,7 @@ err_write_tun:
 
 int forward_ip_process(unsigned int port_index,
 	void *slot_buf, unsigned int slot_size,
+	struct ixmap_instance *instance,
 	struct tun_instance *instance_tun,
 	struct neigh_table *neigh, struct fib *fib)
 {
@@ -176,7 +169,7 @@ int forward_ip_process(unsigned int port_index,
 		goto packet_drop;
 	}
 
-	if(!(ip->ttl - 1)){
+	if(ip->ttl == 1){
 		fd = instance_tun->ports[port_index].fd;
 		ret = write(fd, slot_buf, slot_size);
 		if(ret < 0)
@@ -188,7 +181,8 @@ int forward_ip_process(unsigned int port_index,
 	ip->check--;
 
 	memcpy(eth->h_dest, entry->mac_addr, ETH_ALEN);
-	memcpy(eth->h_source, src_mac, ETH_ALEN);
+	memcpy(eth->h_source,
+		ixmap_macaddr(instance, fib_entry->port_index), ETH_ALEN);
 
 	ret = fib_entry->port_index;
 	rcu_read_unlock();

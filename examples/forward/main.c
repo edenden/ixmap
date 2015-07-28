@@ -89,7 +89,7 @@ int main(int argc, char **argv)
 			buf_size = ixmap_bufsize_get(ih_list[i]);
 
 		th_list[i] = tun_open(ixmap_interface_list[i],
-			ixmap_macaddr_get(ih_list[i]),
+			ixmap_macaddr_default(ih_list[i]),
 			ixmap_mtu_get(ih_list[i]));
 		if(!th_list[i]){
 			printf("failed to tun_open\n");

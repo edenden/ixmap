@@ -6,7 +6,8 @@ struct neigh_table {
 };
 
 struct neigh_entry {
-	uint8_t mac_addr[6];
+	uint8_t dst_mac[ETH_ALEN];
+	uint8_t src_mac[ETH_ALEN];
 };
 
 #endif /* _IXMAPFWD_NEIGH_H */
