@@ -135,6 +135,7 @@ static void _trie_delete_all(struct trie_node *node)
 		}
 	}
 
+	/* Do not delete top node */
 	if(node->parent)
 		free(node);
 

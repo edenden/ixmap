@@ -30,6 +30,8 @@ void *thread_process_interrupt(void *data)
 	struct ixmap_instance *instance;
 	struct ixmap_buf *buf;
 	struct ixmap_bulk *bulk_rx, **bulk_tx_list;
+	struct neigh_table *neigh;
+	struct fib *fib;
 	struct epoll_desc *ep_desc_list, *ep_desc;
 	struct ixmap_irqdev_handle *irqh;
 	struct tun_instance *instance_tun;
@@ -43,6 +45,8 @@ void *thread_process_interrupt(void *data)
 	instance = thread->instance;
 	buf = thread->buf;
 	instance_tun = thread->instance_tun;
+	neigh = thread->neigh;
+	fib = thread->fib;
 
 	/* Prepare read buffer */
 	read_size = max(sizeof(uint32_t),
@@ -109,8 +113,8 @@ void *thread_process_interrupt(void *data)
 				forward_dump(buf, bulk_rx);
 #endif
 
-				forward_process(buf, port_index,
-					bulk_rx, bulk_tx_list, instance_tun);
+				forward_process(buf, port_index, bulk_rx, bulk_tx_list,
+					instance_tun, neigh, fib);
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
 				}

@@ -35,12 +35,12 @@ void netlink_process(uint8_t *buf, int read_size)
 	return;
 }
 
-void netlink_route(struct nlmsghdr *nlh){
+void netlink_route(struct nlmsghdr *nlh, struct fib *fib)
+{
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
-	int route_attr_len;
-	char gw_ip[256], dst_ip[256];
-	int family;
+	int route_attr_len, family;
+	uint32_t prefix[4], nexthop[4];
 	unsigned int prefix_len;
 
 	route_entry = (struct rtmsg *)NLMSG_DATA(nlh);
@@ -58,12 +58,12 @@ void netlink_route(struct nlmsghdr *nlh){
 	while(RTA_OK(route_attr, route_attr_len)){
 		switch(route_attr->rta_type){
 		case RTA_DST:
-			inet_ntop(family, RTA_DATA(route_attr),
-				dst_ip, sizeof(dst_ip));
+			memcpy(prefix, RTA_DATA(route_attr),
+				RTA_PAYLOAD(route_attr));
 			break;
 		case RTA_GATEWAY:
-			inet_ntop(family, RTA_DATA(route_attr),
-				gw_ip, sizeof(gw_ip));
+			memcpy(nexthop, RTA_DATA(route_attr),
+				RTA_PAYLOAD(route_attr));
 			break;
 		default:
 			break;
@@ -74,10 +74,10 @@ void netlink_route(struct nlmsghdr *nlh){
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
-		printf("route add: %s/%d -> %s\n", dst_ip, prefix_len, gw_ip);
+		fib_route_update(fib, family, prefix, prefix_len, nexthop);
 		break;
 	case RTM_DELROUTE:
-		printf("route del: %s/%d -> %s\n", dst_ip, prefix_len, gw_ip);
+		fib_route_delete(fib, family, prefix, prefix_len);
 		break;
 	default:
 		break;
@@ -87,15 +87,15 @@ ign_route_table:
 	return;
 }
 
-void netlink_neigh(struct nlmsghdr *nlh)
+void netlink_neigh(struct nlmsghdr *nlh, struct neigh_table *neigh)
 {
 	struct ndmsg *neigh_entry;
 	struct rtattr *route_attr;
 	int route_attr_len;
 	int ifindex;
 	int family;
-	uint8_t *temp;
-	char dst_mac[256], dst_ip[256];
+	uint32_t dst_addr[4];
+	uint8_t mac_addr[ETH_ALEN];
 
 	neigh_entry = (struct ndmsg *)NLMSG_DATA(nlh);
 	family		= neigh_entry->ndm_family;
@@ -107,13 +107,12 @@ void netlink_neigh(struct nlmsghdr *nlh)
 	while(RTA_OK(route_attr, route_attr_len)){
 		switch(route_attr->rta_type){
 		case NDA_DST:
-			inet_ntop(family, RTA_DATA(route_attr),
-				dst_ip, sizeof(dst_ip));
+			memcpy(dst_addr, RTA_DATA(route_attr),
+				RTA_PAYLOAD(route_attr));
 			break;
 		case NDA_LLADDR:
-			temp = RTA_DATA(route_attr);
-			sprintf(dst_mac, "%02x:%02x:%02x:%02x:%02x:%02x",
-				temp[0], temp[1], temp[2], temp[3], temp[4], temp[5]);
+			memcpy(mac_addr, RTA_DATA(route_attr),
+				RTA_PAYLOAD(route_attr));
 			break;
 		default:
 			break;
@@ -124,10 +123,10 @@ void netlink_neigh(struct nlmsghdr *nlh)
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:
-		printf("neigh add: %s -> %s\n", dst_ip, dst_mac);
+		neigh_add(neigh, family, dst_addr, mac_addr);
 		break;
 	case RTM_DELNEIGH:
-		printf("neigh del: %s -> %s\n", dst_ip, dst_mac);
+		neigh_delete(neigh, family, dst_addr);
 		break;
 	default:
 		break;

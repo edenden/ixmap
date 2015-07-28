@@ -31,6 +31,8 @@ int main(int argc, char **argv)
 	struct ixmap_handle	**ih_list;
 	struct ixmapfwd_thread	*threads;
 	struct tun_handle	**th_list;
+	struct neigh_table	*neigh;
+	struct fib		*fib;
 	unsigned int buf_size = 0;
 	unsigned int num_cores = 4;
 	unsigned int num_ports = 2;
@@ -98,15 +100,6 @@ int main(int argc, char **argv)
 		}
 	}
 
-	rcu_init();
-	rcu_register_thread();
-
-	threads = malloc(sizeof(struct ixmapfwd_thread) * num_cores);
-	if(!threads){
-		ret = -1;
-		goto err_alloc_threads;
-	}
-
 	/* Prepare read buffer */
 	read_size = max(sysconf(_SC_PAGE_SIZE),
 		sizeof(struct signalfd_siginfo));
@@ -119,6 +112,25 @@ int main(int argc, char **argv)
 	if(fd_ep < 0){
 		printf("failed to epoll prepare\n");
 		goto err_fd_prepare;
+	}
+
+	/* Prepare neighbor table */
+	neigh = neigh_alloc();
+	if(!neigh)
+		goto err_neigh_alloc;
+
+	/* Prepare fib */
+	fib = fib_alloc();
+	if(!fib)
+		goto err_fib_alloc;
+
+	rcu_init();
+	rcu_register_thread();
+
+	threads = malloc(sizeof(struct ixmapfwd_thread) * num_cores);
+	if(!threads){
+		ret = -1;
+		goto err_alloc_threads;
 	}
 
 	for(i = 0; i < num_cores; i++, cores_assigned++){
@@ -147,6 +159,9 @@ int main(int argc, char **argv)
 			ret = -1;
 			goto err_assign_cores;
 		}
+
+		threads[i].neigh	= neigh;
+		threads[i].fib		= fib;
 
 		ret = ixmapfwd_thread_create(&threads[i], i, num_ports);
 		if(ret < 0){
@@ -197,14 +212,18 @@ err_assign_cores:
 		ixmap_instance_release(threads[i].instance);
 		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 	}
-	ixmapfwd_fd_destroy(ep_desc_list, fd_ep);
-err_fd_prepare:
-	free(read_buf);
-err_alloc_read_buf:
 	free(threads);
 err_alloc_threads:
 	rcu_unregister_thread();
 	rcu_exit();
+	fib_release(fib);
+err_fib_alloc:
+	neigh_release(neigh);
+err_neigh_alloc:
+	ixmapfwd_fd_destroy(ep_desc_list, fd_ep);
+err_fd_prepare:
+	free(read_buf);
+err_alloc_read_buf:
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
 		tun_close(th_list[i]);

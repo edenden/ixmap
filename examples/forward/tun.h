@@ -7,6 +7,16 @@ struct tun_handle {
 	unsigned int	mtu_frame;
 };
 
+struct tun_port {
+	int			fd;
+	unsigned int		ifindex;
+	unsigned int		mtu;
+};
+
+struct tun_instance {
+	struct tun_port		*ports;
+};
+
 struct tun_handle *tun_open(char *if_name, uint8_t *src_mac,
 	unsigned int mtu_frame);
 void tun_close(struct tun_handle *tun);

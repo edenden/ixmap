@@ -24,24 +24,4 @@
 #define ixgbe_print(args...)
 #endif
 
-struct tun_port {
-	int			fd;
-	unsigned int		ifindex;
-	unsigned int		mtu;
-};
-
-struct tun_instance {
-	struct tun_port		*ports;
-};
-
-struct ixmapfwd_thread {
-	int			index;
-	pthread_t		tid;
-	pthread_t		ptid;
-	int			num_ports;
-	struct ixmap_buf	*buf;
-	struct ixmap_instance	*instance;
-	struct tun_instance	*instance_tun;
-};
-
 #endif /* _IXMAPFWD_MAIN_H */

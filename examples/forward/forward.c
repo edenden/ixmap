@@ -35,7 +35,8 @@ static void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 
 void forward_process(struct ixmap_buf *buf, unsigned int port_index,
 	struct ixmap_bulk *bulk_rx, struct ixmap_bulk **bulk_tx,
-	struct tun_instance *instance_tun)
+	struct tun_instance *instance_tun, struct neigh_table *neigh,
+	struct fib *fib)
 {
 	unsigned short count;
 	int slot_index, i, ret;
@@ -146,7 +147,8 @@ err_write_tun:
 
 int forward_ip_process(unsigned int port_index,
 	void *slot_buf, unsigned int slot_size,
-	struct tun_instance *instance_tun)
+	struct tun_instance *instance_tun,
+	struct neigh_table *neigh, struct fib *fib)
 {
 	struct ethhdr *eth;
 	struct iphdr *ip;
@@ -164,7 +166,7 @@ int forward_ip_process(unsigned int port_index,
 		goto packet_drop;
 	}
 
-	neigh_entry = neigh_lookup(neigh, fib_entry->nexthop);
+	neigh_entry = neigh_lookup(neigh, AF_INET, fib_entry->nexthop);
 	if(!neigh_entry){
 		fd = instance_tun->ports[port_index].fd;
 		ret = write(fd, slot_buf, slot_size);
