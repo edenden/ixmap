@@ -147,6 +147,7 @@ int forward_ip_process(unsigned int port_index,
 	struct iphdr *ip;
 	struct fib_entry *fib_entry;
 	struct neigh_entry *neigh_entry;
+	uint8_t *dst_mac, *src_mac;
 	int fd, ret;
 
 	eth = (struct ethhdr *)slot_buf;
@@ -180,9 +181,10 @@ int forward_ip_process(unsigned int port_index,
 	ip->ttl--;
 	ip->check--;
 
-	memcpy(eth->h_dest, entry->mac_addr, ETH_ALEN);
-	memcpy(eth->h_source,
-		ixmap_macaddr(instance, fib_entry->port_index), ETH_ALEN);
+	dst_mac = neigh_entry->dst_mac;
+	src_mac = ixmap_macaddr(instance, fib_entry->port_index);
+	memcpy(eth->h_dest, dst_mac, ETH_ALEN);
+	memcpy(eth->h_source, src_mac, ETH_ALEN);
 
 	ret = fib_entry->port_index;
 	rcu_read_unlock();

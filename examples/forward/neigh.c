@@ -48,7 +48,7 @@ int neigh_add(struct neigh_table *neigh, int family,
 		break;
 	}
 
-	memcpy(entry.mac_addr, mac_addr, ETH_ALEN);
+	memcpy(entry.dst_mac, mac_addr, ETH_ALEN);
 	ret = hash_add(neigh->table, dst_addr, family_len,
 		&entry, sizeof(struct neigh_entry));
 	if(ret < 0)

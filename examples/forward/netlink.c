@@ -123,7 +123,7 @@ void netlink_neigh(struct nlmsghdr *nlh, struct neigh_table *neigh)
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:
-		neigh_add(neigh, family, dst_addr, dst_mac, src_mac);
+		neigh_add(neigh, family, dst_addr, dst_mac);
 		break;
 	case RTM_DELNEIGH:
 		neigh_delete(neigh, family, dst_addr);
