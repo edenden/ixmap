@@ -176,15 +176,19 @@ int forward_ip_process(unsigned int port_index,
 		goto packet_drop;
 	}
 
-	memcpy(eth->h_dest, entry->mac_addr, ETH_ALEN);
-	memcpy(eth->h_source, src_mac, ETH_ALEN);
+	if(!(ip->ttl - 1)){
+		fd = instance_tun->ports[port_index].fd;
+		ret = write(fd, slot_buf, slot_size);
+		if(ret < 0)
+			goto err_write_tun;
 
-	ip->ttl--;
-	if(!ip->ttl){
-		/* TBD: return the ICMP packet */
 		goto packet_drop;
 	}
+	ip->ttl--;
 	ip->check--;
+
+	memcpy(eth->h_dest, entry->mac_addr, ETH_ALEN);
+	memcpy(eth->h_source, src_mac, ETH_ALEN);
 
 	ret = fib_entry->port_index;
 	rcu_read_unlock();
