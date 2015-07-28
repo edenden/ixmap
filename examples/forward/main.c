@@ -114,6 +114,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Prepare neighbor table */
+	/* TBD: allocate neighbor table per port */
 	neigh = neigh_alloc();
 	if(!neigh)
 		goto err_neigh_alloc;

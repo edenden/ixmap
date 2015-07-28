@@ -157,6 +157,8 @@ int forward_ip_process(struct ixmapfwd_thread *thread,
 		goto packet_drop;
 	}
 
+	/* TBD: determine the packet is destined to localhost or not */
+
 	neigh_entry = neigh_lookup(thread->neigh, AF_INET, fib_entry->nexthop);
 	if(!neigh_entry){
 		fd = thread->instance_tun->ports[port_index].fd;
