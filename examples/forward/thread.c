@@ -27,26 +27,14 @@ static void thread_print_result(struct ixmapfwd_thread *thread);
 void *thread_process_interrupt(void *data)
 {
 	struct ixmapfwd_thread *thread = data;
-	struct ixmap_instance *instance;
-	struct ixmap_buf *buf;
-	struct ixmap_bulk *bulk_rx, **bulk_tx_list;
-	struct neigh_table *neigh;
-	struct fib *fib;
-	struct epoll_desc *ep_desc_list, *ep_desc;
-	struct ixmap_irqdev_handle *irqh;
-	struct tun_instance *instance_tun;
-	struct epoll_event events[EPOLL_MAXEVENTS];
-	int read_size, fd_ep, i, ret, num_fd;
+	struct ixmap_bulk **bulk_array;
+	struct epoll_desc *ep_desc_list;
+	int read_size, fd_ep, i, ret;
 	unsigned int port_index;
 	uint8_t *read_buf;
-	int bulk_tx_assigned = 0;
+	int bulk_assigned = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
-	instance = thread->instance;
-	buf = thread->buf;
-	instance_tun = thread->instance_tun;
-	neigh = thread->neigh;
-	fib = thread->fib;
 
 	/* Prepare read buffer */
 	read_size = max(sizeof(uint32_t),
@@ -60,19 +48,15 @@ void *thread_process_interrupt(void *data)
 	if(!read_buf)
 		goto err_alloc_read_buf;
 
-	/* Prepare bulk array */
-	bulk_rx = ixmap_bulk_alloc(instance, thread->num_ports);
-	if(!bulk_rx)
-		goto err_bulk_rx_alloc;
+	bulk_array = malloc(sizeof(struct ixmap_bulk *) * (thread->num_ports + 1));
+	if(!bulk_array)
+		goto err_bulk_array_alloc;
 
-	bulk_tx_list = malloc(sizeof(struct ixmap_bulk *) * thread->num_ports);
-	if(!bulk_tx_list)
-		goto err_bulk_tx_alloc_list;
-
-	for(i = 0; i < thread->num_ports; i++, bulk_tx_assigned++){
-		bulk_tx_list[i] = ixmap_bulk_alloc(instance, thread->num_ports);
-		if(!bulk_tx_list[i])
-			goto err_bulk_tx_alloc;
+	for(i = 0; i < thread->num_ports + 1; i++, bulk_assigned++){
+		bulk_array[i] = ixmap_bulk_alloc(thread->instance,
+			thread->num_ports);
+		if(!bulk_array[i])
+			goto err_bulk_alloc;
 	}
 
 	/* Prepare each fd in epoll */
@@ -85,16 +69,58 @@ void *thread_process_interrupt(void *data)
 
 	/* Prepare initial RX buffer */
 	for(i = 0; i < thread->num_ports; i++){
-		ixmap_rx_alloc(instance, i, buf);
+		ixmap_rx_alloc(thread->instance, i, thread->buf);
 	}
 
 	rcu_register_thread();
 
+	ret = thread_wait(thread, fd_ep, read_buf, read_size, bulk_array);
+	if(ret < 0)
+		goto err_wait;
+
+	rcu_unregister_thread();
+	
+
+	thread_epoll_destroy(ep_desc_list, fd_ep, thread->num_ports);
+	for(i = 0; i < bulk_assigned; i++){
+		ixmap_bulk_release(bulk_array[i]);
+	}
+	free(bulk_array);
+	free(read_buf);
+	thread_print_result(thread);
+	return NULL;
+
+err_wait:
+	rcu_unregister_thread();
+	thread_epoll_destroy(ep_desc_list, fd_ep, thread->num_ports);
+err_ixgbe_epoll_prepare:
+err_bulk_alloc:
+	for(i = 0; i < bulk_assigned; i++){
+		ixmap_bulk_release(bulk_array[i]);
+	}
+	free(bulk_array);
+err_bulk_array_alloc_list:
+	free(read_buf);
+err_alloc_read_buf:
+	printf("thread execution failed\n");
+	pthread_kill(thread->ptid, SIGINT);
+	return NULL;
+}
+
+static int thread_wait(struct ixmapfwd_thread *thread,
+	int fd_ep, uint8_t *read_buf, int read_size,
+	struct ixmap_bulk **bulk_array)
+{
+        struct epoll_desc *ep_desc;
+        struct ixmap_irqdev_handle *irqh;
+        struct epoll_event events[EPOLL_MAXEVENTS];
+        int i, ret, num_fd;
+        unsigned int port_index;
+
 	while(1){
 		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
 		if(num_fd < 0){
-			perror("epoll error");
-			continue;
+			goto err_read;
 		}
 
 		for(i = 0; i < num_fd; i++){
@@ -106,24 +132,26 @@ void *thread_process_interrupt(void *data)
 				port_index = ixmap_port_index(irqh);
 
 				/* Rx descripter cleaning */
-				ret = ixmap_rx_clean(instance, port_index, buf, bulk_rx);
-				ixmap_rx_alloc(instance, port_index, buf);
+				ret = ixmap_rx_clean(thread->instance, port_index,
+					thread->buf, bulk_array[thread->num_ports]);
+				ixmap_rx_alloc(thread->instance, port_index, thread->buf);
 
 #ifdef DEBUG
-				forward_dump(buf, bulk_rx);
+				forward_dump(buf, bulk_array[thread->num_ports]);
 #endif
 
-				forward_process(buf, port_index, bulk_rx, bulk_tx_list,
-					instance, instance_tun, neigh, fib);
+				forward_process(thread, port_index, bulk_array);
 				for(i = 0; i < thread->num_ports; i++){
-					ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
+					ixmap_tx_xmit(thread->instance, i, thread->buf,
+						bulk_array[i]);
 				}
 
-				if(ret < ixmap_budget(instance, port_index)){
+				if(ret < ixmap_budget(thread->instance, port_index)){
 					ret = read(ep_desc->fd, read_buf, read_size);
 					if(ret < 0)
-						goto out;
-					ixmap_irq_unmask_queues(instance, irqh);
+						goto err_read;
+
+					ixmap_irq_unmask_queues(thread->instance, irqh);
 				}
 				break;
 			case EPOLL_IRQ_TX:
@@ -131,13 +159,14 @@ void *thread_process_interrupt(void *data)
 				port_index = ixmap_port_index(irqh);
 
 				/* Tx descripter cleaning */
-				ret = ixmap_tx_clean(instance, port_index, buf);
+				ret = ixmap_tx_clean(thread->instance, port_index, thread->buf);
 
-				if(ret < ixmap_budget(instance, port_index)){
+				if(ret < ixmap_budget(thread->instance, port_index)){
 					ret = read(ep_desc->fd, read_buf, read_size);
 					if(ret < 0)
-						goto out;
-					ixmap_irq_unmask_queues(instance, irqh);
+						goto err_read;
+
+					ixmap_irq_unmask_queues(thread->instance, irqh);
 				}
 				break;
 			case EPOLL_TUN:
@@ -145,18 +174,20 @@ void *thread_process_interrupt(void *data)
 
 				ret = read(ep_desc->fd, read_buf, read_size);
 				if(ret < 0)
-					continue;
+					goto err_read;
 
 				forward_process_tun(port_index,
-					read_buf, ret, bulk_tx_list);
+					read_buf, ret, bulk_array);
 				for(i = 0; i < thread->num_ports; i++){
-					ixmap_tx_xmit(instance, i, buf, bulk_tx_list[i]);
+					ixmap_tx_xmit(thread->instance, i, thread->buf,
+						bulk_array[i]);
 				}
 				break;
 			case EPOLL_SIGNAL:
 				ret = read(ep_desc->fd, read_buf, read_size);
 				if(ret < 0)
-					continue;
+					goto err_read;
+
 				goto out;
 				break;
 			default:
@@ -166,36 +197,14 @@ void *thread_process_interrupt(void *data)
 	}
 
 out:
-	rcu_unregister_thread();
-	thread_epoll_destroy(ep_desc_list, fd_ep, thread->num_ports);
-	for(i = 0; i < bulk_tx_assigned; i++){
-		ixmap_bulk_release(bulk_tx_list[i]);
-	}
-	free(bulk_tx_list);
-	ixmap_bulk_release(bulk_rx);
-	free(read_buf);
-	thread_print_result(thread);
-	return NULL;
+	return 0;
 
-err_ixgbe_epoll_prepare:
-err_bulk_tx_alloc:
-	for(i = 0; i < bulk_tx_assigned; i++){
-		ixmap_bulk_release(bulk_tx_list[i]);
-	}
-	free(bulk_tx_list);
-err_bulk_tx_alloc_list:
-	ixmap_bulk_release(bulk_rx);
-err_bulk_rx_alloc:
-	free(read_buf);
-err_alloc_read_buf:
-	printf("thread execution failed\n");
-	pthread_kill(thread->ptid, SIGINT);
-	return NULL;
+err_read:
+	return -1;
 }
 
 static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
-	struct ixmap_instance *instance, struct tun_instance *instance_tun,
-	uint32_t num_ports, uint32_t queue_index)
+	struct ixmapfwd_thread *thread)
 {
 	struct epoll_desc ep_desc_root, *ep_desc_last;
 	sigset_t sigset;
@@ -211,10 +220,10 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 		goto err_epoll_open;
 	}
 
-	for(i = 0; i < num_ports; i++){
+	for(i = 0; i < thread->num_ports; i++){
 		/* Register RX interrupt fd */
 		ep_desc_last->next = epoll_desc_alloc_irqdev(
-			instance, i, queue_index, IXMAP_IRQ_RX);
+			thread->instance, i, queue_index, IXMAP_IRQ_RX);
 		if(!ep_desc_last->next)
 			goto err_assign_port;
 
@@ -232,12 +241,12 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 
 		/* Register TX interrupt fd */
 		ep_desc_last->next = epoll_desc_alloc_irqdev(
-			instance, i, queue_index, IXMAP_IRQ_TX);
+			thread->instance, i, thread->index, IXMAP_IRQ_TX);
 		if(!ep_desc_last->next)
 			goto err_assign_port;
 
 		ret = thread_irq_setmask((struct ixmap_irqdev_handle *)
-			ep_desc_last->next->data, queue_index);
+			ep_desc_last->next->data, thread->index);
 		if(ret < 0)
 			goto err_assign_port;
 
@@ -249,7 +258,7 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 		}
 
 		/* Register Virtual Interface fd */
-		ep_desc_last->next = epoll_desc_alloc_tun(instance_tun, i);
+		ep_desc_last->next = epoll_desc_alloc_tun(thread->instance_tun, i);
 		if(!ep_desc_last->next)
 			goto err_assign_port;
 

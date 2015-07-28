@@ -40,11 +40,10 @@ int main(int argc, char **argv)
 	unsigned int promisc = 1;
 	unsigned int mtu_frame = 0; /* MTU=1522 is used by default. */
 	unsigned short intr_rate = IXGBE_20K_ITR;
-	int ret = 0, i, fd_ep, num_fd, read_size;
-	int cores_assigned = 0, ports_assigned = 0;
-	struct epoll_desc *ep_desc_list, *ep_desc;
-	struct epoll_event events[EPOLL_MAXEVENTS];
 	uint8_t *read_buf;
+	int ret, i, fd_ep, read_size;
+	int cores_assigned = 0, ports_assigned = 0;
+	struct epoll_desc *ep_desc_list;
 
 	ixmap_interface_list[0] = "ixgbe0";
 	ixmap_interface_list[1] = "ixgbe1";
@@ -173,37 +172,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	while(1){
-		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
-		if(num_fd < 0){
-			perror("epoll error");
-			continue;
-		}
-
-		for(i = 0; i < num_fd; i++){
-			ep_desc = (struct epoll_desc *)events[i].data.ptr;
-			
-			switch(ep_desc->type){
-			case EPOLL_NETLINK:
-				ret = read(ep_desc->fd, read_buf, read_size);
-				if(ret < 0)
-					continue;
-				netlink_process(read_buf, ret);
-				break;
-			case EPOLL_SIGNAL:
-				ret = read(ep_desc->fd, read_buf, read_size);
-				if(ret < 0)
-					continue;
-				goto out;
-				break;
-			default:
-				break;
-			}
-		}
-	}
-
-out:
-	ret = 0;
+	ret = ixmapfwd_wait(fd_ep, read_buf, read_size);
 
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
@@ -235,6 +204,50 @@ err_tun_list:
 	free(ih_list);
 err_ih_list:
 	return ret;
+}
+
+static int ixmapfwd_wait(int fd_ep, uint8_t *read_buf, int read_size)
+{
+	struct epoll_event events[EPOLL_MAXEVENTS];
+	struct epoll_desc *ep_desc;
+	int ret, i, num_fd;
+
+	while(1){
+		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
+		if(num_fd < 0){
+			perror("epoll error");
+			continue;
+		}
+
+		for(i = 0; i < num_fd; i++){
+			ep_desc = (struct epoll_desc *)events[i].data.ptr;
+			
+			switch(ep_desc->type){
+			case EPOLL_NETLINK:
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					goto err_read;
+
+				netlink_process(read_buf, ret);
+				break;
+			case EPOLL_SIGNAL:
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					goto err_read;
+
+				goto out;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+out:
+	return 0;
+
+err_read:
+	return -1;
 }
 
 static int ixmapfwd_fd_prepare(struct epoll_desc **ep_desc_list)
