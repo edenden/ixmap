@@ -1,3 +1,7 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
 struct fib *fib_alloc()
 {
         struct fib *fib;

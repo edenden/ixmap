@@ -11,6 +11,36 @@ static uint32_t trie_bit(uint32_t *addr, int digit);
 static struct trie_node *trie_alloc_node(struct trie_node *parent);
 static int _trie_traverse(struct trie_node *node, struct node_data_list *list_root);
 
+struct trie_tree *trie_alloc()
+{
+	struct trie_tree *tree;
+
+	tree = malloc(sizeof(struct trie_tree));
+	if(!tree)
+		goto err_trie_alloc;
+
+	memset(tree, 0, sizeof(struct trie_tree));
+	pthread_mutex_init(&tree->mutex, NULL);
+	tree->node = trie_alloc_node(NULL);
+	if(!tree->node)
+		goto err_trie_alloc_node;
+
+	return tree;
+
+err_trie_alloc_node:
+	free(tree);
+err_trie_alloc:
+	return NULL;
+}
+
+void trie_release(struct trie_tree *tree)
+{
+	trie_delete_all(tree);
+	free(tree->node);
+	free(tree);
+	return;
+}
+
 static uint32_t trie_bit(uint32_t *addr, int digit)
 {
 	int index, shift;
@@ -124,6 +154,8 @@ static void _trie_delete_all(struct trie_node *node)
 
 	data = rcu_dereference(node->data);
 	if(data){
+		rcu_set_pointer(node->data, NULL);
+		synchronize_rcu();
 		free(data);
 	}
 
@@ -132,12 +164,11 @@ static void _trie_delete_all(struct trie_node *node)
 
 		if(child != NULL){
 			_trie_delete_all(child);
+			rcu_set_pointer(node->child[i], NULL);
+			synchronize_rcu();
+			free(child);
 		}
 	}
-
-	/* Do not delete top node */
-	if(node->parent)
-		free(node);
 
 	return;
 }
@@ -188,6 +219,34 @@ err_noroute_found:
 	return NULL;
 }
 
+static int _trie_cleanup(struct trie_node *node)
+{
+	struct trie_node *child;
+	int ret, i;
+
+	for(i = 0; i < 2; i++){
+		child = rcu_dereference(node->child[i]);
+
+		if(child != NULL){
+			ret = _trie_cleanup(child);
+			if(ret < 0)
+				rcu_set_pointer(node->child[i], NULL);
+				synchronize_rcu();
+				free(child);
+			}
+		}
+	}
+
+	/* Cleanup stub node */
+	if(!rcu_dereference(node->child[0])
+	&& !rcu_dereference(node->child[1])
+	&& !rcu_dereference(node->data)){
+		return -1;
+	}
+
+	return 0;
+}
+
 int trie_add(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len,
 	void *data, unsigned int data_len)
@@ -231,7 +290,7 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 	return 0;
 
 err_alloc_child;
-	/* TBD: free allocated nodes */
+	_trie_cleanup(tree->node);
 	ixmapfwd_mutex_unlock(&tree->mutex);
 	free(data_new);
 err_alloc_data:
@@ -292,32 +351,3 @@ err_noroute_found:
 	return -1;
 }
 
-struct trie_tree *trie_alloc()
-{
-	struct trie_tree *tree;
-
-	tree = malloc(sizeof(struct trie_tree));
-	if(!tree)
-		goto err_trie_alloc;
-
-	memset(tree, 0, sizeof(struct trie_tree));
-	pthread_mutex_init(&tree->mutex, NULL);
-	tree->node = trie_alloc_node(NULL);
-	if(!tree->node)
-		goto err_trie_alloc_node;
-
-	return tree;
-
-err_trie_alloc_node:
-	free(tree);
-err_trie_alloc:
-	return NULL;
-}
-
-void trie_release(struct trie_tree *tree)
-{
-	trie_delete_all(tree);
-	free(tree->node);
-	free(tree);
-	return;
-}
