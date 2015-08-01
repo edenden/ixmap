@@ -25,7 +25,7 @@
 struct ixmap_handle;
 struct ixmap_irqdev_handle;
 struct ixmap_buf;
-struct ixmap_instance;
+struct ixmap_plane;
 struct ixmap_bulk;
 
 enum ixmap_irq_direction {
@@ -34,9 +34,9 @@ enum ixmap_irq_direction {
 };
 
 void ixmap_irq_enable(struct ixmap_handle *ih);
-struct ixmap_instance *ixmap_instance_alloc(struct ixmap_handle **ih_list,
+struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 	int ih_num, int queue_index);
-void ixmap_instance_release(struct ixmap_instance *instance);
+void ixmap_plane_release(struct ixmap_plane *plane);
 int ixmap_desc_alloc(struct ixmap_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc);
 void ixmap_desc_release(struct ixmap_handle *ih);
@@ -51,7 +51,7 @@ void ixmap_close(struct ixmap_handle *ih);
 unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);
 uint8_t *ixmap_macaddr_default(struct ixmap_handle *ih);
 unsigned int ixmap_mtu_get(struct ixmap_handle *ih);
-struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
+struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction);
 void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh);
@@ -59,12 +59,12 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	unsigned int core_id);
 int ixmap_irqdev_fd(struct ixmap_irqdev_handle *irqh);
 
-inline void ixmap_irq_unmask_queues(struct ixmap_instance *instance,
+inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
 	struct ixmap_irqdev_handle *irqh);
-inline unsigned int ixmap_budget(struct ixmap_instance *instance,
+inline unsigned int ixmap_budget(struct ixmap_plane *plane,
 	unsigned int port_index);
 inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh);
-struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
+struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_plane *plane,
 	unsigned int num_ports);
 void ixmap_bulk_release(struct ixmap_bulk *bulk);
 
@@ -76,16 +76,16 @@ int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
 int ixmap_bulk_slot_pop(struct ixmap_bulk *bulk,
 	int *slot_index, unsigned int *slot_size);
 
-void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
+void ixmap_rx_alloc(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);
-void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
+void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf, struct ixmap_bulk *bulk);
-int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
+int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf, struct ixmap_bulk *bulk);
-int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index,
+int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);
 
-uint8_t *ixmap_macaddr(struct ixmap_instance *instance,
+uint8_t *ixmap_macaddr(struct ixmap_plane *plane,
 	unsigned int port_index);
 
 inline void *ixmap_slot_addr_virt(struct ixmap_buf *buf,
@@ -95,13 +95,13 @@ inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index);
 inline unsigned int ixmap_slot_size(struct ixmap_buf *buf);
 
-inline unsigned long ixmap_count_rx_alloc_failed(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_rx_alloc_failed(struct ixmap_plane *plane,
 	unsigned int port_index);
-inline unsigned long ixmap_count_rx_clean_total(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_rx_clean_total(struct ixmap_plane *plane,
 	unsigned int port_index);
-inline unsigned long ixmap_count_tx_xmit_failed(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_tx_xmit_failed(struct ixmap_plane *plane,
 	unsigned int port_index);
-inline unsigned long ixmap_count_tx_clean_total(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_tx_clean_total(struct ixmap_plane *plane,
 	unsigned int port_index);
 
 void ixmap_configure_rx(struct ixmap_handle *ih);

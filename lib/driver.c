@@ -55,13 +55,13 @@ static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value)
 	return;
 }
 
-inline void ixmap_irq_unmask_queues(struct ixmap_instance *instance,
+inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
 	struct ixmap_irqdev_handle *irqh)
 {
 	struct ixmap_port *port;
 	uint32_t mask;
 
-	port = &instance->ports[irqh->port_index];
+	port = &plane->ports[irqh->port_index];
 
 	mask = (irqh->qmask & 0xFFFFFFFF);
 	if (mask)
@@ -73,12 +73,12 @@ inline void ixmap_irq_unmask_queues(struct ixmap_instance *instance,
 	return;
 }
 
-inline unsigned int ixmap_budget(struct ixmap_instance *instance,
+inline unsigned int ixmap_budget(struct ixmap_plane *plane,
 	unsigned int port_index)
 {
 	unsigned int budget;
 
-	budget = instance->ports[port_index].budget;
+	budget = plane->ports[port_index].budget;
 	return budget;
 }
 
@@ -90,7 +90,7 @@ inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh)
 	return port_index;
 }
 
-struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
+struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_plane *plane,
 	unsigned int num_ports)
 {
 	struct ixmap_bulk *bulk;
@@ -98,8 +98,8 @@ struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_instance *instance,
 
 	/* Prepare bulk array */
 	for(i = 0; i < num_ports; i++){
-		if(instance->ports[i].budget > max_bulk_count){
-			max_bulk_count = instance->ports[i].budget;
+		if(plane->ports[i].budget > max_bulk_count){
+			max_bulk_count = plane->ports[i].budget;
 		}
 	}
 	max_bulk_count += IXMAP_BULK_RESERVED;
@@ -192,7 +192,7 @@ err_bulk_empty:
 	return -1;
 }
 
-void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
+void ixmap_rx_alloc(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf)
 {
 	struct ixmap_port *port;
@@ -200,7 +200,7 @@ void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
 	unsigned int total_allocated = 0;
 	uint16_t max_allocation;
 
-	port = &instance->ports[port_index];
+	port = &plane->ports[port_index];
 	rx_ring = port->rx_ring;
 
 	max_allocation = ixmap_desc_unused(rx_ring, port->num_rx_desc);
@@ -249,7 +249,7 @@ void ixmap_rx_alloc(struct ixmap_instance *instance, unsigned int port_index,
 	}
 }
 
-void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
+void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 {
 	struct ixmap_port *port;
@@ -259,7 +259,7 @@ void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 	uint32_t tx_flags;
 	int i;
 
-	port = &instance->ports[port_index];
+	port = &plane->ports[port_index];
 	tx_ring = port->tx_ring;
 
 	/* Nothing to do */
@@ -330,14 +330,14 @@ void ixmap_tx_xmit(struct ixmap_instance *instance, unsigned int port_index,
 	return;
 }
 
-int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
+int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
 	unsigned int total_rx_packets = 0;
 
-	port = &instance->ports[port_index];
+	port = &plane->ports[port_index];
 	rx_ring = port->rx_ring;
 
 	do{
@@ -397,14 +397,14 @@ int ixmap_rx_clean(struct ixmap_instance *instance, unsigned int port_index,
 	return total_rx_packets;
 }
 
-int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index,
+int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
 	unsigned int total_tx_packets = 0;
 
-	port = &instance->ports[port_index];
+	port = &plane->ports[port_index];
 	tx_ring = port->tx_ring;
 
 	do {
@@ -436,10 +436,10 @@ int ixmap_tx_clean(struct ixmap_instance *instance, unsigned int port_index,
 	return total_tx_packets;
 }
 
-uint8_t *ixmap_macaddr(struct ixmap_instance *instance,
+uint8_t *ixmap_macaddr(struct ixmap_plane *plane,
 	unsigned int port_index)
 {
-	return instance->ports[port_index].mac_addr;
+	return plane->ports[port_index].mac_addr;
 }
 
 inline int ixmap_slot_assign(struct ixmap_buf *buf)
@@ -504,27 +504,27 @@ inline unsigned int ixmap_slot_size(struct ixmap_buf *buf)
 	return buf->buf_size;
 }
 
-inline unsigned long ixmap_count_rx_alloc_failed(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_rx_alloc_failed(struct ixmap_plane *plane,
 	unsigned int port_index)
 {
-	return instance->ports[port_index].count_rx_alloc_failed;
+	return plane->ports[port_index].count_rx_alloc_failed;
 }
 
-inline unsigned long ixmap_count_rx_clean_total(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_rx_clean_total(struct ixmap_plane *plane,
 	unsigned int port_index)
 {
-	return instance->ports[port_index].count_rx_clean_total;
+	return plane->ports[port_index].count_rx_clean_total;
 }
 
-inline unsigned long ixmap_count_tx_xmit_failed(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_tx_xmit_failed(struct ixmap_plane *plane,
 	unsigned int port_index)
 {
-	return instance->ports[port_index].count_tx_xmit_failed;
+	return plane->ports[port_index].count_tx_xmit_failed;
 }
 
-inline unsigned long ixmap_count_tx_clean_total(struct ixmap_instance *instance,
+inline unsigned long ixmap_count_tx_clean_total(struct ixmap_plane *plane,
 	unsigned int port_index)
 {
-	return instance->ports[port_index].count_tx_clean_total;
+	return plane->ports[port_index].count_tx_clean_total;
 }
 

@@ -82,53 +82,53 @@ static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask)
 	return;
 }
 
-struct ixmap_instance *ixmap_instance_alloc(struct ixmap_handle **ih_list,
+struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 	int ih_num, int queue_index)
 {
-	struct ixmap_instance *instance;
+	struct ixmap_plane *plane;
 	int i;
 
-	instance = malloc(sizeof(struct ixmap_instance));
-	if(!instance)
-		goto err_instance_alloc;
+	plane = malloc(sizeof(struct ixmap_plane));
+	if(!plane)
+		goto err_plane_alloc;
 
-	instance->ports = malloc(sizeof(struct ixmap_port) * ih_num);
-	if(!instance->ports){
-		printf("failed to allocate port for each instance\n");
+	plane->ports = malloc(sizeof(struct ixmap_port) * ih_num);
+	if(!plane->ports){
+		printf("failed to allocate port for each plane\n");
 		goto err_alloc_ports;
 	}
 
 	for(i = 0; i < ih_num; i++){
-		instance->ports[i].interface_name = ih_list[i]->interface_name;
-		instance->ports[i].irqreg[0] = ih_list[i]->bar + IXGBE_EIMS_EX(0);
-		instance->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
-		instance->ports[i].rx_ring = &(ih_list[i]->rx_ring[queue_index]);
-		instance->ports[i].tx_ring = &(ih_list[i]->tx_ring[queue_index]);
-		instance->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
-		instance->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
-		instance->ports[i].num_queues = ih_list[i]->num_queues;
-		instance->ports[i].budget = ih_list[i]->budget;
-		instance->ports[i].mtu_frame = ih_list[i]->mtu_frame;
-		instance->ports[i].count_rx_alloc_failed = 0;
-		instance->ports[i].count_rx_clean_total = 0;
-		instance->ports[i].count_tx_xmit_failed = 0;
-		instance->ports[i].count_tx_clean_total = 0;
+		plane->ports[i].interface_name = ih_list[i]->interface_name;
+		plane->ports[i].irqreg[0] = ih_list[i]->bar + IXGBE_EIMS_EX(0);
+		plane->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
+		plane->ports[i].rx_ring = &(ih_list[i]->rx_ring[queue_index]);
+		plane->ports[i].tx_ring = &(ih_list[i]->tx_ring[queue_index]);
+		plane->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
+		plane->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
+		plane->ports[i].num_queues = ih_list[i]->num_queues;
+		plane->ports[i].budget = ih_list[i]->budget;
+		plane->ports[i].mtu_frame = ih_list[i]->mtu_frame;
+		plane->ports[i].count_rx_alloc_failed = 0;
+		plane->ports[i].count_rx_clean_total = 0;
+		plane->ports[i].count_tx_xmit_failed = 0;
+		plane->ports[i].count_tx_clean_total = 0;
 
-		memcpy(instance->ports[i].mac_addr, ih_list[i]->mac_addr, ETH_ALEN);
+		memcpy(plane->ports[i].mac_addr, ih_list[i]->mac_addr, ETH_ALEN);
 	}
 
-	return instance;
+	return plane;
 
 err_alloc_ports:
-	free(instance);
-err_instance_alloc:
+	free(plane);
+err_plane_alloc:
 	return NULL;
 }
 
-void ixmap_instance_release(struct ixmap_instance *instance)
+void ixmap_plane_release(struct ixmap_plane *plane)
 {
-	free(instance->ports);
-	free(instance);
+	free(plane->ports);
+	free(plane);
 
 	return;
 }
@@ -477,7 +477,7 @@ unsigned int ixmap_mtu_get(struct ixmap_handle *ih)
 	return ih->mtu_frame;
 }
 
-struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
+struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction)
 {
@@ -486,7 +486,7 @@ struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_instance *instance,
 	char filename[FILENAME_SIZE];
 	uint64_t qmask;
 
-	port = &instance->ports[port_index];
+	port = &plane->ports[port_index];
 
 	if(queue_index >= port->num_queues){
 		goto err_invalid_queue_index;

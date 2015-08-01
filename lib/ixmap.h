@@ -131,7 +131,7 @@ struct ixmap_port {
 	unsigned long		count_tx_clean_total;
 };
 
-struct ixmap_instance {
+struct ixmap_plane {
 	struct ixmap_port 	*ports;
 };
 
