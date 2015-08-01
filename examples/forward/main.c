@@ -19,7 +19,7 @@
 #include "thread.h"
 
 static int buf_count = 16384;
-static char *ixmap_interface_list[2];
+static char *ixmap_interface_array[2];
 
 static int ixmapfwd_thread_create(struct ixmapfwd_thread *thread,
 	int thread_index, unsigned int num_ports);
@@ -28,53 +28,53 @@ static int ixmapfwd_set_signal(sigset_t *sigset);
 
 int main(int argc, char **argv)
 {
-	struct ixmap_handle	**ih_list;
+	struct ixmapfwd		ixmapfwd;
 	struct ixmapfwd_thread	*threads;
-	struct tun		**tun;
-	struct neigh_table	**neigh;
-	struct fib		*fib;
-	unsigned int buf_size = 0;
-	unsigned int num_cores = 4;
-	unsigned int num_ports = 2;
-	unsigned int budget = 1024;
-	unsigned int promisc = 1;
-	unsigned int mtu_frame = 0; /* MTU=1522 is used by default. */
-	unsigned short intr_rate = IXGBE_20K_ITR;
-	uint8_t *read_buf;
-	int ret, i, fd_ep, read_size;
-	int cores_assigned = 0, ports_assigned = 0;
-	struct epoll_desc *ep_desc_list;
+	struct epoll_desc	*ep_desc_list;
+	uint8_t			*read_buf;
+	int			ret, i, fd_ep, read_size;
+	int			cores_assigned = 0,
+				ports_assigned = 0;
 
-	ixmap_interface_list[0] = "ixgbe0";
-	ixmap_interface_list[1] = "ixgbe1";
+	ixmap_interface_array[0] = "ixgbe0";
+	ixmap_interface_array[1] = "ixgbe1";
 
-	ih_list = malloc(sizeof(struct ixmap_handle *) * num_ports);
-	if(!ih_list){
+	ixmapfwd.buf_size = 0;
+	ixmapfwd.num_cores = 4;
+	ixmapfwd.num_ports = 2;
+	ixmapfwd.budget = 1024;
+	ixmapfwd.promisc = 1;
+	ixmapfwd.mtu_frame = 0; /* MTU=1522 is used by default. */
+	ixmapfwd.intr_rate = IXGBE_20K_ITR;
+
+	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * num_ports);
+	if(!ixmapfwd.ih_array){
 		ret = -1;
-		goto err_ih_list;
+		goto err_ih_array;
 	}
 
-	tun = malloc(sizeof(struct tun *) * num_ports);
-	if(!tun){
+	ixmapfwd.tun = malloc(sizeof(struct tun *) * num_ports);
+	if(!ixmapfwd.tun){
 		ret = -1;
 		goto err_tun;
 	}
 
-	neigh = malloc(sizeof(struct neigh *) * num_ports);
-	if(!neigh){
+	ixmapfwd.neigh = malloc(sizeof(struct neigh *) * num_ports);
+	if(!ixmapfwd.neigh){
 		ret = -1;
 		goto err_neigh_table;
 	}
 
-	for(i = 0; i < num_ports; i++, ports_assigned++){
-		ih_list[i] = ixmap_open(ixmap_interface_list[i],
-			num_cores, budget, intr_rate, mtu_frame, promisc);
-		if(!ih_list[i]){
+	for(i = 0; i < ixmapfwd.num_ports; i++, ports_assigned++){
+		ixmapfwd.ih_array[i] = ixmap_open(ixmap_interface_array[i],
+			ixmapfwd.num_cores, ixmapfwd.budget, ixmapfwd.intr_rate,
+			ixmapfwd.mtu_frame, ixmapfwd.promisc);
+		if(!ixmapfwd.ih_array[i]){
 			printf("failed to ixmap_open, idx = %d\n", i);
 			goto err_open;
 		}
 
-		ret = ixmap_desc_alloc(ih_list[i],
+		ret = ixmap_desc_alloc(ixmapfwd.ih_array[i],
 			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
 		if(ret < 0){
 			printf("failed to ixmap_alloc_descring, idx = %d\n", i);
@@ -82,42 +82,42 @@ int main(int argc, char **argv)
 			goto err_desc_alloc;
 		}
 
-		ixmap_configure_rx(ih_list[i]);
-		ixmap_configure_tx(ih_list[i]);
-		ixmap_irq_enable(ih_list[i]);
+		ixmap_configure_rx(ixmapfwd.ih_array[i]);
+		ixmap_configure_tx(ixmapfwd.ih_array[i]);
+		ixmap_irq_enable(ixmapfwd.ih_array[i]);
 
 		/* calclulate maximum buf_size we should prepare */
-		if(ixmap_bufsize_get(ih_list[i]) > buf_size)
-			buf_size = ixmap_bufsize_get(ih_list[i]);
+		if(ixmap_bufsize_get(ixmapfwd.ih_array[i]) > ixmapfwd.buf_size)
+			ixmapfwd.buf_size = ixmap_bufsize_get(ixmapfwd.ih_array[i]);
 
-		tun[i] = tun_open(ixmap_interface_list[i],
-			ixmap_macaddr_default(ih_list[i]),
-			ixmap_mtu_get(ih_list[i]));
-		if(!tun[i]){
+		ixmapfwd.tun[i] = tun_open(ixmap_interface_array[i],
+			ixmap_macaddr_default(ixmapfwd.ih_array[i]),
+			ixmap_mtu_get(ixmapfwd.ih_array[i]));
+		if(!ixmapfwd.tun[i]){
 			printf("failed to tun_open\n");
 			goto err_tun_open;
 		}
 
-		neigh[i] = neigh_alloc();
-		if(!neigh[i])
+		ixmapfwd.neigh[i] = neigh_alloc();
+		if(!ixmapfwd.neigh[i])
 			goto err_neigh_alloc;
 
 		continue;
 
 err_neigh_alloc:
-		tun_close(tun[i]);
+		tun_close(ixmapfwd.tun[i]);
 err_tun_open:
-		ixmap_desc_release(ih_list[i]);
+		ixmap_desc_release(ixmapfwd.ih_array[i]);
 err_desc_alloc:
-		ixmap_close(ih_list[i]);
+		ixmap_close(ixmapfwd.ih_array[i]);
 err_open:
 		ret = -1;
 		goto err_assign_ports;
 	}
 
 	/* Prepare fib */
-	fib = fib_alloc();
-	if(!fib)
+	ixmapfwd.fib = fib_alloc();
+	if(!ixmapfwd.fib)
 		goto err_fib_alloc;
 
 	/* Prepare read buffer */
@@ -143,26 +143,27 @@ err_open:
 		goto err_alloc_threads;
 	}
 
-	for(i = 0; i < num_cores; i++, cores_assigned++){
-		threads[i].buf = ixmap_buf_alloc(ih_list, num_ports,
-					buf_count, buf_size);
+	for(i = 0; i < ixmapfwd.num_cores; i++, cores_assigned++){
+		threads[i].buf = ixmap_buf_alloc(ixmapfwd.ih_array,
+			ixmapfwd.num_ports, ixmapfwd.buf_count, ixmapfwd.buf_size);
 		if(!threads[i].buf){
 			printf("failed to ixmap_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
 			goto err_buf_alloc;
 		}
 
-		threads[i].plane = ixmap_plane_alloc(ih_list, num_ports, i);
+		threads[i].plane = ixmap_plane_alloc(ixmapfwd.ih_array,
+			ixmapfwd.num_ports, i);
 		if(!threads[i].plane){
 			printf("failed to ixmap_plane_alloc, idx = %d\n", i);
 			goto err_plane_alloc;
 		}
 
-		tureads[i].tun		= tun;
+		threads[i].tun		= tun;
 		threads[i].neigh	= neigh;
 		threads[i].fib		= fib;
 
-		ret = ixmapfwd_thread_create(&threads[i], i, num_ports);
+		ret = ixmapfwd_thread_create(&threads[i], i, ixmapfwd.num_ports);
 		if(ret < 0){
 			goto err_thread_create;
 		}
@@ -170,19 +171,21 @@ err_open:
 err_thread_create:
 		ixmap_plane_release(threads[i].plane);
 err_plane_alloc:
-		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
+		ixmap_buf_release(threads[i].buf,
+			ixmapfwd.ih_array, ixmapfwd.num_ports);
 err_buf_alloc:
 		ret = -1;
 		goto err_assign_cores;
 	}
 
-	ret = ixmapfwd_wait(fd_ep, read_buf, read_size);
+	ret = ixmapfwd_wait(&ixmapfwd, fd_ep, read_buf, read_size);
 
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixmapfwd_thread_kill(&threads[i]);
 		ixmap_plane_release(threads[i].plane);
-		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
+		ixmap_buf_release(threads[i].buf,
+			ixmapfwd.ih_array, ixmapfwd.num_ports);
 	}
 	free(threads);
 err_alloc_threads:
@@ -192,25 +195,26 @@ err_alloc_threads:
 err_fd_prepare:
 	free(read_buf);
 err_alloc_read_buf:
-	fib_release(fib);
+	fib_release(ixmapfwd.fib);
 err_fib_alloc:
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
-		neigh_release(neigh[i]);
-		tun_close(tun[i]);
-		ixmap_desc_release(ih_list[i]);
-		ixmap_close(ih_list[i]);
+		neigh_release(ixmapfwd.neigh[i]);
+		tun_close(ixmapfwd.tun[i]);
+		ixmap_desc_release(ixmapfwd.ih_array[i]);
+		ixmap_close(ixmapfwd.ih_array[i]);
 	}
-	free(neigh);
+	free(ixmapfwd.neigh);
 err_neigh_table:
-	free(tun);
+	free(ixmapfwd.tun);
 err_tun:
-	free(ih_list);
-err_ih_list:
+	free(ixmapfwd.ih_array);
+err_ih_array:
 	return ret;
 }
 
-static int ixmapfwd_wait(int fd_ep, uint8_t *read_buf, int read_size)
+static int ixmapfwd_wait(struct ixmapfwd *ixmapfwd, int fd_ep,
+	uint8_t *read_buf, int read_size)
 {
 	struct epoll_event events[EPOLL_MAXEVENTS];
 	struct epoll_desc *ep_desc;
@@ -232,7 +236,7 @@ static int ixmapfwd_wait(int fd_ep, uint8_t *read_buf, int read_size)
 				if(ret < 0)
 					goto err_read;
 
-				netlink_process(read_buf, ret);
+				netlink_process(ixmapfwd, read_buf, ret);
 				break;
 			case EPOLL_SIGNAL:
 				ret = read(ep_desc->fd, read_buf, read_size);

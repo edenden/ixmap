@@ -24,4 +24,18 @@
 #define ixgbe_print(args...)
 #endif
 
+struct ixmapfwd {
+	struct ixmap_handle	**ih_array;
+        struct tun              **tun;
+	struct neigh_table	**neigh;
+	struct fib		*fib;
+	unsigned int		buf_size;
+	unsigned int		num_cores;
+	unsigned int		num_ports;
+	unsigned int		budget;
+	unsigned int		promisc;
+	unsigned int		mtu_frame;
+	unsigned short		intr_rate;
+};
+
 #endif /* _IXMAPFWD_MAIN_H */

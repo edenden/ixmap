@@ -7,22 +7,23 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-void netlink_process(uint8_t *buf, int read_size)
+void netlink_process(struct ixmapfwd *ixmapfwd,
+	uint8_t *read_buf, int read_size)
 {
 	struct nlmsghdr *nlh;
 	int ret;
 
-	nlh = (struct nlmsghdr *)buf;
+	nlh = (struct nlmsghdr *)read_buf;
 
 	while(NLMSG_OK(nlh, read_size)){
 		switch(nlh->nlmsg_type){
 		case RTM_NEWROUTE:
 		case RTM_DELROUTE:
-			netlink_route(nlh);
+			netlink_route(ixmapfwd, nlh);
 			break;
 		case RTM_NEWNEIGH:
 		case RTM_DELNEIGH:
-			netlink_neigh(nlh);
+			netlink_neigh(ixmapfwd, nlh);
 			break;
 		default:
 			printf("unknown type\n");
@@ -35,7 +36,7 @@ void netlink_process(uint8_t *buf, int read_size)
 	return;
 }
 
-void netlink_route(struct nlmsghdr *nlh, struct fib *fib)
+void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 {
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
@@ -99,7 +100,7 @@ ign_route_table:
 	return;
 }
 
-void netlink_neigh(struct nlmsghdr *nlh, struct neigh_table *neigh)
+void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 {
 	struct ndmsg *neigh_entry;
 	struct rtattr *route_attr;
