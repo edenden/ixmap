@@ -26,7 +26,7 @@
 
 struct ixmapfwd {
 	struct ixmap_handle	**ih_array;
-        struct tun              **tun;
+	struct tun		**tun;
 	struct neigh_table	**neigh;
 	struct fib		*fib;
 	unsigned int		buf_size;

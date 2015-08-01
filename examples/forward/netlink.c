@@ -41,26 +41,18 @@ void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
 	int route_attr_len, family;
-	uint32_t prefix[4], nexthop[4];
-	unsigned int prefix_len, port_index;
-	int type;
+	uint32_t prefix[4] = {};
+	uint32_t nexthop[4] = {};
+	unsigned int prefix_len;
+	int ifindex, port_index;
+	enum fib_type type;
 
 	route_entry = (struct rtmsg *)NLMSG_DATA(nlh);
 	family		= route_entry->rtm_family;
 	prefix_len	= route_entry->rtm_dst_len;
-
-	/* if packet matches RT_TABLE_LOCAL, then inject it to kernel */
-	switch(route_entry->rtm_table){
-	case RT_TABLE_MAIN:
-		type = FORWARD;
-		break;
-	case RT_TABLE_LOCAL:
-		type = LOCAL;
-		break;
-	default:
-		goto ign_route_table;
-		break;
-	}
+	ifindex		= -1;
+	port_index	= -1;
+	type		= FIB_TYPE_LINK;
 
 	route_attr = (struct rtattr *)RTM_RTA(route_entry);
 	route_attr_len = RTM_PAYLOAD(nlh);
@@ -74,6 +66,10 @@ void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 		case RTA_GATEWAY:
 			memcpy(nexthop, RTA_DATA(route_attr),
 				RTA_PAYLOAD(route_attr));
+			type = FIB_TYPE_FORWARD;
+			break;
+		case RTA_OIF:
+			ifindex = *(int *)RTA_DATA(route_attr);
 			break;
 		default:
 			break;
@@ -82,21 +78,27 @@ void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 		route_attr = RTA_NEXT(route_attr, route_attr_len);
 	}
 
-	// TBD: get dest port index here
+	for(i = 0; i < ixmapfwd->num_ports; i++){
+		if(ixmapfwd->tun[i]->ifindex == ifindex){
+			port_index = i;
+			break;
+		}
+	}
+
+	/* TBD: handle link local route */
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
 		fib_route_update(fib, family, prefix, prefix_len,
-			nexthop, port_index, type);
+			nexthop, port_index, type, ifindex);
 		break;
 	case RTM_DELROUTE:
-		fib_route_delete(fib, family, prefix, prefix_len);
+		fib_route_delete(fib, family, prefix, prefix_len, ifindex);
 		break;
 	default:
 		break;
 	}
 
-ign_route_table:
 	return;
 }
 
@@ -107,12 +109,24 @@ void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	int route_attr_len;
 	int ifindex;
 	int family;
-	uint32_t dst_addr[4];
-	uint8_t dst_mac[ETH_ALEN];
+	uint32_t dst_addr[4] = {};
+	uint8_t dst_mac[ETH_ALEN] = {};
+	int i, port_index = -1;
 
 	neigh_entry = (struct ndmsg *)NLMSG_DATA(nlh);
 	family		= neigh_entry->ndm_family;
 	ifindex		= neigh_entry->ndm_ifindex;
+	port_index 	= -1;
+
+	for(i = 0; i < ixmapfwd->num_ports; i++){
+		if(ixmapfwd->tun[i]->ifindex == ifindex){
+			port_index = i;
+			break;
+		}
+	}
+
+	if(port_index < 0)
+		goto ign_ifindex;
 
 	route_attr = (struct rtattr *)RTM_RTA(neigh_entry);
 	route_attr_len = RTM_PAYLOAD(nlh);
@@ -134,18 +148,19 @@ void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 		route_attr = RTA_NEXT(route_attr, route_attr_len);
 	}
 
-	// TBD: support per port neigh table
-
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:
-		neigh_add(neigh, family, dst_addr, dst_mac);
+		neigh_add(ixmapfwd->neigh[port_index],
+			family, dst_addr, dst_mac);
 		break;
 	case RTM_DELNEIGH:
-		neigh_delete(neigh, family, dst_addr);
+		neigh_delete(ixmapfwd->neigh[port_index],
+			family, dst_addr);
 		break;
 	default:
 		break;
 	}
 
+ign_ifindex:
 	return;
 }

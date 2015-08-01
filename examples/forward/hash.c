@@ -27,9 +27,7 @@ struct hash_table *hash_alloc()
 	table = malloc(sizeof(struct hash_table));
 	if(!table)
 		goto err_hash_alloc;
-
 	memset(table, 0, sizeof(struct hash_table));
-	pthread_mutex_init(&table->mutex, NULL);
 
 	return table;
 
@@ -39,13 +37,12 @@ err_hash_alloc:
 
 void hash_release(struct hash_table *table)
 {
-	hash_delete_all(table);
 	free(table);
 	return;
 }
 
 int hash_add(struct hash_table *table, void *key, int key_len,
-	void *value, int value_len)
+	void **value)
 {
 	struct hash_entry *entry_new, *entry;
 	unsigned int hash_key;
@@ -59,17 +56,11 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 	if(!entry_new->key)
 		goto err_alloc_key;
 
-	entry_new->value = malloc(value_len);
-	if(!entry_new->value)
-		goto err_alloc_value;
-
 	memcpy(entry_new->key, key, key_len);
 	entry_new->key_len = key_len;
-	memcpy(entry_new->value, value, value_len); 
+	entry_new->value = *value;
 
 	hash_key = hash_key(key, key_len);
-	ixmapfwd_mutex_lock(&table->mutex);
-
 	while(count++ < HASH_COLLISION){
 		entry = table->entries[hash_key];
 
@@ -78,7 +69,7 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 			&& !memcmp(entry->key, key, key_len)){
 				rcu_set_pointer(table->entries[hash_key], entry_new);
 				synchronize_rcu();
-				free(entry->value);
+				*value = entry->value;
 				free(entry->key);
 				free(entry);
 				break;
@@ -98,13 +89,9 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 		goto err_hash_full;
 	}
 
-	ixmapfwd_mutex_unlock(&table->mutex);
 	return 0;
 	
 err_hash_full:
-	ixmapfwd_mutex_unlock(&table->mutex);
-	free(entry_new->value);
-err_alloc_value:
 	free(entry_new->key);
 err_alloc_key:
 	free(entry_new);
@@ -112,15 +99,13 @@ err_alloc_entry:
 	return -1;
 }
 
-int hash_delete(struct hash_table *table, void *key, int key_len)
+int hash_delete(struct hash_table *table, void *key, int key_len, void **value)
 {
 	struct hash_entry *entry;
 	unsigned int hash_key;
 	int ret = -1, count = 0;
 
 	hash_key = hash_key(key, key_len);
-	ixmapfwd_mutex_lock(&table->mutex);
-
 	while(count++ < HASH_COLLISION){
 		entry = table->entries[hash_key];
 		if(entry){
@@ -128,7 +113,7 @@ int hash_delete(struct hash_table *table, void *key, int key_len)
 			&& !memcmp(entry->key, key, key_len)){
 				rcu_set_pointer(table->entries[hash_key], NULL);
 				synchronize_rcu();
-				free(entry->value);
+				*value = entry->value;
 				free(entry->key);
 				free(entry);
 				ret = 0;
@@ -145,20 +130,33 @@ int hash_delete(struct hash_table *table, void *key, int key_len)
 		goto err_not_found;
 	}
 
-	ixmapfwd_mutex_unlock(&table->mutex);
 	return 0;
 
 err_not_found:
-	ixmapfwd_mutex_unlock(&table->mutex);
 	return -1;
 }
 
-static void hash_delete_all(struct hash_table *table)
+int hash_delete_all(struct hash_table *table, struct hash_value_list **list_ret)
 {
 	struct hash_entry *entry;
+	struct hash_value_list list_root, *list, *list_next;
 	unsigned int i;
 
-	ixmapfwd_mutex_lock(&table->mutex);
+	for(i = 0; i < HASH_SIZE; i++){
+		entry = table->entries[i];
+
+		if(entry){
+			list = malloc(sizeof(struct hash_value_list));
+			if(!list)
+				goto err_alloc_list;
+
+			list->value = entry->value;
+			list->next = NULL;
+
+			list_root->last->next = list;
+			list_root->last = list;
+		}
+	}
 
 	for(i = 0; i < HASH_SIZE; i++){
 		entry = table->entries[i];
@@ -166,14 +164,23 @@ static void hash_delete_all(struct hash_table *table)
 		if(entry){
 			rcu_set_pointer(table->entries[i], NULL);
 			synchronize_rcu();
-			free(entry->value);
 			free(entry->key);
 			free(entry);
 		}
 	}
 
-	ixmapfwd_mutex_unlock(&table->mutex);
-	return;
+	*list_ret = list_root.next;
+	return 0;
+
+err_alloc_list:
+	list = list_root.next;
+	while(list){
+		list_next = list->next;
+		free(list);
+		list = list_next;
+	}
+	*list_ret = NULL;
+	return -1;
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */

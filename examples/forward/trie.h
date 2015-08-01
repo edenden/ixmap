@@ -8,14 +8,13 @@ struct trie_node {
 };
 
 struct trie_tree {
-	pthread_mutex_t		mutex;
 	struct trie_node	*node;
 };
 
-struct node_data_list {
+struct trie_data_list {
 	void			*data;
-	struct node_data_list	*next;
-	struct node_data_list	*last;
+	struct trie_data_list	*next;
+	struct trie_data_list	*last;
 };
 
 #endif /* _TRIE_H */

@@ -11,8 +11,13 @@ struct hash_entry {
 };
 
 struct hash_table {
-	pthread_mutex_t		mutex;
 	struct hash_entry	*entries[HASH_SIZE];
+};
+
+struct hash_value_list {
+	void			*value;
+	struct hash_value_list	*next;
+	struct hash_value_list	*last;
 };
 
 int hash_add(struct hash *hash, void *key, int key_len,

@@ -9,7 +9,7 @@
 
 static uint32_t trie_bit(uint32_t *addr, int digit);
 static struct trie_node *trie_alloc_node(struct trie_node *parent);
-static int _trie_traverse(struct trie_node *node, struct node_data_list *list_root);
+static int _trie_traverse(struct trie_node *node, struct trie_data_list *list_root);
 
 struct trie_tree *trie_alloc()
 {
@@ -19,8 +19,6 @@ struct trie_tree *trie_alloc()
 	if(!tree)
 		goto err_trie_alloc;
 
-	memset(tree, 0, sizeof(struct trie_tree));
-	pthread_mutex_init(&tree->mutex, NULL);
 	tree->node = trie_alloc_node(NULL);
 	if(!tree->node)
 		goto err_trie_alloc_node;
@@ -35,9 +33,9 @@ err_trie_alloc:
 
 void trie_release(struct trie_tree *tree)
 {
-	trie_delete_all(tree);
 	free(tree->node);
 	free(tree);
+
 	return;
 }
 
@@ -68,16 +66,16 @@ err_alloc_node:
 	return NULL;
 }
 
-static int _trie_traverse(struct trie_node *node, struct node_data_list *list_root)
+static int _trie_traverse(struct trie_node *node, struct trie_data_list *list_root)
 {
-	struct node_data_list *list;
+	struct trie_data_list *list;
 	struct trie_node *child;
 	void *data;
 	int ret, i;
 
 	data = rcu_dereference(node->data);
 	if(data){
-		list = malloc(sizeof(struct node_data_list));
+		list = malloc(sizeof(struct trie_data_list));
 		if(!list)
 			goto err_alloc_list;
 
@@ -106,11 +104,11 @@ err_alloc_list:
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-struct node_data_list *trie_traverse(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len)
+int trie_traverse(struct trie_tree *tree, unsigned int family_len,
+	uint32_t *prefix, unsigned int prefix_len, struct trie_data_list **list_ret)
 {
 	struct trie_node *node;
-	struct node_data_list list_root, *list, *list_next;
+	struct trie_data_list list_root, *list, *list_next;
 	int rest_len, ret;
 
 	node = tree->node;
@@ -132,21 +130,25 @@ struct node_data_list *trie_traverse(struct trie_tree *tree, unsigned int family
 
 	ret = _trie_traverse(node, &list_root);
 	if(ret < 0){
-		list = list_root.next;
-		while(list){
-			list_next = list->next;
-			free(list);
-			list = list_next;
-		}
-		list_root.next = NULL;
+		goto err_traverse;
 	}
 
-err_noroute_found:
+	*list_ret = list_root.next;
+	return 0;
+
+err_traverse:
 	list = list_root.next;
-	return list;
+	while(list){
+		list_next = list->next;
+		free(list);
+		list = list_next;
+	}
+err_noroute_found:
+	*list_ret = NULL;
+	return -1;
 }
 
-static void _trie_delete_all(struct trie_node *node)
+static int _trie_delete_all(struct trie_node *node, struct trie_data_list *list_root)
 {
 	struct trie_node *child;
 	void *data;
@@ -154,30 +156,65 @@ static void _trie_delete_all(struct trie_node *node)
 
 	data = rcu_dereference(node->data);
 	if(data){
-		rcu_set_pointer(node->data, NULL);
-		synchronize_rcu();
-		free(data);
+		list = malloc(sizeof(struct trie_data_list));
+		if(!list)
+			goto err_alloc_list;
+
+		list->data = data;
+		list->next = NULL;
+
+		list_root->last->next = list;
+		list_root->last = list;
 	}
 
 	for(i = 0; i < 2; i++){
 		child = rcu_dereference(node->child[i]);
 
 		if(child != NULL){
-			_trie_delete_all(child);
+			ret = _trie_delete_all(child, list_root);
+			if(ret < 0)
+				goto err_recursive;
+
 			rcu_set_pointer(node->child[i], NULL);
 			synchronize_rcu();
 			free(child);
 		}
 	}
 
-	return;
+	return 0;
+
+err_recursive:
+err_alloc_list:
+	return -1;
 }
 
-static void trie_delete_all(struct trie_tree *tree)
+int trie_delete_all(struct trie_tree *tree, struct trie_data_list **list_ret)
 {
-	ixmapfwd_mutex_lock(&tree->mutex);
-	_trie_delete_all(tree->node);
-	ixmapfwd_mutex_unlock(&tree->mutex);
+	struct trie_data_list list_root, *list, *list_next;
+	int ret;
+
+	list_root.node = NULL;
+	list_root.next = NULL;
+	list_root.last = &list_root;
+
+	ret = _trie_delete_all(tree->node, &list_root);
+	if(ret < 0){
+		goto err_delete_all;
+	}
+
+	*list_ret = list_root.next;
+	return 0;
+
+err_delete_all:
+	list = list_root.next;
+	while(list){
+		list_next = list->next;
+		free(list);
+		list = list_next;
+	}
+
+	*list_ret = NULL;
+	return -1;
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
@@ -248,21 +285,13 @@ static int _trie_cleanup(struct trie_node *node)
 }
 
 int trie_add(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len,
-	void *data, unsigned int data_len)
+	uint32_t *prefix, unsigned int prefix_len, void **data)
 {
 	struct trie_node *node, *node_parent;
-	void *data_new;
 	int rest_len, index;
-
-	data_new = malloc(data_len);
-	if(!data_new)
-		goto err_alloc_data;
-	memcpy(data_new, data, data_len);
 
 	node = tree->node;
 	rest_len = prefix_len;
-	ixmapfwd_mutex_lock(&tree->mutex);
 
 	while(rest_len > 0){
 		rest_len--;
@@ -280,33 +309,27 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 
 	}
 
-	rcu_xchg_pointer(node->data, data_new)
-	if(data_new){
+	rcu_xchg_pointer(node->data, *data)
+	if(*data){
 		synchronize_rcu();
-		free(data_new);
 	}
 
-	ixmapfwd_mutex_unlock(&trie->mutex);
 	return 0;
 
 err_alloc_child;
 	_trie_cleanup(tree->node);
-	ixmapfwd_mutex_unlock(&tree->mutex);
-	free(data_new);
 err_alloc_data:
 	return -1;
 }
 
 int trie_delete(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len)
+	uint32_t *prefix, unsigned int prefix_len, void **data)
 {
 	struct trie_node *node, *node_parent;
-	void *data = NULL;
 	int rest_len, index;
 
 	node = tree->node;
 	rest_len = prefix_len;
-	ixmapfwd_mutex_lock(&tree->mutex);
 
 	while(rest_len > 0){
 		rest_len--;
@@ -319,10 +342,9 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
                 }
 	}
 	
-	rcu_xchg_pointer(node->data, data);
-	if(data){
+	rcu_xchg_pointer(node->data, *data);
+	if(*data){
 		synchronize_rcu();
-		free(data);
 	}
 	rest_len = prefix_len;
 
@@ -343,11 +365,9 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
 		node = node_parent;
 	}
 
-	ixmapfwd_mutex_unlock(&tree->mutex);
 	return 0;
 
 err_noroute_found:
-	ixmapfwd_mutex_unlock(&tree->mutex);
 	return -1;
 }
 
