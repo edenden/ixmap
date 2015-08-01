@@ -41,16 +41,25 @@ void netlink_route(struct nlmsghdr *nlh, struct fib *fib)
 	struct rtattr *route_attr;
 	int route_attr_len, family;
 	uint32_t prefix[4], nexthop[4];
-	unsigned int prefix_len;
+	unsigned int prefix_len, port_index;
+	int type;
 
 	route_entry = (struct rtmsg *)NLMSG_DATA(nlh);
 	family		= route_entry->rtm_family;
 	prefix_len	= route_entry->rtm_dst_len;
 
 	/* if packet matches RT_TABLE_LOCAL, then inject it to kernel */
-	if(route_entry->rtm_table != RT_TABLE_MAIN
-	&& route_entry->rtm_table != RT_TABLE_LOCAL)
+	switch(route_entry->rtm_table){
+	case RT_TABLE_MAIN:
+		type = FORWARD;
+		break;
+	case RT_TABLE_LOCAL:
+		type = LOCAL;
+		break;
+	default:
 		goto ign_route_table;
+		break;
+	}
 
 	route_attr = (struct rtattr *)RTM_RTA(route_entry);
 	route_attr_len = RTM_PAYLOAD(nlh);
@@ -72,9 +81,12 @@ void netlink_route(struct nlmsghdr *nlh, struct fib *fib)
 		route_attr = RTA_NEXT(route_attr, route_attr_len);
 	}
 
+	// TBD: get dest port index here
+
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
-		fib_route_update(fib, family, prefix, prefix_len, nexthop);
+		fib_route_update(fib, family, prefix, prefix_len,
+			nexthop, port_index, type);
 		break;
 	case RTM_DELROUTE:
 		fib_route_delete(fib, family, prefix, prefix_len);
@@ -120,6 +132,8 @@ void netlink_neigh(struct nlmsghdr *nlh, struct neigh_table *neigh)
 
 		route_attr = RTA_NEXT(route_attr, route_attr_len);
 	}
+
+	// TBD: support per port neigh table
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:

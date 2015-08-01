@@ -8,8 +8,8 @@ struct ixmapfwd_thread {
 	int			num_ports;
 	struct ixmap_buf	*buf;
 	struct ixmap_instance	*instance;
-	struct tun_instance	*instance_tun;
-	struct neigh_table	*neigh;
+	struct tun		**tun;
+	struct neigh_table	**neigh;
 	struct fib		*fib;
 };
 

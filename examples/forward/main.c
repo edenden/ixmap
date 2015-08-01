@@ -30,8 +30,8 @@ int main(int argc, char **argv)
 {
 	struct ixmap_handle	**ih_list;
 	struct ixmapfwd_thread	*threads;
-	struct tun_handle	**th_list;
-	struct neigh_table	*neigh;
+	struct tun		**tun;
+	struct neigh_table	**neigh;
 	struct fib		*fib;
 	unsigned int buf_size = 0;
 	unsigned int num_cores = 4;
@@ -54,10 +54,16 @@ int main(int argc, char **argv)
 		goto err_ih_list;
 	}
 
-	th_list = malloc(sizeof(struct tun_handle *) * num_ports);
-	if(!th_list){
+	tun = malloc(sizeof(struct tun *) * num_ports);
+	if(!tun){
 		ret = -1;
-		goto err_th_list;
+		goto err_tun;
+	}
+
+	neigh = malloc(sizeof(struct neigh *) * num_ports);
+	if(!neigh){
+		ret = -1;
+		goto err_neigh_table;
 	}
 
 	for(i = 0; i < num_ports; i++, ports_assigned++){
@@ -65,8 +71,7 @@ int main(int argc, char **argv)
 			num_cores, budget, intr_rate, mtu_frame, promisc);
 		if(!ih_list[i]){
 			printf("failed to ixmap_open, idx = %d\n", i);
-			ret = -1;
-			goto err_assign_ports;
+			goto err_open;
 		}
 
 		ret = ixmap_desc_alloc(ih_list[i],
@@ -74,9 +79,7 @@ int main(int argc, char **argv)
 		if(ret < 0){
 			printf("failed to ixmap_alloc_descring, idx = %d\n", i);
 			printf("please decrease descripter or enable iommu\n");
-			ixmap_close(ih_list[i]);
-			ret = -1;
-			goto err_assign_ports;
+			goto err_desc_alloc;
 		}
 
 		ixmap_configure_rx(ih_list[i]);
@@ -87,17 +90,35 @@ int main(int argc, char **argv)
 		if(ixmap_bufsize_get(ih_list[i]) > buf_size)
 			buf_size = ixmap_bufsize_get(ih_list[i]);
 
-		th_list[i] = tun_open(ixmap_interface_list[i],
+		tun[i] = tun_open(ixmap_interface_list[i],
 			ixmap_macaddr_default(ih_list[i]),
 			ixmap_mtu_get(ih_list[i]));
-		if(!th_list[i]){
+		if(!tun[i]){
 			printf("failed to tun_open\n");
-			ixmap_desc_release(ih_list[i]);
-			ixmap_close(ih_list[i]);
-			ret = -1;
-			goto err_assign_ports;
+			goto err_tun_open;
 		}
+
+		neigh[i] = neigh_alloc();
+		if(!neigh[i])
+			goto err_neigh_alloc;
+
+		continue;
+
+err_neigh_alloc:
+		tun_close(tun[i]);
+err_tun_open:
+		ixmap_desc_release(ih_list[i]);
+err_desc_alloc:
+		ixmap_close(ih_list[i]);
+err_open:
+		ret = -1;
+		goto err_assign_ports;
 	}
+
+	/* Prepare fib */
+	fib = fib_alloc();
+	if(!fib)
+		goto err_fib_alloc;
 
 	/* Prepare read buffer */
 	read_size = max(sysconf(_SC_PAGE_SIZE),
@@ -112,17 +133,6 @@ int main(int argc, char **argv)
 		printf("failed to epoll prepare\n");
 		goto err_fd_prepare;
 	}
-
-	/* Prepare neighbor table */
-	/* TBD: allocate neighbor table per port */
-	neigh = neigh_alloc();
-	if(!neigh)
-		goto err_neigh_alloc;
-
-	/* Prepare fib */
-	fib = fib_alloc();
-	if(!fib)
-		goto err_fib_alloc;
 
 	rcu_init();
 	rcu_register_thread();
@@ -139,38 +149,31 @@ int main(int argc, char **argv)
 		if(!threads[i].buf){
 			printf("failed to ixmap_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
-			ret = -1;
-			goto err_assign_cores;
+			goto err_buf_alloc;
 		}
 
 		threads[i].instance = ixmap_instance_alloc(ih_list, num_ports, i);
 		if(!threads[i].instance){
 			printf("failed to ixmap_instance_alloc, idx = %d\n", i);
-			ixmap_buf_release(threads[i].buf, ih_list, num_ports);
-			ret = -1;
-			goto err_assign_cores;
+			goto err_instance_alloc;
 		}
 
-		threads[i].instance_tun = tun_instance_alloc(th_list, num_ports);
-		if(!threads[i].instance_tun){
-			printf("failed to tun_instance_alloc, idx = %d\n", i);
-			ixmap_instance_release(threads[i].instance);
-			ixmap_buf_release(threads[i].buf, ih_list, num_ports);
-			ret = -1;
-			goto err_assign_cores;
-		}
-
+		tureads[i].tun		= tun;
 		threads[i].neigh	= neigh;
 		threads[i].fib		= fib;
 
 		ret = ixmapfwd_thread_create(&threads[i], i, num_ports);
 		if(ret < 0){
-			tun_instance_release(threads[i].instance_tun);
-			ixmap_instance_release(threads[i].instance);
-			ixmap_buf_release(threads[i].buf, ih_list, num_ports);
-			ret = -1;
-			goto err_assign_cores;
+			goto err_thread_create;
 		}
+
+err_thread_create:
+		ixmap_instance_release(threads[i].instance);
+err_instance_alloc:
+		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
+err_buf_alloc:
+		ret = -1;
+		goto err_assign_cores;
 	}
 
 	ret = ixmapfwd_wait(fd_ep, read_buf, read_size);
@@ -178,7 +181,6 @@ int main(int argc, char **argv)
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixmapfwd_thread_kill(&threads[i]);
-		tun_instance_release(threads[i].instance_tun);
 		ixmap_instance_release(threads[i].instance);
 		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 	}
@@ -186,22 +188,23 @@ err_assign_cores:
 err_alloc_threads:
 	rcu_unregister_thread();
 	rcu_exit();
-	fib_release(fib);
-err_fib_alloc:
-	neigh_release(neigh);
-err_neigh_alloc:
 	ixmapfwd_fd_destroy(ep_desc_list, fd_ep);
 err_fd_prepare:
 	free(read_buf);
 err_alloc_read_buf:
+	fib_release(fib);
+err_fib_alloc:
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
-		tun_close(th_list[i]);
+		neigh_release(neigh[i]);
+		tun_close(tun[i]);
 		ixmap_desc_release(ih_list[i]);
 		ixmap_close(ih_list[i]);
 	}
-	free(th_list);
-err_tun_list:
+	free(neigh);
+err_neigh_table:
+	free(tun);
+err_tun:
 	free(ih_list);
 err_ih_list:
 	return ret;

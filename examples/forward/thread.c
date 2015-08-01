@@ -41,8 +41,8 @@ void *thread_process_interrupt(void *data)
 		sizeof(struct signalfd_siginfo));
 	for(i = 0; i < thread->num_ports; i++){
 		/* calclulate maximum buf_size we should prepare */
-		if(instance_tun->ports[i].mtu > read_size)
-			read_size = instance_tun->ports[i].mtu;
+		if(thread->tun[i]->mtu_frame > read_size)
+			read_size = thread->tun[i]->mtu_frame;
         }
 	read_buf = malloc(read_size);
 	if(!read_buf)
@@ -60,8 +60,7 @@ void *thread_process_interrupt(void *data)
 	}
 
 	/* Prepare each fd in epoll */
-	fd_ep = thread_fd_prepare(&ep_desc_list,
-		instance, instance_tun, thread->num_ports, thread->index);
+	fd_ep = thread_fd_prepare(&ep_desc_list, thread);
 	if(fd_ep < 0){
 		printf("failed to epoll prepare\n");
 		goto err_ixgbe_epoll_prepare;
@@ -258,7 +257,7 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 		}
 
 		/* Register Virtual Interface fd */
-		ep_desc_last->next = epoll_desc_alloc_tun(thread->instance_tun, i);
+		ep_desc_last->next = epoll_desc_alloc_tun(thread->tun, i);
 		if(!ep_desc_last->next)
 			goto err_assign_port;
 

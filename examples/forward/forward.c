@@ -125,7 +125,7 @@ int forward_arp_process(struct ixmapfwd_thread *thread,
 {
 	int fd, ret;
 
-	fd = thread->instance_tun->ports[port_index].fd;
+	fd = thread->tun[port_index]->fd;
 	ret = write(fd, slot_buf, slot_size);
 	if(ret < 0)
 		goto err_write_tun;
@@ -161,7 +161,7 @@ int forward_ip_process(struct ixmapfwd_thread *thread,
 
 	neigh_entry = neigh_lookup(thread->neigh, AF_INET, fib_entry->nexthop);
 	if(!neigh_entry){
-		fd = thread->instance_tun->ports[port_index].fd;
+		fd = thread->tun[port_index]->fd;
 		ret = write(fd, slot_buf, slot_size);
 		if(ret < 0)
 			goto err_write_tun;
@@ -170,7 +170,7 @@ int forward_ip_process(struct ixmapfwd_thread *thread,
 	}
 
 	if(ip->ttl == 1){
-		fd = thread->instance_tun->ports[port_index].fd;
+		fd = thread->tun[port_index]->fd;
 		ret = write(fd, slot_buf, slot_size);
 		if(ret < 0)
 			goto err_write_tun;

@@ -3,6 +3,7 @@ struct fib_entry {
 	unsigned int		prefix_len;
 	uint32_t		nexthop[4];
 	unsigned int		port_index;
+	int			type;
 };
 
 struct fib {

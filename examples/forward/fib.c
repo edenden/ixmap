@@ -30,10 +30,11 @@ void fib_release(struct fib *fib)
 }
 
 int fib_route_update(struct fib *fib, int family,
-	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop)
+	uint32_t *prefix, unsigned int prefix_len,
+	uint32_t *nexthop, unsigned int port_index, int type)
 {
 	struct fib_entry entry;
-	unsigned int port_index, family_len;
+	unsigned int family_len;
 
 	switch(family){
 	case AF_INET:
@@ -47,12 +48,11 @@ int fib_route_update(struct fib *fib, int family,
 		break;
 	}
 
-	// TBD: Get the port index here
-
 	memcpy(entry.nexthop, nexthop, ALIGN(family_len, 8) >> 3);
 	memcpy(entry.prefix, prefix, ALIGN(family_len, 8) >> 3);
-	entry.prefix_len = prefix_len;
-	entry.port_index = port_index;
+	entry.prefix_len	= prefix_len;
+	entry.port_index	= port_index;
+	entry.type		= type;
 
 	trie_add(fib->trie_root, family_len, prefix, prefix_len,
 		&entry, sizeof(struct fib_entry));
