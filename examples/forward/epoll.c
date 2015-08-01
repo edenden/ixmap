@@ -13,7 +13,7 @@ int epoll_add(int fd_ep, void *ptr, int fd)
 	return 0;
 }
 
-struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_instance *instance,
+struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction)
 {
@@ -25,7 +25,7 @@ struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_instance *instance,
 	if(!ep_desc)
 		goto err_alloc_ep_desc;
 
-	irqh = ixmap_irqdev_open(instance, port_index, queue_index, direction);
+	irqh = ixmap_irqdev_open(plane, port_index, queue_index, direction);
 	if(!irqh_rx){
 		perror("failed to open");
 		goto err_open_irqdev;

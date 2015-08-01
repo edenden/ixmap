@@ -7,7 +7,7 @@ struct ixmapfwd_thread {
 	pthread_t		ptid;
 	int			num_ports;
 	struct ixmap_buf	*buf;
-	struct ixmap_instance	*instance;
+	struct ixmap_plane	*plane;
 	struct tun		**tun;
 	struct neigh_table	**neigh;
 	struct fib		*fib;

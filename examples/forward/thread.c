@@ -18,7 +18,7 @@
 #include "thread.h"
 
 static int thread_fd_prepare(struct epoll_desc **_ep_desc_list,
-	struct ixmap_instance *instance, uint32_t num_ports, uint32_t queue_index);
+	struct ixmap_plane *plane, uint32_t num_ports, uint32_t queue_index);
 static void thread_fd_destroy(struct epoll_desc *ep_desc_list,
 	int fd_ep, int num_ports);
 static int thread_irq_setmask(struct ixmap_irqdev_handle *irqh, int core_id);
@@ -53,7 +53,7 @@ void *thread_process_interrupt(void *data)
 		goto err_bulk_array_alloc;
 
 	for(i = 0; i < thread->num_ports + 1; i++, bulk_assigned++){
-		bulk_array[i] = ixmap_bulk_alloc(thread->instance,
+		bulk_array[i] = ixmap_bulk_alloc(thread->plane,
 			thread->num_ports);
 		if(!bulk_array[i])
 			goto err_bulk_alloc;
@@ -68,7 +68,7 @@ void *thread_process_interrupt(void *data)
 
 	/* Prepare initial RX buffer */
 	for(i = 0; i < thread->num_ports; i++){
-		ixmap_rx_alloc(thread->instance, i, thread->buf);
+		ixmap_rx_alloc(thread->plane, i, thread->buf);
 	}
 
 	rcu_register_thread();
@@ -131,9 +131,9 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				port_index = ixmap_port_index(irqh);
 
 				/* Rx descripter cleaning */
-				ret = ixmap_rx_clean(thread->instance, port_index,
+				ret = ixmap_rx_clean(thread->plane, port_index,
 					thread->buf, bulk_array[thread->num_ports]);
-				ixmap_rx_alloc(thread->instance, port_index, thread->buf);
+				ixmap_rx_alloc(thread->plane, port_index, thread->buf);
 
 #ifdef DEBUG
 				forward_dump(buf, bulk_array[thread->num_ports]);
@@ -141,16 +141,16 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 
 				forward_process(thread, port_index, bulk_array);
 				for(i = 0; i < thread->num_ports; i++){
-					ixmap_tx_xmit(thread->instance, i, thread->buf,
+					ixmap_tx_xmit(thread->plane, i, thread->buf,
 						bulk_array[i]);
 				}
 
-				if(ret < ixmap_budget(thread->instance, port_index)){
+				if(ret < ixmap_budget(thread->plane, port_index)){
 					ret = read(ep_desc->fd, read_buf, read_size);
 					if(ret < 0)
 						goto err_read;
 
-					ixmap_irq_unmask_queues(thread->instance, irqh);
+					ixmap_irq_unmask_queues(thread->plane, irqh);
 				}
 				break;
 			case EPOLL_IRQ_TX:
@@ -158,14 +158,14 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				port_index = ixmap_port_index(irqh);
 
 				/* Tx descripter cleaning */
-				ret = ixmap_tx_clean(thread->instance, port_index, thread->buf);
+				ret = ixmap_tx_clean(thread->plane, port_index, thread->buf);
 
-				if(ret < ixmap_budget(thread->instance, port_index)){
+				if(ret < ixmap_budget(thread->plane, port_index)){
 					ret = read(ep_desc->fd, read_buf, read_size);
 					if(ret < 0)
 						goto err_read;
 
-					ixmap_irq_unmask_queues(thread->instance, irqh);
+					ixmap_irq_unmask_queues(thread->plane, irqh);
 				}
 				break;
 			case EPOLL_TUN:
@@ -178,7 +178,7 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				forward_process_tun(port_index,
 					read_buf, ret, bulk_array);
 				for(i = 0; i < thread->num_ports; i++){
-					ixmap_tx_xmit(thread->instance, i, thread->buf,
+					ixmap_tx_xmit(thread->plane, i, thread->buf,
 						bulk_array[i]);
 				}
 				break;
@@ -222,7 +222,7 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 	for(i = 0; i < thread->num_ports; i++){
 		/* Register RX interrupt fd */
 		ep_desc_last->next = epoll_desc_alloc_irqdev(
-			thread->instance, i, queue_index, IXMAP_IRQ_RX);
+			thread->plane, i, queue_index, IXMAP_IRQ_RX);
 		if(!ep_desc_last->next)
 			goto err_assign_port;
 
@@ -240,7 +240,7 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 
 		/* Register TX interrupt fd */
 		ep_desc_last->next = epoll_desc_alloc_irqdev(
-			thread->instance, i, thread->index, IXMAP_IRQ_TX);
+			thread->plane, i, thread->index, IXMAP_IRQ_TX);
 		if(!ep_desc_last->next)
 			goto err_assign_port;
 
@@ -348,13 +348,13 @@ static void thread_print_result(struct ixmapfwd_thread *thread)
 	for(i = 0; i < thread->num_ports; i++){
 		printf("thread %d port %d statictis:\n", thread->index, i);
 		printf("\tRx allocation failed = %lu\n",
-			ixmap_count_rx_alloc_failed(thread->instance, i));
+			ixmap_count_rx_alloc_failed(thread->plane, i));
 		printf("\tRx packetes received = %lu\n",
-			ixmap_count_rx_clean_total(thread->instance, i));
+			ixmap_count_rx_clean_total(thread->plane, i));
 		printf("\tTx xmit failed = %lu\n",
-			ixmap_count_tx_xmit_failed(thread->instance, i));
+			ixmap_count_tx_xmit_failed(thread->plane, i));
 		printf("\tTx packetes transmitted = %lu\n",
-			ixmap_count_tx_clean_total(thread->instance, i));
+			ixmap_count_tx_clean_total(thread->plane, i));
 	}
 	return;
 }

@@ -152,10 +152,10 @@ err_open:
 			goto err_buf_alloc;
 		}
 
-		threads[i].instance = ixmap_instance_alloc(ih_list, num_ports, i);
-		if(!threads[i].instance){
-			printf("failed to ixmap_instance_alloc, idx = %d\n", i);
-			goto err_instance_alloc;
+		threads[i].plane = ixmap_plane_alloc(ih_list, num_ports, i);
+		if(!threads[i].plane){
+			printf("failed to ixmap_plane_alloc, idx = %d\n", i);
+			goto err_plane_alloc;
 		}
 
 		tureads[i].tun		= tun;
@@ -168,8 +168,8 @@ err_open:
 		}
 
 err_thread_create:
-		ixmap_instance_release(threads[i].instance);
-err_instance_alloc:
+		ixmap_plane_release(threads[i].plane);
+err_plane_alloc:
 		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 err_buf_alloc:
 		ret = -1;
@@ -181,7 +181,7 @@ err_buf_alloc:
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixmapfwd_thread_kill(&threads[i]);
-		ixmap_instance_release(threads[i].instance);
+		ixmap_plane_release(threads[i].plane);
 		ixmap_buf_release(threads[i].buf, ih_list, num_ports);
 	}
 	free(threads);

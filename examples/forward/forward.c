@@ -181,7 +181,7 @@ int forward_ip_process(struct ixmapfwd_thread *thread,
 	ip->check--;
 
 	dst_mac = neigh_entry->dst_mac;
-	src_mac = ixmap_macaddr(thread->instance, fib_entry->port_index);
+	src_mac = ixmap_macaddr(thread->plane, fib_entry->port_index);
 	memcpy(eth->h_dest, dst_mac, ETH_ALEN);
 	memcpy(eth->h_source, src_mac, ETH_ALEN);
 
