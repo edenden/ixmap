@@ -13,7 +13,7 @@ struct fib_entry {
 	int			port_index; /* -1 means not ixmap interface */
 	enum fib_type		type;
 	uint16_t		flag;
-	struct list_node	node;
+	struct list_head	list;
 };
 
 struct fib {

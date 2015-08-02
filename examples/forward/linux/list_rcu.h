@@ -48,8 +48,7 @@ static inline void list_replace_rcu(struct list_head *old,
 }
 
 static inline void list_splice_init_rcu(struct list_head *list,
-					struct list_head *head,
-					void (*sync)(void))
+	struct list_head *head)
 {
 	struct list_head *first = list->next;
 	struct list_head *last = list->prev;
@@ -73,7 +72,7 @@ static inline void list_splice_init_rcu(struct list_head *list,
 	 * an empty list.
 	 */
 
-	sync();
+	synchronize_rcu();
 
 	/*
 	 * Readers are finished with the source list, so perform splice.

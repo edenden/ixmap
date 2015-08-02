@@ -10,7 +10,7 @@
 
 static uint32_t trie_bit(uint32_t *addr, int digit);
 static struct trie_node *trie_alloc_node(struct trie_node *parent);
-static int _trie_traverse(struct trie_node *node, struct list_node *head);
+static int _trie_traverse(struct trie_node *node, struct list_head *head);
 
 void trie_init(struct trie_tree *tree)
 {
@@ -20,7 +20,7 @@ void trie_init(struct trie_tree *tree)
 
 	memset(node, 0, sizeof(struct trie_node));
 	node->parent = NULL;
-	list_init(&node->head);
+	INIT_LIST_HEAD(&node->head);
 
 	return;
 }
@@ -45,7 +45,7 @@ static struct trie_node *trie_alloc_node(struct trie_node *parent)
 
 	memset(node, 0, sizeof(struct trie_node));
 	node->parent = parent;
-	list_init(&node->head);
+	INIT_LIST_HEAD(&node->head);
 
 	return node;
 
@@ -53,13 +53,13 @@ err_alloc_node:
 	return NULL;
 }
 
-static void _trie_traverse(struct trie_node *node, struct list_node *head)
+static void _trie_traverse(struct trie_node *node, struct list_head *head)
 {
 	struct trie_node *child;
 	int ret, i;
 
 	if(!list_empty(&node->head)){
-		list_splice(&node->head, head);
+		/* TBD: search best way */
 	}
 
 	for(i = 0; i < 2; i++){
@@ -75,7 +75,7 @@ static void _trie_traverse(struct trie_node *node, struct list_node *head)
 
 /* rcu_read_lock needs to be hold by caller from readside */
 int trie_traverse(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, struct list_node *head)
+	uint32_t *prefix, unsigned int prefix_len, struct list_head *head)
 {
 	struct trie_node *node;
 	int rest_len, ret;
@@ -101,13 +101,13 @@ err_noroute_found:
 	return -1;
 }
 
-static void _trie_delete_all(struct trie_node *node, struct list_node *head)
+static void _trie_delete_all(struct trie_node *node, struct list_head *head)
 {
 	struct trie_node *child;
 	int i;
 
 	if(!list_empty(&node->head))
-		list_splice(&node->head, head);
+		list_splice_init_rcu(&node->head, head);
 	}
 
 	for(i = 0; i < 2; i++){
@@ -125,14 +125,14 @@ static void _trie_delete_all(struct trie_node *node, struct list_node *head)
 	return;
 }
 
-void trie_delete_all(struct trie_tree *tree, struct list_node *head)
+void trie_delete_all(struct trie_tree *tree, struct list_head *head)
 {
 	_trie_delete_all(&tree->node, head);
 	return;
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-struct list_node *trie_lookup(struct trie_tree *tree, unsigned int family_len,
+struct list_head *trie_lookup(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *destination)
 {
 	struct trie_node *node;
@@ -199,7 +199,7 @@ static int _trie_cleanup(struct trie_node *node)
 
 int trie_add(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len,
-	struct list_node *node, func)
+	struct list_head *node, func)
 {
 	struct trie_node *node, *node_parent;
 	int rest_len, index, ret;

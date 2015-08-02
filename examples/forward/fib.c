@@ -20,13 +20,13 @@ err_fib_alloc:
 
 void fib_release(struct fib *fib)
 {
-	struct list_node head, *list;
+	struct list_node head, *list, *next;
 	struct fib_entry *entry;
 
-	list_init(&head);
+	INIT_LIST_HEAD(&head);
 	trie_delete_all(fib->tree, &head);
 
-	list_for_each_safe(list, &head){
+	list_for_each_safe(list, next, &head){
 		entry = list_entry(list, struct fib_entry, node);
 		free(entry);
 	}
@@ -133,10 +133,10 @@ err_invalid_family:
 	return -1;
 }
 
-struct list_node *fib_lookup(struct fib *fib, int family,
+struct list_head *fib_lookup(struct fib *fib, int family,
 	uint32_t *destination)
 {
-	struct list_node *head;
+	struct list_head *head;
 	unsigned int family_len;
 
 	switch(family){

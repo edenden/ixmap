@@ -25,7 +25,7 @@ void neigh_release(struct neigh_table *neigh)
 	struct hash_entry *hash_entry;
 	struct neigh_entry *neigh_entry;
 
-	list_init(&head);
+	INIT_LIST_HEAD(&head);
 	hash_delete_all(neigh->table, &head);
 
 	list_for_each_safe(list, &head){
