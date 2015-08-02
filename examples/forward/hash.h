@@ -1,7 +1,7 @@
 #ifndef _HASH_H
 #define _HASH_H
 
-#define HASH_SIZE 100000
+#define HASH_SIZE (1 << 16)
 
 #define hash_entry(ptr, type, member)	\
 	container_of(ptr, type, member)
