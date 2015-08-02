@@ -32,7 +32,7 @@ void neigh_entry_delete(struct hash_entry *entry)
 {
 	struct neigh_entry *neigh_entry;
 
-	neigh_entry = hlist_entry(entry, struct neigh_entry, hlist);
+	neigh_entry = hash_entry(entry, struct neigh_entry, hash);
 	free(neigh_entry);
 	return;
 }
@@ -97,15 +97,9 @@ int neigh_delete(struct neigh_table *neigh, int family,
 	}
 
 	ixmapfwd_mutex_lock(&neigh->mutex);
-	ret = hash_delete(neigh->table, dst_addr, family_len, &hash_entry);
+	ret = hash_delete(neigh->table, dst_addr, family_len);
 	if(ret < 0)
 		goto err_hash_delete;
-
-	if(hash_entry){
-		neigh_entry = hash_entry(hash_entry, struct neigh_entry, hash);
-		free(neigh_entry);
-	}
-
 	ixmapfwd_mutex_unlock(&neigh->mutex);
 
 	return 0;
@@ -139,7 +133,7 @@ struct neigh_entry *neigh_lookup(struct neigh_table *neigh, int family,
 	if(!hash_entry)
 		goto err_hash_lookup;
 
-	neigh_entry = hash_entry(entry_hash, struct neigh_entry, hash);
+	neigh_entry = hash_entry(hash_entry, struct neigh_entry, hash);
 	return neigh_entry;
 
 err_hash_lookup:

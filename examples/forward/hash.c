@@ -56,7 +56,7 @@ void hash_entry_destroy(struct hash_entry *entry)
 int hash_add(struct hash_table *table, void *key, int key_len,
 	struct hash_entry *entry_new)
 {
-	struct hlist_node *head;
+	struct hlist_head *head;
 	struct hash_entry *entry_new, *entry;
 	unsigned int hash_key;
 	int ret;
@@ -75,7 +75,7 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 		}
 	}
 
-	hlist_add_head_rcu(&entry_new->list, head);
+	hlist_add_head_rcu(&entry_new->hlist, head);
 
 	return 0;
 
@@ -88,7 +88,7 @@ err_init_node:
 int hash_delete(struct hash_table *table,
 	void *key, int key_len)
 {
-	struct hlist_node *head;
+	struct hlist_head *head;
 	struct hash_entry *entry, *target;
 	unsigned int hash_key;
 
@@ -119,14 +119,14 @@ err_not_found:
 
 void hash_delete_all(struct hash_table *table)
 {
-	struct list_node *head;
+	struct hlist_head *head;
 	struct hash_entry *entry;
 	unsigned int i;
 
 	for(i = 0; i < HASH_SIZE; i++){
 		head = &table->head[i];
-		hlist_for_each_entry_rcu(entry, head, list){
-			hlist_del_init_rcu(&entry->list);
+		hlist_for_each_entry_rcu(entry, head, hlist){
+			hlist_del_init_rcu(&entry->hlist);
 			hash_entry_delete(entry);
 			table->hash_entry_delete(entry);
 		}
@@ -138,16 +138,15 @@ void hash_delete_all(struct hash_table *table)
 /* rcu_read_lock needs to be hold by caller from readside */
 struct hash_entry *hash_lookup(struct hash_table *table, void *key, int key_len)
 {
-	struct list_head *head, *list;
+	struct hlist_head *head;
 	struct hash_entry *entry, *entry_ret;
 	unsigned int hash_key;
-	int count = 0;
 
 	entry_ret = NULL;
 	hash_key = hash_key(key, key_len);
 	head = &table->head[hash_key];
 
-	list_for_each_entry_rcu(entry, head, list){
+	list_for_each_entry_rcu(entry, head, hlist){
 		if(entry->key_len == key_len
 		&& !memcmp(entry->key, key, key_len)){
 			entry_ret = entry;

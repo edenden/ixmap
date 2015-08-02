@@ -8,7 +8,7 @@ struct neigh_table {
 
 struct neigh_entry {
 	uint8_t			dst_mac[ETH_ALEN];
-	struct hlist_head	hlist;
+	struct hash_entry	hash;
 };
 
 #endif /* _IXMAPFWD_NEIGH_H */
