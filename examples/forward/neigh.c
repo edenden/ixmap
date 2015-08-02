@@ -12,6 +12,8 @@ struct neigh_table *neigh_alloc()
 		goto err_neigh_alloc;
 
 	hash_init(&neigh->table);
+	neigh->table.hash_release = neigh_entry_delete;
+
 	pthread_mutex_init(&neigh->mutex, NULL);
 	return neigh;
 
@@ -21,20 +23,17 @@ err_neigh_alloc:
 
 void neigh_release(struct neigh_table *neigh)
 {
-	struct list_node head, *list;
-	struct hash_entry *hash_entry;
+	hash_delete_all(neigh->table);
+	free(neigh);
+	return;
+}
+
+void neigh_entry_delete(struct hash_entry *entry)
+{
 	struct neigh_entry *neigh_entry;
 
-	INIT_LIST_HEAD(&head);
-	hash_delete_all(neigh->table, &head);
-
-	list_for_each_safe(list, &head){
-		hash_entry = list_entry(list, struct hash_entry, list);
-		neigh_entry = hash_entry(hash_entry, struct neigh_entry, hash);
-		free(neigh_entry);
-	}
-
-	free(neigh);
+	neigh_entry = hlist_entry(entry, struct neigh_entry, hlist);
+	free(neigh_entry);
 	return;
 }
 

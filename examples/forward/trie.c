@@ -101,20 +101,21 @@ err_noroute_found:
 	return -1;
 }
 
-static void _trie_delete_all(struct trie_node *node, struct list_head *head)
+static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node)
 {
+	struct list_head *list;
 	struct trie_node *child;
 	int i;
 
-	if(!list_empty(&node->head))
-		list_splice_init_rcu(&node->head, head);
+	if(!list_empty(&node->head)){
+		tree->trie_entry_delete_all($node->head);
 	}
 
 	for(i = 0; i < 2; i++){
 		child = rcu_dereference(node->child[i]);
 
 		if(child != NULL){
-			_trie_delete_all(child, head);
+			_trie_delete_all(tree, child);
 
 			rcu_set_pointer(node->child[i], NULL);
 			synchronize_rcu();
@@ -125,9 +126,9 @@ static void _trie_delete_all(struct trie_node *node, struct list_head *head)
 	return;
 }
 
-void trie_delete_all(struct trie_tree *tree, struct list_head *head)
+void trie_delete_all(struct trie_tree *tree)
 {
-	_trie_delete_all(&tree->node, head);
+	_trie_delete_all(tree, &tree->node);
 	return;
 }
 
@@ -198,8 +199,8 @@ static int _trie_cleanup(struct trie_node *node)
 }
 
 int trie_add(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len,
-	struct list_head *node, func)
+	uint32_t *prefix, unsigned int prefix_len, unsigned int id,
+	struct list_head *node)
 {
 	struct trie_node *node, *node_parent;
 	int rest_len, index, ret;
@@ -223,8 +224,7 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 
 	}
 
-	/* fib_entry_insert */
-	ret = func(&node->head, node);
+	ret = tree->trie_entry_insert(&node->head, node);
 	if(ret < 0)
 		goto err_insert;
 
@@ -237,8 +237,7 @@ err_alloc_child:
 }
 
 int trie_delete(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, unsigned int id,
-	func)
+	uint32_t *prefix, unsigned int prefix_len, unsigned int id)
 {
 	struct trie_node *node, *node_parent;
 	int rest_len, index;
@@ -257,7 +256,7 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
                 }
 	}
 
-	ret = func(&node->head, id);
+	ret = tree->trie_entry_delete(&node->head, id);
 	if(ret < 0)
 		goto err_delete;
 

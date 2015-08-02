@@ -9,6 +9,9 @@ struct trie_node {
 
 struct trie_tree {
 	struct trie_node	node;
+	void			(*trie_release)();
+	void			(*trie_entry_insert)();
+	void			(*trie_entry_delete)();
 };
 
 #endif /* _TRIE_H */

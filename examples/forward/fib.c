@@ -11,6 +11,10 @@ struct fib *fib_alloc()
 		goto err_fib_alloc;
 
 	trie_init(&fib->tree);
+	fib->trie.trie_entry_delete = fib_entry_delete;
+	fib->trie.trie_entry_insert = fib_entry_insert;
+	fib->trie.trie_entry_delete_all = fib_entry_delete_all;
+
 	pthread_mutex_init(&fib->mutex, NULL);
 	return fib;
 
@@ -20,32 +24,30 @@ err_fib_alloc:
 
 void fib_release(struct fib *fib)
 {
-	struct list_node head, *list, *next;
-	struct fib_entry *entry;
-
-	INIT_LIST_HEAD(&head);
-	trie_delete_all(fib->tree, &head);
-
-	list_for_each_safe(list, next, &head){
-		entry = list_entry(list, struct fib_entry, node);
-		free(entry);
-	}
-
+	trie_delete_all(fib->tree);
 	free(fib);
 	return;
 }
 
-int fib_entry_insert(void *data, void *data_orig, void **data_ret)
+int fib_entry_insert(struct list_head *head, unsigned int id,
+	struct list_head *node)
 {
 	struct fib_entry *entry, *entry_orig;
 
-	entry = data;
-	entry_orig = data_orig;
 }
 
-int fib_entry_delete()
+int fib_entry_delete(struct list_head *head, unsigned int id)
 {
 
+}
+
+void fib_entry_delete_all(struct list_head *head)
+{
+	struct fib_entry *entry;
+
+	list_for_each_entry_rcu(entry, head, list){
+		free(entry);
+	}
 }
 
 int fib_route_update(struct fib *fib, int family,
@@ -84,7 +86,7 @@ int fib_route_update(struct fib *fib, int family,
 
 	ixmapfwd_mutex_lock(&fib->mutex);
 	ret = trie_add(fib->trie_root, family_len,
-		prefix, prefix_len, &entry->node, fib_entry_insert);
+		prefix, prefix_len, id, &entry->node);
 	if(ret < 0)
 		goto err_trie_add;
 	ixmapfwd_mutex_unlock(&fib->mutex);
@@ -120,7 +122,7 @@ int fib_route_delete(struct fib *fib, int family,
 
 	ixmapfwd_mutex_lock(&fib->mutex);
 	ret = trie_delete(fib->trie_root, family_len,
-		prefix, prefix_len, id, fib_entry_delete);
+		prefix, prefix_len, id);
 	if(ret < 0)
 		goto err_trie_delete;
 	ixmapfwd_mutex_unlock(&fib->mutex);

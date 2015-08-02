@@ -10,8 +10,6 @@
 static unsigned int hash_key(void *key, int key_len);
 static void hash_delete_all(struct hash_table *table);
 
-/* TBD: use hlist */
-
 static unsigned int hash_key(void *key, int key_len)
 {
 	unsigned int i, sum;
@@ -58,7 +56,7 @@ void hash_entry_destroy(struct hash_entry *entry)
 int hash_add(struct hash_table *table, void *key, int key_len,
 	struct hash_entry *entry_new)
 {
-	struct hlist_node *list, *head;
+	struct hlist_node *head;
 	struct hash_entry *entry_new, *entry;
 	unsigned int hash_key;
 	int ret;
@@ -88,29 +86,30 @@ err_init_node:
 }
 
 int hash_delete(struct hash_table *table,
-	void *key, int key_len, struct hash_entry **entry_ret)
+	void *key, int key_len)
 {
-	struct hlist_node *list, *head;
-	struct hash_entry *entry;
+	struct hlist_node *head;
+	struct hash_entry *entry, *target;
 	unsigned int hash_key;
 
-	*entry_ret = NULL;
+	target = NULL;
 	hash_key = hash_key(key, key_len);
 	head = &table->head[hash_key];
 
 	hlist_for_each_entry_rcu(entry, head, list){
 		if(entry->key_len == key_len
 		&& !memcmp(entry->key, key, key_len)){
-			*entry_ret = entry;
+			target = entry;
 			break;
 		}
 	}
 
-	if(!*entry_ret)
+	if(!target)
 		goto err_not_found;
 
-	hlist_del_init_rcu(&(*entry_ret->list));
-	hash_entry_destroy(*entry_ret);
+	hlist_del_init_rcu(&target->list);
+	hash_entry_destroy(target);
+	table->hash_entry_delete(target);
 
 	return 0;
 
@@ -118,21 +117,19 @@ err_not_found:
 	return -1;
 }
 
-void hash_delete_all(struct hash_table *table, struct list_node *head)
+void hash_delete_all(struct hash_table *table)
 {
+	struct list_node *head;
 	struct hash_entry *entry;
 	unsigned int i;
 
 	for(i = 0; i < HASH_SIZE; i++){
-		if(!hlist_empty(&table->head[i])){
-			list_splice(&table->head[i], head);
+		head = &table->head[i];
+		hlist_for_each_entry_rcu(entry, head, list){
+			hlist_del_init_rcu(&entry->list);
+			hash_entry_delete(entry);
+			table->hash_entry_delete(entry);
 		}
-	}
-
-	synchronize_rcu();
-	list_for_each(list, head){
-		entry = list_entry(list, struct hash_entry, list);
-		hash_entry_destroy(entry);
 	}
 
 	return;
@@ -150,9 +147,7 @@ struct hash_entry *hash_lookup(struct hash_table *table, void *key, int key_len)
 	hash_key = hash_key(key, key_len);
 	head = &table->head[hash_key];
 
-	list_for_each(list, head){
-		entry = list_content(list, struct hash_entry, list);
-
+	list_for_each_entry_rcu(entry, head, list){
 		if(entry->key_len == key_len
 		&& !memcmp(entry->key, key, key_len)){
 			entry_ret = entry;

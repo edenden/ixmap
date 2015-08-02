@@ -14,6 +14,7 @@ struct hash_entry {
 
 struct hash_table {
 	struct hlist_head	head[HASH_SIZE];
+	void			(*hash_entry_delete)();
 };
 
 int hash_add(struct hash *hash, void *key, int key_len,
