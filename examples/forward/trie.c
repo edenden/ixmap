@@ -3,38 +3,24 @@
 #include <string.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <urcu.h>
 
 #include "main.h"
 #include "trie.h"
 
 static uint32_t trie_bit(uint32_t *addr, int digit);
 static struct trie_node *trie_alloc_node(struct trie_node *parent);
-static int _trie_traverse(struct trie_node *node, struct trie_data_list *list_root);
+static int _trie_traverse(struct trie_node *node, struct list_node *head);
 
-struct trie_tree *trie_alloc()
+void trie_init(struct trie_tree *tree)
 {
-	struct trie_tree *tree;
+	struct trie_node *node;
 
-	tree = malloc(sizeof(struct trie_tree));
-	if(!tree)
-		goto err_trie_alloc;
+	node = &tree->node;
 
-	tree->node = trie_alloc_node(NULL);
-	if(!tree->node)
-		goto err_trie_alloc_node;
-
-	return tree;
-
-err_trie_alloc_node:
-	free(tree);
-err_trie_alloc:
-	return NULL;
-}
-
-void trie_release(struct trie_tree *tree)
-{
-	free(tree->node);
-	free(tree);
+	memset(node, 0, sizeof(struct trie_node));
+	node->parent = NULL;
+	list_init(&node->head);
 
 	return;
 }
@@ -59,6 +45,7 @@ static struct trie_node *trie_alloc_node(struct trie_node *parent)
 
 	memset(node, 0, sizeof(struct trie_node));
 	node->parent = parent;
+	list_init(&node->head);
 
 	return node;
 
@@ -66,56 +53,35 @@ err_alloc_node:
 	return NULL;
 }
 
-static int _trie_traverse(struct trie_node *node, struct trie_data_list *list_root)
+static void _trie_traverse(struct trie_node *node, struct list_node *head)
 {
-	struct trie_data_list *list;
 	struct trie_node *child;
-	void *data;
 	int ret, i;
 
-	data = rcu_dereference(node->data);
-	if(data){
-		list = malloc(sizeof(struct trie_data_list));
-		if(!list)
-			goto err_alloc_list;
-
-		list->data = data;
-		list->next = NULL;
-
-		list_root->last->next = list;
-		list_root->last = list;
+	if(!list_empty(&node->head)){
+		list_splice(&node->head, head);
 	}
 
 	for(i = 0; i < 2; i++){
 		child = rcu_dereference(node->child[i]);
 
 		if(child != NULL){
-			ret = _trie_traverse(child, list_root);
-			if(ret < 0)
-				goto err_recursive;
+			_trie_traverse(child, head);
 		}
 	}
 
-	return 0;
-
-err_recursive:
-err_alloc_list:
-	return -1;
+	return;
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
 int trie_traverse(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, struct trie_data_list **list_ret)
+	uint32_t *prefix, unsigned int prefix_len, struct list_node *head)
 {
 	struct trie_node *node;
-	struct trie_data_list list_root, *list, *list_next;
 	int rest_len, ret;
 
-	node = tree->node;
+	node = &tree->node;
 	rest_len = prefix_len;
-	list_root.node = NULL;
-	list_root.next = NULL;
-	list_root.last = &list_root;
 
 	while(rest_len > 0){
 		rest_len--;
@@ -128,52 +94,27 @@ int trie_traverse(struct trie_tree *tree, unsigned int family_len,
 		}
 	}
 
-	ret = _trie_traverse(node, &list_root);
-	if(ret < 0){
-		goto err_traverse;
-	}
-
-	*list_ret = list_root.next;
+	_trie_traverse(node, head);
 	return 0;
 
-err_traverse:
-	list = list_root.next;
-	while(list){
-		list_next = list->next;
-		free(list);
-		list = list_next;
-	}
 err_noroute_found:
-	*list_ret = NULL;
 	return -1;
 }
 
-static int _trie_delete_all(struct trie_node *node, struct trie_data_list *list_root)
+static void _trie_delete_all(struct trie_node *node, struct list_node *head)
 {
 	struct trie_node *child;
-	void *data;
 	int i;
 
-	data = rcu_dereference(node->data);
-	if(data){
-		list = malloc(sizeof(struct trie_data_list));
-		if(!list)
-			goto err_alloc_list;
-
-		list->data = data;
-		list->next = NULL;
-
-		list_root->last->next = list;
-		list_root->last = list;
+	if(!list_empty(&node->head))
+		list_splice(&node->head, head);
 	}
 
 	for(i = 0; i < 2; i++){
 		child = rcu_dereference(node->child[i]);
 
 		if(child != NULL){
-			ret = _trie_delete_all(child, list_root);
-			if(ret < 0)
-				goto err_recursive;
+			_trie_delete_all(child, head);
 
 			rcu_set_pointer(node->child[i], NULL);
 			synchronize_rcu();
@@ -181,52 +122,25 @@ static int _trie_delete_all(struct trie_node *node, struct trie_data_list *list_
 		}
 	}
 
-	return 0;
-
-err_recursive:
-err_alloc_list:
-	return -1;
+	return;
 }
 
-int trie_delete_all(struct trie_tree *tree, struct trie_data_list **list_ret)
+void trie_delete_all(struct trie_tree *tree, struct list_node *head)
 {
-	struct trie_data_list list_root, *list, *list_next;
-	int ret;
-
-	list_root.node = NULL;
-	list_root.next = NULL;
-	list_root.last = &list_root;
-
-	ret = _trie_delete_all(tree->node, &list_root);
-	if(ret < 0){
-		goto err_delete_all;
-	}
-
-	*list_ret = list_root.next;
-	return 0;
-
-err_delete_all:
-	list = list_root.next;
-	while(list){
-		list_next = list->next;
-		free(list);
-		list = list_next;
-	}
-
-	*list_ret = NULL;
-	return -1;
+	_trie_delete_all(&tree->node, head);
+	return;
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-void *trie_lookup(struct trie_tree *tree, unsigned int family_len,
+struct list_node *trie_lookup(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *destination)
 {
 	struct trie_node *node;
-	void *data, *data_ptr;
+	struct list_node *head;
 	int rest_len, index, ret;
 
-	node = tree->node;
-	data = NULL;
+	node = &tree->node;
+	head = NULL;
 	rest_len = family_len;
 	ret = 0;
 
@@ -236,7 +150,7 @@ void *trie_lookup(struct trie_tree *tree, unsigned int family_len,
 
 		node = rcu_dereference(node->child[index]);
 		if(node == NULL){
-			if(!data){
+			if(!head){
 				/* no route found */
 				goto err_noroute_found;
 			}
@@ -244,13 +158,12 @@ void *trie_lookup(struct trie_tree *tree, unsigned int family_len,
 			break;
 		}
 
-		data_ptr = rcu_dereference(node->data);
-		if(data_ptr != NULL){
-			data = data_ptr;
+		if(!list_empty(&node->head)){
+			head = &node->head;
 		}
 	}
 
-	return data;
+	return head;
 
 err_noroute_found:
 	return NULL;
@@ -277,7 +190,7 @@ static int _trie_cleanup(struct trie_node *node)
 	/* Cleanup stub node */
 	if(!rcu_dereference(node->child[0])
 	&& !rcu_dereference(node->child[1])
-	&& !rcu_dereference(node->data)){
+	&& list_empty(&node->head)){
 		return -1;
 	}
 
@@ -285,12 +198,13 @@ static int _trie_cleanup(struct trie_node *node)
 }
 
 int trie_add(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, void **data)
+	uint32_t *prefix, unsigned int prefix_len,
+	struct list_node *node, func)
 {
 	struct trie_node *node, *node_parent;
-	int rest_len, index;
+	int rest_len, index, ret;
 
-	node = tree->node;
+	node = &tree->node;
 	rest_len = prefix_len;
 
 	while(rest_len > 0){
@@ -309,26 +223,27 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 
 	}
 
-	rcu_xchg_pointer(node->data, *data)
-	if(*data){
-		synchronize_rcu();
-	}
+	/* fib_entry_insert */
+	ret = func(&node->head, node);
+	if(ret < 0)
+		goto err_insert;
 
 	return 0;
 
-err_alloc_child;
-	_trie_cleanup(tree->node);
-err_alloc_data:
+err_insert:
+err_alloc_child:
+	_trie_cleanup(&tree->node);
 	return -1;
 }
 
 int trie_delete(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, void **data)
+	uint32_t *prefix, unsigned int prefix_len, unsigned int id,
+	func)
 {
 	struct trie_node *node, *node_parent;
 	int rest_len, index;
 
-	node = tree->node;
+	node = &tree->node;
 	rest_len = prefix_len;
 
 	while(rest_len > 0){
@@ -341,20 +256,19 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
 			goto err_noroute_found;
                 }
 	}
-	
-	rcu_xchg_pointer(node->data, *data);
-	if(*data){
-		synchronize_rcu();
-	}
-	rest_len = prefix_len;
 
+	ret = func(&node->head, id);
+	if(ret < 0)
+		goto err_delete;
+
+	rest_len = prefix_len;
 	while(rest_len > 0){
 		index = trie_bit(prefix, (family_len - rest_len));
 		rest_len--;
 
 		if(rcu_dereference(node->child[0]) != NULL
 		|| rcu_dereference(node->child[1]) != NULL
-		|| rcu_dereference(node->data) != NULL){
+		|| !list_empty(&node->head)){
 			break;
 		}
 
@@ -367,6 +281,7 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
 
 	return 0;
 
+err_delete:
 err_noroute_found:
 	return -1;
 }

@@ -2,22 +2,18 @@
 #define _HASH_H
 
 #define HASH_SIZE 100000
-#define HASH_COLLISION 5
+
+#define hash_entry(ptr, type, member)	\
+	container_of(ptr, type, member)
 
 struct hash_entry {
 	void			*key;
 	unsigned int		key_len;
-	void			*value;
+	struct list_node	list;
 };
 
 struct hash_table {
-	struct hash_entry	*entries[HASH_SIZE];
-};
-
-struct hash_value_list {
-	void			*value;
-	struct hash_value_list	*next;
-	struct hash_value_list	*last;
+	struct list_node	head[HASH_SIZE];
 };
 
 int hash_add(struct hash *hash, void *key, int key_len,

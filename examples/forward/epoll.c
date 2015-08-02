@@ -1,3 +1,9 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <sys/epoll.h>
+
 int epoll_add(int fd_ep, void *ptr, int fd)
 {
 	struct epoll_event event;

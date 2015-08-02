@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <urcu.h>
 
 #include "main.h"
 #include "hash.h"
@@ -20,115 +21,98 @@ static unsigned int hash_key(void *key, int key_len)
 	return sum % HASH_SIZE;
 }
 
-struct hash_table *hash_alloc()
+void hash_init(struct hash_table *table)
 {
-	struct hash_table *table;
+	int i;
 
-	table = malloc(sizeof(struct hash_table));
-	if(!table)
-		goto err_hash_alloc;
-	memset(table, 0, sizeof(struct hash_table));
-
-	return table;
-
-err_hash_alloc:
-	return NULL;
-}
-
-void hash_release(struct hash_table *table)
-{
-	free(table);
+	for(i = 0; i < HASH_SIZE; i++){
+		list_init(&table->head[i]);
+	}
+	
 	return;
 }
 
-int hash_add(struct hash_table *table, void *key, int key_len,
-	void **value)
+int hash_entry_init(struct hash_entry *entry,
+	void *key, int key_len)
 {
-	struct hash_entry *entry_new, *entry;
-	unsigned int hash_key;
-	int count = 0;
-	
-	entry_new = (struct hash_entry *)malloc(sizeof(struct hash_entry));
-	if(!entry_new)
-		goto err_alloc_entry;
-
-	entry_new->key = malloc(key_len);
-	if(!entry_new->key)
+	entry->key = malloc(key_len);
+	if(!entry->key)
 		goto err_alloc_key;
 
-	memcpy(entry_new->key, key, key_len);
-	entry_new->key_len = key_len;
-	entry_new->value = *value;
-
-	hash_key = hash_key(key, key_len);
-	while(count++ < HASH_COLLISION){
-		entry = table->entries[hash_key];
-
-		if(entry){
-			if(entry->key_len == key_len
-			&& !memcmp(entry->key, key, key_len)){
-				rcu_set_pointer(table->entries[hash_key], entry_new);
-				synchronize_rcu();
-				*value = entry->value;
-				free(entry->key);
-				free(entry);
-				break;
-			}
-		}else{
-			rcu_set_pointer(table->entries[hash_key], entry_new);
-			break;
-		}
-
-		hash_key++;
-		if(hash_key == HASH_SIZE){
-			hash_key = 0;
-		}
-	}
-
-	if(count > HASH_COLLISION){
-		goto err_hash_full;
-	}
+	memcpy(entry->key, key, key_len);
+	entry->key_len = key_len;
 
 	return 0;
-	
-err_hash_full:
-	free(entry_new->key);
+
 err_alloc_key:
-	free(entry_new);
-err_alloc_entry:
 	return -1;
 }
 
-int hash_delete(struct hash_table *table, void *key, int key_len, void **value)
+void hash_entry_destroy(struct hash_entry *entry)
 {
-	struct hash_entry *entry;
+	free(entry->key);
+}
+
+int hash_add(struct hash_table *table, void *key, int key_len,
+	struct hash_entry *entry_new)
+{
+	struct list_node *list, *head;
+	struct hash_entry *entry_new, *entry;
 	unsigned int hash_key;
-	int ret = -1, count = 0;
+	int ret;
 
+	ret = hash_entry_init(entry_new, key, key_len);
+	if(ret < 0)
+		goto err_init_node;
+	
 	hash_key = hash_key(key, key_len);
-	while(count++ < HASH_COLLISION){
-		entry = table->entries[hash_key];
-		if(entry){
-			if(entry->key_len == key_len
-			&& !memcmp(entry->key, key, key_len)){
-				rcu_set_pointer(table->entries[hash_key], NULL);
-				synchronize_rcu();
-				*value = entry->value;
-				free(entry->key);
-				free(entry);
-				ret = 0;
-                        }
-                }
+	head = &table->head[hash_key];
 
-		hash_key++;
-		if(hash_key == HASH_SIZE){
-			hash_key = 0;
+	list_for_each(list, head){
+		entry = list_entry(list, struct hash_entry, list);
+
+		if(entry->key_len == key_len
+		&& !memcmp(entry->key, key, key_len)){
+			goto err_entry_exist;
 		}
 	}
 
-	if(count > HASH_COLLISION){
-		goto err_not_found;
+	list_add(&entry_new->list, head);
+
+	return 0;
+
+err_entry_exist:
+	hash_entry_destroy(entry_new);
+err_init_node:
+	return -1;
+}
+
+int hash_delete(struct hash_table *table,
+	void *key, int key_len, struct hash_entry **entry_ret)
+{
+	struct list_node *list, *head;
+	struct hash_entry *entry;
+	unsigned int hash_key;
+
+	*entry_ret = NULL;
+	hash_key = hash_key(key, key_len);
+	head = &table->head[hash_key];
+
+	list_for_each_safe(list, head){
+		entry = list_entry(list, struct hash_entry, list);
+
+		if(entry->key_len == key_len
+		&& !memcmp(entry->key, key, key_len)){
+			list_delete(list);
+			synchronize_rcu();
+			hash_entry_destroy(entry);
+			*entry_ret = entry;
+			break;
+		}
 	}
+
+	if(!*entry_ret)
+		goto err_not_found;
 
 	return 0;
 
@@ -136,75 +120,45 @@ err_not_found:
 	return -1;
 }
 
-int hash_delete_all(struct hash_table *table, struct hash_value_list **list_ret)
+void hash_delete_all(struct hash_table *table, struct list_node *head)
 {
 	struct hash_entry *entry;
-	struct hash_value_list list_root, *list, *list_next;
 	unsigned int i;
 
 	for(i = 0; i < HASH_SIZE; i++){
-		entry = table->entries[i];
-
-		if(entry){
-			list = malloc(sizeof(struct hash_value_list));
-			if(!list)
-				goto err_alloc_list;
-
-			list->value = entry->value;
-			list->next = NULL;
-
-			list_root->last->next = list;
-			list_root->last = list;
+		if(!list_empty(&table->head[i])){
+			list_splice(&table->head[i], head);
 		}
 	}
 
-	for(i = 0; i < HASH_SIZE; i++){
-		entry = table->entries[i];
-
-		if(entry){
-			rcu_set_pointer(table->entries[i], NULL);
-			synchronize_rcu();
-			free(entry->key);
-			free(entry);
-		}
+	synchronize_rcu();
+	list_for_each(list, head){
+		entry = list_entry(list, struct hash_entry, list);
+		hash_entry_destroy(entry);
 	}
 
-	*list_ret = list_root.next;
-	return 0;
-
-err_alloc_list:
-	list = list_root.next;
-	while(list){
-		list_next = list->next;
-		free(list);
-		list = list_next;
-	}
-	*list_ret = NULL;
-	return -1;
+	return;
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-void *hash_lookup(struct hash_table *table, void *key, int key_len)
+struct hash_entry *hash_lookup(struct hash_table *table, void *key, int key_len)
 {
-	struct hash_entry *entry, *entry_ret = NULL;
+	struct list_head *head, *list;
+	struct hash_entry *entry, *entry_ret;
 	unsigned int hash_key;
 	int count = 0;
 
+	entry_ret = NULL;
 	hash_key = hash_key(key, key_len);
-	while(count++ < HASH_COLLISION){
-		entry = rcu_dereference(table->entries[hash_key]);
+	head = &table->head[hash_key];
 
-		if(entry){
-			if(entry->key_len == key_len
-			&& !memcmp(entry->key, key, key_len)){
-				entry_ret = entry;
-				break;
-			}
-		}
+	list_for_each(list, head){
+		entry = list_content(list, struct hash_entry, list);
 
-		hash_key++;
-		if(hash_key == HASH_SIZE){
-			hash_key = 0;
+		if(entry->key_len == key_len
+		&& !memcmp(entry->key, key, key_len)){
+			entry_ret = entry;
+			break;
 		}
 	}
 
