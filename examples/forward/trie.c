@@ -224,7 +224,7 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 
 	}
 
-	ret = tree->trie_entry_insert(&node->head, node);
+	ret = tree->trie_entry_insert(&node->head, id, node);
 	if(ret < 0)
 		goto err_insert;
 

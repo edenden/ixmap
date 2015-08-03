@@ -32,13 +32,34 @@ void fib_release(struct fib *fib)
 int fib_entry_insert(struct list_head *head, unsigned int id,
 	struct list_head *node)
 {
-	struct fib_entry *entry, *entry_orig;
+	struct fib_entry *entry;
 
+	list_for_each_entry_rcu(entry, head, list){
+		if(entry->id == id){
+			goto err_entry_exist;
+		}
+	}
+
+	list_add_rcu(node, head);
+	return 0;
+
+err_entry_exist:
+	return -1;
 }
 
 int fib_entry_delete(struct list_head *head, unsigned int id)
 {
+	struct fib_entry *entry;
 
+	list_for_each_entry_rcu(entry, head, list){
+		if(entry->id == id){
+			list_del_rcu(&entry->list);
+			free(entry);
+			return 0;
+		}
+	}
+
+	return -1;
 }
 
 void fib_entry_delete_all(struct list_head *head)
@@ -46,8 +67,11 @@ void fib_entry_delete_all(struct list_head *head)
 	struct fib_entry *entry;
 
 	list_for_each_entry_rcu(entry, head, list){
+		list_del_rcu(&entry->list);
 		free(entry);
 	}
+
+	return;
 }
 
 int fib_route_update(struct fib *fib, int family,
