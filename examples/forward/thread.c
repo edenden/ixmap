@@ -26,15 +26,15 @@ static void thread_print_result(struct ixmapfwd_thread *thread);
 
 void *thread_process_interrupt(void *data)
 {
-	struct ixmapfwd_thread *thread = data;
-	struct ixmap_bulk **bulk_array;
-	struct epoll_desc *ep_desc_list;
-	int read_size, fd_ep, i, ret;
-	unsigned int port_index;
-	uint8_t *read_buf;
-	int bulk_assigned = 0;
+	struct ixmapfwd_thread	*thread = data;
+	struct ixmap_bulk	**bulk_array;
+	struct list_head	ep_desc_head;
+	uint8_t			*read_buf;
+	int			read_size, fd_ep, i, ret,
+				bulk_assigned = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
+	INIT_HLIST_HEAD(&ep_desc_head);
 
 	/* Prepare read buffer */
 	read_size = max(sizeof(uint32_t),
@@ -78,9 +78,7 @@ void *thread_process_interrupt(void *data)
 		goto err_wait;
 
 	rcu_unregister_thread();
-	
-
-	thread_epoll_destroy(ep_desc_list, fd_ep, thread->num_ports);
+	thread_epoll_destroy(ep_desc_head, fd_ep);
 	for(i = 0; i < bulk_assigned; i++){
 		ixmap_bulk_release(bulk_array[i]);
 	}
@@ -91,7 +89,7 @@ void *thread_process_interrupt(void *data)
 
 err_wait:
 	rcu_unregister_thread();
-	thread_epoll_destroy(ep_desc_list, fd_ep, thread->num_ports);
+	thread_epoll_destroy(ep_desc_head, fd_ep);
 err_ixgbe_epoll_prepare:
 err_bulk_alloc:
 	for(i = 0; i < bulk_assigned; i++){
@@ -202,15 +200,12 @@ err_read:
 	return -1;
 }
 
-static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
+static int thread_fd_prepare(struct list_head *ep_desc_head,
 	struct ixmapfwd_thread *thread)
 {
-	struct epoll_desc ep_desc_root, *ep_desc_last;
-	sigset_t sigset;
-	int fd_ep, num_fd, i, ret;
-
-	memset(&ep_desc_root, 0, sizeof(struct epoll_desc));
-	ep_desc_last = &ep_desc_root;
+	struct epoll_desc 	*ep_desc;
+	sigset_t		sigset;
+	int			fd_ep, i, ret;
 
 	/* epoll fd preparing */
 	fd_ep = epoll_create(EPOLL_MAXEVENTS);
@@ -221,48 +216,51 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 
 	for(i = 0; i < thread->num_ports; i++){
 		/* Register RX interrupt fd */
-		ep_desc_last->next = epoll_desc_alloc_irqdev(
-			thread->plane, i, queue_index, IXMAP_IRQ_RX);
-		if(!ep_desc_last->next)
+		ep_desc = epoll_desc_alloc_irqdev(
+			thread->plane, i, thread->index, IXMAP_IRQ_RX);
+		if(!ep_desc)
 			goto err_assign_port;
 
+		list_add(&ep_desc->list, ep_desc_head);
+
 		ret = thread_irq_setmask((struct ixmap_irqdev_handle *)
-			ep_desc_last->next->data, queue_index);
+			ep_desc->data, thread->index);
 		if(ret < 0)
 			goto err_assign_port;
 
-		ep_desc_last = ep_desc_last->next;
-		ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+		ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 		if(ret < 0){
 			perror("failed to add fd in epoll");
 			goto err_assign_port;
 		}
 
 		/* Register TX interrupt fd */
-		ep_desc_last->next = epoll_desc_alloc_irqdev(
+		ep_desc = epoll_desc_alloc_irqdev(
 			thread->plane, i, thread->index, IXMAP_IRQ_TX);
-		if(!ep_desc_last->next)
+		if(!ep_desc)
 			goto err_assign_port;
 
+		list_add(&ep_desc->list, ep_desc_head);
+
 		ret = thread_irq_setmask((struct ixmap_irqdev_handle *)
-			ep_desc_last->next->data, thread->index);
+			ep_desc->data, thread->index);
 		if(ret < 0)
 			goto err_assign_port;
 
-                ep_desc_last = ep_desc_last->next;
-		ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+		ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 		if(ret < 0){
 			perror("failed to add fd in epoll");
 			goto err_assign_port;
 		}
 
 		/* Register Virtual Interface fd */
-		ep_desc_last->next = epoll_desc_alloc_tun(thread->tun, i);
-		if(!ep_desc_last->next)
+		ep_desc = epoll_desc_alloc_tun(thread->tun, i);
+		if(!ep_desc)
 			goto err_assign_port;
 
-		ep_desc_last = ep_desc_last->next;
-		ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+		list_add(&ep_desc->list, ep_desc_head);
+
+		ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 		if(ret < 0){
 			perror("failed to add fd in epoll");
 			goto err_assign_port;
@@ -272,36 +270,36 @@ static int thread_fd_prepare(struct epoll_desc **ep_desc_list,
 	/* signalfd preparing */
 	sigemptyset(&sigset);
 	sigaddset(&sigset, SIGUSR1);
-	ep_desc_last->next = epoll_desc_alloc_signalfd(&sigset);
-	if(!ep_desc_last->next)
+	ep_desc = epoll_desc_alloc_signalfd(&sigset);
+	if(!ep_desc)
 		goto err_epoll_desc_signalfd;
 
-	ep_desc_last = ep_desc_last->next;
-	ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+	list_add(&ep_desc->list, ep_desc_head);
+
+	ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 	if(ret < 0){
 		perror("failed to add fd in epoll");
 		goto err_epoll_add_signalfd;
 	}
 
-	*ep_desc_list = ep_desc_root.next;
 	return fd_ep;
 
 err_epoll_add_signalfd:
 err_epoll_desc_signalfd:
 err_assign_port:
-	thread_fd_destroy(ep_desc_root.next, fd_ep, num_ports);
+	thread_fd_destroy(ep_desc_head, fd_ep);
 err_epoll_open:
 	return -1;
 }
 
-static void thread_fd_destroy(struct epoll_desc *ep_desc_list,
+static void thread_fd_destroy(struct list_head *ep_desc_head,
 	int fd_ep)
 {
-	struct epoll_desc *ep_desc, *ep_desc_next;
+	struct epoll_desc *ep_desc;
+	struct list_head *next;
 
-	ep_desc = ep_desc_list;
-	while(ep_desc){
-		ep_desc_next = ep_desc->next;
+	list_for_each_safe(ep_desc, next, ep_desc_head, list){
+		list_del(&ep_desc->list);
 
 		switch(ep_desc->type){
 		case EPOLL_IRQ_RX:
@@ -317,8 +315,6 @@ static void thread_fd_destroy(struct epoll_desc *ep_desc_list,
 		default:
 			break;
 		}
-
-		ep_desc = ep_desc_next;
 	}
 
 	close(fd_ep);

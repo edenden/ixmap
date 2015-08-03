@@ -30,7 +30,7 @@ int main(int argc, char **argv)
 {
 	struct ixmapfwd		ixmapfwd;
 	struct ixmapfwd_thread	*threads;
-	struct epoll_desc	*ep_desc_list;
+	struct list_head	ep_desc_head;
 	uint8_t			*read_buf;
 	int			ret, i, fd_ep, read_size;
 	int			cores_assigned = 0,
@@ -46,6 +46,7 @@ int main(int argc, char **argv)
 	ixmapfwd.promisc = 1;
 	ixmapfwd.mtu_frame = 0; /* MTU=1522 is used by default. */
 	ixmapfwd.intr_rate = IXGBE_20K_ITR;
+	INIT_HLIST_HEAD(&ep_desc_head);
 
 	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * num_ports);
 	if(!ixmapfwd.ih_array){
@@ -128,7 +129,7 @@ err_open:
 		goto err_alloc_read_buf;
 
 	/* Prepare each fd in epoll */
-	fd_ep = ixmapfwd_fd_prepare(&ep_desc_list);
+	fd_ep = ixmapfwd_fd_prepare(&ep_desc_head);
 	if(fd_ep < 0){
 		printf("failed to epoll prepare\n");
 		goto err_fd_prepare;
@@ -258,15 +259,12 @@ err_read:
 	return -1;
 }
 
-static int ixmapfwd_fd_prepare(struct epoll_desc **ep_desc_list)
+static int ixmapfwd_fd_prepare(struct list_head *ep_desc_head)
 {
-	struct epoll_desc ep_desc_root, *ep_desc_last;
-	sigset_t sigset;
-	struct sockaddr_nl addr;
-	int fd_ep, num_fd, i, ret;
-
-	memset(&ep_desc_root, 0, sizeof(struct epoll_desc));
-	ep_desc_last = &ep_desc_root;
+	struct epoll_desc	*ep_desc;
+	sigset_t		sigset;
+	struct sockaddr_nl	addr;
+	int			fd_ep, ret;
 
 	/* epoll fd preparing */
 	fd_ep = epoll_create(EPOLL_MAXEVENTS);
@@ -281,12 +279,13 @@ static int ixmapfwd_fd_prepare(struct epoll_desc **ep_desc_list)
 		goto err_set_signal;
 	}
 
-	ep_desc_last->next = epoll_desc_alloc_signalfd(&sigset);
-	if(!ep_desc_last->next)
+	ep_desc = epoll_desc_alloc_signalfd(&sigset);
+	if(!ep_desc)
 		goto err_epoll_desc_signalfd;
 
-	ep_desc_last = ep_desc_last->next;
-	ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+	list_add(&ep_desc->list, ep_desc_head);
+
+	ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 	if(ret < 0){
 		perror("failed to add fd in epoll");
 		goto err_epoll_add_signalfd;
@@ -297,18 +296,18 @@ static int ixmapfwd_fd_prepare(struct epoll_desc **ep_desc_list)
 	addr.nl_family = AF_NETLINK;
 	addr.nl_groups = RTMGRP_NEIGH | RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE;
 
-	ep_desc_last->next = epoll_desc_alloc_netlink(&addr);
-	if(!ep_desc_last->next)
+	ep_desc = epoll_desc_alloc_netlink(&addr);
+	if(!ep_desc)
 		goto err_epoll_desc_netlink;
 
-	ep_desc_last = ep_desc_last->next;
-	ret = epoll_add(fd_ep, ep_desc_last, ep_desc_last->fd);
+	list_add(&ep_desc->list, ep_desc_head);
+
+	ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 	if(ret < 0){
 		perror("failed to add fd in epoll");
 		goto err_epoll_add_netlink;
 	}
 
-	*ep_desc_list = ep_desc_root.next;
 	return fd_ep;
 
 err_epoll_add_netlink:
@@ -316,19 +315,19 @@ err_epoll_desc_netlink:
 err_epoll_add_signalfd:
 err_epoll_desc_signalfd:
 err_set_signal:
-	thread_fd_destroy(ep_desc_root.next, fd_ep, num_ports);
+	ixmapfwd_fd_destroy(ep_desc_head, fd_ep);
 err_epoll_open:
 	return -1;
 }
 
-static void ixmapfwd_fd_destroy(struct epoll_desc *ep_desc_list,
+static void ixmapfwd_fd_destroy(struct list_head *ep_desc_head,
 	int fd_ep)
 {
-	struct epoll_desc *ep_desc, *ep_desc_next;
+	struct epoll_desc *ep_desc;
+	struct list_head *next;
 
-	ep_desc = ep_desc_list;
-	while(ep_desc){
-		ep_desc_next = ep_desc->next;
+	list_for_each_safe(ep_desc, next, ep_desc_head, list){
+		list_del(&ep_desc->list);
 
 		switch(ep_desc->type){
 		case EPOLL_SIGNAL:
@@ -340,8 +339,6 @@ static void ixmapfwd_fd_destroy(struct epoll_desc *ep_desc_list,
 		default:
 			break;
 		}
-
-		ep_desc = ep_desc_next;
 	}
 
 	close(fd_ep);
