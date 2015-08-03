@@ -12,11 +12,10 @@ enum {
 };
 
 struct epoll_desc {
-	int				fd;
-	int				type;
-	void				*data;
-	struct epoll_fd_desc		*next;
-	struct list_head		*list;
+	int			fd;
+	int			type;
+	void			*data;
+	struct list_head	list;
 };
 
 #endif /* _IXMAPFWD_EPOLL_H */
