@@ -11,8 +11,14 @@ static inline void INIT_LIST_HEAD_RCU(struct list_head *list)
 
 #define list_next_rcu(list)	(*((struct list_head __rcu **)(&(list)->next)))
 
-void __list_add_rcu(struct list_head *new,
-		    struct list_head *prev, struct list_head *next);
+static inline void __list_add_rcu(struct list_head *new,
+	struct list_head *prev, struct list_head *next)
+{
+	new->next = next;
+	new->prev = prev;
+	rcu_assign_pointer(list_next_rcu(prev), new);
+	next->prev = new;
+}
 
 static inline void list_add_rcu(struct list_head *new, struct list_head *head)
 {

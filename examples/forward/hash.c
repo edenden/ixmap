@@ -4,15 +4,17 @@
 #include <stdint.h>
 #include <urcu.h>
 
+#include "linux/list.h"
+#include "linux/list_rcu.h"
 #include "main.h"
 #include "hash.h"
 
-static unsigned int hash_key(void *key, int key_len);
+static unsigned int hash_key_crc32(void *key, int key_len);
 static int hash_entry_init(struct hash_entry *entry,
 	void *key, int key_len);
 static void hash_entry_destroy(struct hash_entry *entry);
 
-static unsigned int hash_key(void *key, int key_len)
+static unsigned int hash_key_crc32(void *key, int key_len)
 {
 	unsigned int i, sum;
 
@@ -59,7 +61,7 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 	struct hash_entry *entry_new)
 {
 	struct hlist_head *head;
-	struct hash_entry *entry_new, *entry;
+	struct hash_entry *entry;
 	unsigned int hash_key;
 	int ret;
 
@@ -67,7 +69,7 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 	if(ret < 0)
 		goto err_init_node;
 	
-	hash_key = hash_key(key, key_len);
+	hash_key = hash_key_crc32(key, key_len);
 	head = &table->head[hash_key];
 
 	hlist_for_each_entry_rcu(entry, head, list){
@@ -77,7 +79,7 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 		}
 	}
 
-	hlist_add_head_rcu(&entry_new->hlist, head);
+	hlist_add_head_rcu(&entry_new->list, head);
 
 	return 0;
 
@@ -95,7 +97,7 @@ int hash_delete(struct hash_table *table,
 	unsigned int hash_key;
 
 	target = NULL;
-	hash_key = hash_key(key, key_len);
+	hash_key = hash_key_crc32(key, key_len);
 	head = &table->head[hash_key];
 
 	hlist_for_each_entry_rcu(entry, head, list){
@@ -127,9 +129,9 @@ void hash_delete_all(struct hash_table *table)
 
 	for(i = 0; i < HASH_SIZE; i++){
 		head = &table->head[i];
-		hlist_for_each_entry_rcu(entry, head, hlist){
-			hlist_del_init_rcu(&entry->hlist);
-			hash_entry_delete(entry);
+		hlist_for_each_entry_rcu(entry, head, list){
+			hlist_del_init_rcu(&entry->list);
+			hash_entry_destroy(entry);
 			table->hash_entry_delete(entry);
 		}
 	}
@@ -146,10 +148,10 @@ struct hash_entry *hash_lookup(struct hash_table *table,
 	unsigned int hash_key;
 
 	entry_ret = NULL;
-	hash_key = hash_key(key, key_len);
+	hash_key = hash_key_crc32(key, key_len);
 	head = &table->head[hash_key];
 
-	list_for_each_entry_rcu(entry, head, hlist){
+	hlist_for_each_entry_rcu(entry, head, list){
 		if(entry->key_len == key_len
 		&& !memcmp(entry->key, key, key_len)){
 			entry_ret = entry;

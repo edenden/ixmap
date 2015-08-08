@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <netinet/ip.h>
 
+#include "linux/list.h"
+#include "linux/list_rcu.h"
 #include "main.h"
 #include "fib.h"
 
