@@ -34,7 +34,7 @@ void *thread_process_interrupt(void *data)
 				bulk_assigned = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
-	INIT_HLIST_HEAD(&ep_desc_head);
+	INIT_LIST_HEAD(&ep_desc_head);
 
 	/* Prepare read buffer */
 	read_size = max(sizeof(uint32_t),

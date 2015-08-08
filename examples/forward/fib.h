@@ -3,7 +3,8 @@
 
 enum fib_type {
 	FIB_TYPE_FORWARD = 0,
-	FIB_TYPE_LINK
+	FIB_TYPE_LINK,
+	FIB_TYPE_LOCAL
 };
 
 struct fib_entry {
@@ -12,7 +13,6 @@ struct fib_entry {
 	uint32_t		nexthop[4];
 	int			port_index; /* -1 means not ixmap interface */
 	enum fib_type		type;
-	uint16_t		flag;
 	struct list_head	list;
 };
 

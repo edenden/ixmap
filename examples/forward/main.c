@@ -15,8 +15,13 @@
 #include <urcu.h>
 #include <ixmap.h>
 
+#include "linux/list.h"
+#include "linux/list_rcu.h"
 #include "main.h"
 #include "thread.h"
+#include "tun.h"
+#include "fib.h"
+#include "neigh.h"
 
 static int buf_count = 16384;
 static char *ixmap_interface_array[2];
@@ -46,21 +51,21 @@ int main(int argc, char **argv)
 	ixmapfwd.promisc = 1;
 	ixmapfwd.mtu_frame = 0; /* MTU=1522 is used by default. */
 	ixmapfwd.intr_rate = IXGBE_20K_ITR;
-	INIT_HLIST_HEAD(&ep_desc_head);
+	INIT_LIST_HEAD(&ep_desc_head);
 
-	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * num_ports);
+	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * ixmapfwd.num_ports);
 	if(!ixmapfwd.ih_array){
 		ret = -1;
 		goto err_ih_array;
 	}
 
-	ixmapfwd.tun = malloc(sizeof(struct tun *) * num_ports);
+	ixmapfwd.tun = malloc(sizeof(struct tun *) * ixmapfwd.num_ports);
 	if(!ixmapfwd.tun){
 		ret = -1;
 		goto err_tun;
 	}
 
-	ixmapfwd.neigh = malloc(sizeof(struct neigh *) * num_ports);
+	ixmapfwd.neigh = malloc(sizeof(struct neigh *) * ixmapfwd.num_ports);
 	if(!ixmapfwd.neigh){
 		ret = -1;
 		goto err_neigh_table;

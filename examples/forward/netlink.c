@@ -78,14 +78,15 @@ void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 		route_attr = RTA_NEXT(route_attr, route_attr_len);
 	}
 
+	if(route_entry->rtm_table == RT_TABLE_LOCAL)
+		type = FIB_TYPE_LOCAL;
+
 	for(i = 0; i < ixmapfwd->num_ports; i++){
 		if(ixmapfwd->tun[i]->ifindex == ifindex){
 			port_index = i;
 			break;
 		}
 	}
-
-	/* TBD: handle link local route */
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:

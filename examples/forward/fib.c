@@ -30,7 +30,7 @@ void fib_release(struct fib *fib)
 }
 
 int fib_entry_insert(struct list_head *head, unsigned int id,
-	struct list_head *node)
+	struct list_head *list)
 {
 	struct fib_entry *entry;
 
@@ -40,7 +40,7 @@ int fib_entry_insert(struct list_head *head, unsigned int id,
 		}
 	}
 
-	list_add_rcu(node, head);
+	list_add_rcu(list, head);
 	return 0;
 
 err_entry_exist:
@@ -104,13 +104,11 @@ int fib_route_update(struct fib *fib, int family,
 	entry->prefix_len	= prefix_len;
 	entry->port_index	= port_index;
 	entry->type		= type;
-	entry->flag		= FIB_FLAG_UNICAST;
-	entry->next		= NULL;
 	entry->id		= id;
 
 	ixmapfwd_mutex_lock(&fib->mutex);
 	ret = trie_add(fib->trie_root, family_len,
-		prefix, prefix_len, id, &entry->node);
+		prefix, prefix_len, id, &entry->list);
 	if(ret < 0)
 		goto err_trie_add;
 	ixmapfwd_mutex_unlock(&fib->mutex);

@@ -6,7 +6,7 @@ CFLAGS = -Wall
 LDFLAGS =
 TARGET = ixmapfwd
 LIBS = -lpthread -lurcu -lixmap
-OBJECTS = main.o thread.o
+OBJECTS = main.o thread.o forward.o epoll.o netlink.o tun.o fib.o neigh.o trie.o hash.o
 
 .SUFFIXES: .c .o
 

@@ -35,7 +35,7 @@ static uint32_t trie_bit(uint32_t *addr, int digit)
 	return (addr[index] >> shift) & 0x1;
 }
 
-static struct trie_node *trie_alloc_node(struct trie_node *parent)
+static struct trie_node *trie_alloc_node(struct trie_node *parent, int index)
 {
 	struct trie_node *node;
 
@@ -45,6 +45,7 @@ static struct trie_node *trie_alloc_node(struct trie_node *parent)
 
 	memset(node, 0, sizeof(struct trie_node));
 	node->parent = parent;
+	node->index = index;
 	INIT_LIST_HEAD(&node->head);
 
 	return node;
@@ -53,20 +54,20 @@ err_alloc_node:
 	return NULL;
 }
 
-static void _trie_traverse(struct trie_node *node, struct list_head *head)
+static void _trie_traverse(struct trie_tree *tree, struct trie_node *node)
 {
 	struct trie_node *child;
-	int ret, i;
+	int i;
 
 	if(!list_empty(&node->head)){
-		/* TBD: search best way */
+		tree->trie_entry_dump(&node->head);
 	}
 
 	for(i = 0; i < 2; i++){
 		child = rcu_dereference(node->child[i]);
 
 		if(child != NULL){
-			_trie_traverse(child, head);
+			_trie_traverse(tree, child);
 		}
 	}
 
@@ -75,7 +76,7 @@ static void _trie_traverse(struct trie_node *node, struct list_head *head)
 
 /* rcu_read_lock needs to be hold by caller from readside */
 int trie_traverse(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, struct list_head *head)
+	uint32_t *prefix, unsigned int prefix_len)
 {
 	struct trie_node *node;
 	int rest_len, ret;
@@ -94,7 +95,7 @@ int trie_traverse(struct trie_tree *tree, unsigned int family_len,
 		}
 	}
 
-	_trie_traverse(node, head);
+	_trie_traverse(tree, node);
 	return 0;
 
 err_noroute_found:
@@ -170,39 +171,30 @@ err_noroute_found:
 	return NULL;
 }
 
-static int _trie_cleanup(struct trie_node *node)
+static int _trie_cleanup(struct trie_node *node, int index)
 {
-	struct trie_node *child;
-	int ret, i;
+	struct trie_node *parent;
 
-	for(i = 0; i < 2; i++){
-		child = rcu_dereference(node->child[i]);
-
-		if(child != NULL){
-			ret = _trie_cleanup(child);
-			if(ret < 0)
-				rcu_set_pointer(node->child[i], NULL);
-				synchronize_rcu();
-				free(child);
-			}
+	parent = rcu_dereference(node->parent);
+	if(parent != NULL){
+		if(!rcu_dereference(node->child[!index])
+		&& list_empty(&node->head)){
+			_trie_cleanup(parent, node->index);
+			free(node);
+			return;
 		}
 	}
 
-	/* Cleanup stub node */
-	if(!rcu_dereference(node->child[0])
-	&& !rcu_dereference(node->child[1])
-	&& list_empty(&node->head)){
-		return -1;
-	}
-
-	return 0;
+	rcu_set_pointer(node->child[index], NULL);
+	synchronize_rcu();
+	return;
 }
 
 int trie_add(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len, unsigned int id,
-	struct list_head *node)
+	struct list_head *list)
 {
-	struct trie_node *node, *node_parent;
+	struct trie_node *node, *parent;
 	int rest_len, index, ret;
 
 	node = &tree->node;
@@ -211,28 +203,28 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 	while(rest_len > 0){
 		rest_len--;
 		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
-		node_parrent = node;
+		parent = node;
 
-		node = rcu_dereference(node->child[index]);
-		if(node == NULL){
-			node = trie_alloc_node(parrent);
+		node = rcu_dereference(parent->child[index]);
+		if(!node){
+			node = trie_alloc_node(parent, index);
 			if(!node)
 				goto err_alloc_child;
 
-			rcu_set_pointer(node_parrent->child[index], node);
+			rcu_set_pointer(parent->child[index], node);
 		}
 
 	}
 
-	ret = tree->trie_entry_insert(&node->head, id, node);
+	ret = tree->trie_entry_insert(&node->head, id, list);
 	if(ret < 0)
 		goto err_insert;
 
 	return 0;
 
-err_insert:
 err_alloc_child:
-	_trie_cleanup(&tree->node);
+	_trie_cleanup(parent, index);
+err_insert:
 	return -1;
 }
 
@@ -248,8 +240,9 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
 	while(rest_len > 0){
 		rest_len--;
 		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
+		parent = node;
 
-		node = rcu_dereference(node->child[index]);
+		node = rcu_dereference(parent->child[index]);
 		if(node == NULL){
 			/* no route found */
 			goto err_noroute_found;
@@ -260,23 +253,10 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
 	if(ret < 0)
 		goto err_delete;
 
-	rest_len = prefix_len;
-	while(rest_len > 0){
-		index = trie_bit(prefix, (family_len - rest_len));
-		rest_len--;
-
-		if(rcu_dereference(node->child[0]) != NULL
-		|| rcu_dereference(node->child[1]) != NULL
-		|| !list_empty(&node->head)){
-			break;
-		}
-
-		node_parent = node->parent;
-		rcu_set_pointer(node_parent->child[index], NULL);
-		synchronize_rcu();
-		free(node);
-		node = node_parent;
-	}
+	rcu_set_pointer(parent->child[index], NULL);
+	synchronize_rcu();
+	free(node);
+	_trie_cleanup(parent, index);
 
 	return 0;
 

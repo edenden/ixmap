@@ -51,16 +51,16 @@ void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
 		eth = (struct ethhdr *)slot_buf;
 		switch(ntohs(eth->h_proto)){
 		case ETH_P_ARP:
-			ret = packet_arp_process(thread, port_index, slot_buf,
+			ret = forward_arp_process(thread, port_index, slot_buf,
 				slot_size);
 			break;
 		case ETH_P_IP:
-			ret = packet_ip_process(thread, port_index, slot_buf,
+			ret = forward_ip_process(thread, port_index, slot_buf,
 				slot_size);
 			break;
 		case ETH_P_IPV6:
-			packet_ip6_process();
-			ret = -1;
+			ret = forward_ip6_process(thread, port_index, slot_buf,
+				slot_size);
 			break;
 		default:
 			ret = -1;
@@ -137,46 +137,39 @@ err_write_tun:
 }
 
 int forward_ip_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf,
-	unsigned int slot_size)
+	unsigned int port_index, void *slot_buf, unsigned int slot_size)
 {
-	struct ethhdr *eth;
-	struct iphdr *ip;
-	struct fib_entry *fib_entry;
-	struct neigh_entry *neigh_entry;
-	uint8_t *dst_mac, *src_mac;
-	int fd, ret;
+	struct ethhdr		*eth;
+	struct iphdr		*ip;
+	struct list_head	*head;
+	struct fib_entry	*fib_entry;
+	struct neigh_entry	*neigh_entry;
+	uint8_t			*dst_mac, *src_mac;
+	int			fd, ret;
 
 	eth = (struct ethhdr *)slot_buf;
 	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
 
 	rcu_read_lock();
-	
-	fib_entry = fib_lookup(thread->fib, AF_INET, &ip->daddr);
-	if(!fib_entry){
-		goto packet_drop;
-	}
 
-	/* TBD: determine the packet is destined to localhost or not */
+	head = fib_lookup(thread->fib, AF_INET, &ip->daddr);
+	if(!head)
+		goto packet_drop;
+
+	fib_entry = list_first_or_null_rcu(head, struct fib, list);
+	if(!fib_entry)
+		goto packet_drop;
+
+	if(unlikely(fib->type == FIB_TYPE_LOCAL))
+		goto packet_local;
 
 	neigh_entry = neigh_lookup(thread->neigh, AF_INET, fib_entry->nexthop);
-	if(!neigh_entry){
-		fd = thread->tun[port_index]->fd;
-		ret = write(fd, slot_buf, slot_size);
-		if(ret < 0)
-			goto err_write_tun;
+	if(!neigh_entry)
+		goto packet_local;
 
-		goto packet_drop;
-	}
+	if(unlikely(ip->ttl == 1))
+		goto packet_local;
 
-	if(ip->ttl == 1){
-		fd = thread->tun[port_index]->fd;
-		ret = write(fd, slot_buf, slot_size);
-		if(ret < 0)
-			goto err_write_tun;
-
-		goto packet_drop;
-	}
 	ip->ttl--;
 	ip->check--;
 
@@ -190,30 +183,68 @@ int forward_ip_process(struct ixmapfwd_thread *thread,
 
 	return ret;
 
-err_write_tun:
+packet_local:
+	fd = thread->tun[port_index]->fd;
+	write(fd, slot_buf, slot_size);
 packet_drop:
 	rcu_read_unlock();
 	return -1;
 }
 
-void forward_ip6_process()
+void forward_ip6_process(struct ixmapfwd_thread *thread,
+	unsigned int port_index, void *slot_buf, unsigned int slot_size)
 {
-	struct ethhdr *eth;
-	struct ip6_hdr *ip6;
-	struct fib_entry *fib_entry;
-	struct arp_entry *arp_entry;
-	int slot_index_new, ret;
-	void *slot_buf_new;
-	unsigned int slot_size_new;
+	struct ethhdr		*eth;
+	struct ip6_hdr		*ip6;
+	struct list_head	*head;
+	struct fib_entry	*fib_entry;
+	struct neigh_entry	*neigh_entry;
+	uint8_t			*dst_mac, *src_mac;
+	int			fd, ret;
 
 	eth = (struct ethhdr *)slot_buf;
 	ip6 = (struct ip6_hdr *)(slot_buf + sizeof(struct ethhdr));
 
-	fib_entry = fib_lookup(fib, AF_INET6, &ip6->ip6_dst);
-	if(!fib_entry){
-		goto packet_drop;
-	}
+	if(unlikely(ip6->ip6_dst.s6_addr[0] == 0xfe
+	&& ip6->ip6_dst.s6_addr[1] & 0xc0 == 0x80))
+		goto packet_local;
 
-	return;
+	rcu_read_lock();
+
+	head = fib_lookup(thread->fib, AF_INET6, &ip6->ip6_dst);
+	if(!head)
+		goto packet_drop;
+
+	fib_entry = list_first_or_null_rcu(head, struct fib, list);
+	if(!fib_entry)
+		goto packet_drop;
+
+	if(unlikely(fib->type == FIB_TYPE_LOCAL))
+		goto packet_local;
+
+	neigh_entry = neigh_lookup(thread->neigh, AF_INET6, fib_entry->nexthop);
+	if(!neigh_entry)
+		goto packet_local;
+
+	if(unlikely(ip6->ip6_hlim == 1))
+		goto packet_local;
+
+	ip6->ip6_hlim--;
+
+	dst_mac = neigh_entry->dst_mac;
+	src_mac = ixmap_macaddr(thread->plane, fib_entry->port_index);
+	memcpy(eth->h_dest, dst_mac, ETH_ALEN);
+	memcpy(eth->h_source, src_mac, ETH_ALEN);
+
+	ret = fib_entry->port_index;
+	rcu_read_unlock();
+
+	return ret;
+
+packet_local:
+	fd = thread->tun[port_index]->fd;
+	write(fd, slot_buf, slot_size);
+packet_drop:
+	return -1;
 }
 
