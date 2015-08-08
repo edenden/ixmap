@@ -8,8 +8,8 @@
 #include "main.h"
 #include "trie.h"
 
-static uint32_t trie_bit(uint32_t *addr, int digit);
-static struct trie_node *trie_alloc_node(struct trie_node *parent);
+static int trie_bit(uint32_t *addr, int digit);
+static struct trie_node *trie_alloc_node(struct trie_node *parent, int index);
 static void _trie_traverse(struct trie_tree *tree, struct trie_node *node);
 static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node);
 static void _trie_cleanup(struct trie_node *node, int index);
@@ -27,7 +27,7 @@ void trie_init(struct trie_tree *tree)
 	return;
 }
 
-static uint32_t trie_bit(uint32_t *addr, int digit)
+static int trie_bit(uint32_t *addr, int digit)
 {
 	int index, shift;
 
@@ -81,7 +81,7 @@ int trie_traverse(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len)
 {
 	struct trie_node *node;
-	int rest_len, ret;
+	int rest_len, index;
 
 	node = &tree->node;
 	rest_len = prefix_len;
@@ -106,12 +106,11 @@ err_noroute_found:
 
 static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node)
 {
-	struct list_head *list;
 	struct trie_node *child;
 	int i;
 
 	if(!list_empty(&node->head)){
-		tree->trie_entry_delete_all($node->head);
+		tree->trie_entry_delete_all(&node->head);
 	}
 
 	for(i = 0; i < 2; i++){
@@ -120,7 +119,7 @@ static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node)
 		if(child != NULL){
 			_trie_delete_all(tree, child);
 
-			rcu_set_pointer(node->child[i], NULL);
+			rcu_assign_pointer(node->child[i], NULL);
 			synchronize_rcu();
 			free(child);
 		}
@@ -140,13 +139,12 @@ struct list_head *trie_lookup(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *destination)
 {
 	struct trie_node *node;
-	struct list_node *head;
-	int rest_len, index, ret;
+	struct list_head *head;
+	int rest_len, index;
 
 	node = &tree->node;
 	head = NULL;
 	rest_len = family_len;
-	ret = 0;
 
 	while(rest_len > 0){
 		rest_len--;
@@ -187,7 +185,7 @@ static void _trie_cleanup(struct trie_node *node, int index)
 		}
 	}
 
-	rcu_set_pointer(node->child[index], NULL);
+	rcu_assign_pointer(node->child[index], NULL);
 	synchronize_rcu();
 	return;
 }
@@ -213,7 +211,7 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 			if(!node)
 				goto err_alloc_child;
 
-			rcu_set_pointer(parent->child[index], node);
+			rcu_assign_pointer(parent->child[index], node);
 		}
 
 	}
@@ -233,8 +231,8 @@ err_insert:
 int trie_delete(struct trie_tree *tree, unsigned int family_len,
 	uint32_t *prefix, unsigned int prefix_len, unsigned int id)
 {
-	struct trie_node *node, *node_parent;
-	int rest_len, index;
+	struct trie_node *node, *parent;
+	int rest_len, index, ret;
 
 	node = &tree->node;
 	rest_len = prefix_len;
@@ -255,7 +253,7 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
 	if(ret < 0)
 		goto err_delete;
 
-	rcu_set_pointer(parent->child[index], NULL);
+	rcu_assign_pointer(parent->child[index], NULL);
 	synchronize_rcu();
 	free(node);
 	_trie_cleanup(parent, index);
