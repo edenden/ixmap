@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <linux/if_tun.h>
@@ -14,14 +15,15 @@ static int tun_assign(int fd, char *if_name);
 static int tun_mac(int fd, char *if_name, uint8_t *src_mac);
 static int tun_mtu(int fd, char *if_name, unsigned int mtu_frame);
 static int tun_up(int fd, char *if_name);
+static int tun_ifindex(int fd, char *if_name);
 
-struct tun_handle *tun_open(char *if_name, uint8_t *src_mac,
+struct tun *tun_open(char *if_name, uint8_t *src_mac,
 	unsigned int mtu_frame)
 {
-	struct tun_handle *tun;
-	int fd, sock, ret;
+	struct tun *tun;
+	int sock, ret;
 
-	tun = malloc(sizeof(struct tun_handle));
+	tun = malloc(sizeof(struct tun));
 	if(!tun)
 		goto err_tun_alloc;
 
@@ -42,15 +44,14 @@ struct tun_handle *tun_open(char *if_name, uint8_t *src_mac,
 	if(ret < 0)
 		goto err_tun_mac;
 
-	ret = tun_ifindex(sock, if_name);
-	if(ret < 0)
+	tun->ifindex = tun_ifindex(sock, if_name);
+	if(tun->ifindex < 0)
 		goto err_tun_ifindex;
-	tun->ifindex = ret;
 
 	ret = tun_mtu(sock, if_name, mtu_frame);
 	if(ret < 0)
 		goto err_tun_mtu;
-	tun->mtu = mtu_frame;
+	tun->mtu_frame = mtu_frame;
 
 	ret = tun_up(sock, if_name);
 	if(ret < 0)
@@ -61,18 +62,19 @@ struct tun_handle *tun_open(char *if_name, uint8_t *src_mac,
 
 err_tun_up:
 err_tun_mtu:
+err_tun_ifindex:
 err_tun_mac:
 err_tun_assign:
 	close(sock);
 err_sock_open:
-	close(fd);
+	close(tun->fd);
 err_tun_open:
 	free(tun);
 err_tun_alloc:
 	return NULL;
 }
 
-void tun_close(struct tun_handle *tun)
+void tun_close(struct tun *tun)
 {
 	close(tun->fd);
 	free(tun);
