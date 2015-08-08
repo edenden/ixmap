@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <sys/epoll.h>
+#include <sys/signalfd.h>
+#include <sys/socket.h>
 
 #include "main.h"
 #include "epoll.h"
@@ -35,7 +38,7 @@ struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 		goto err_alloc_ep_desc;
 
 	irqh = ixmap_irqdev_open(plane, port_index, queue_index, direction);
-	if(!irqh_rx){
+	if(!irqh){
 		perror("failed to open");
 		goto err_open_irqdev;
 	}
@@ -55,7 +58,6 @@ struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 	ep_desc->fd = ixmap_irqdev_fd(irqh);
 	ep_desc->type = type;
 	ep_desc->data = irqh;
-	ep_desc->next = NULL;
 
 	return ep_desc;
 
@@ -92,7 +94,6 @@ struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset)
 	ep_desc->fd = fd;
 	ep_desc->type = EPOLL_SIGNAL;
 	ep_desc->data = NULL;
-	ep_desc->next = NULL;
 
 	return ep_desc;
 
@@ -127,7 +128,6 @@ struct epoll_desc *epoll_desc_alloc_tun(struct tun **tun,
 	ep_desc->fd = tun[port_index]->fd;
 	ep_desc->type = EPOLL_TUN;
 	ep_desc->data = data;
-	ep_desc->next = NULL;
 
 	return ep_desc;
 
@@ -147,8 +147,7 @@ void epoll_desc_release_tun(struct epoll_desc *ep_desc)
 struct epoll_desc *epoll_desc_alloc_netlink(struct sockaddr_nl *addr)
 {
 	struct epoll_desc *ep_desc;
-	struct sockaddr_nl addr;
-	int fd;
+	int fd, ret;
 	
 	ep_desc = malloc(sizeof(struct epoll_desc));
 	if(!ep_desc)
@@ -158,17 +157,14 @@ struct epoll_desc *epoll_desc_alloc_netlink(struct sockaddr_nl *addr)
 	if(fd < 0)
 		goto err_open_netlink;
 
-	if(addr){
-		ret = bind(fd, (struct sockaddr *)&addr,
-			sizeof(struct sockaddr_nl));
-		if(ret < 0)
-			goto err_bind_netlink;
-	}
+	ret = bind(fd, (struct sockaddr *)addr,
+		sizeof(struct sockaddr_nl));
+	if(ret < 0)
+		goto err_bind_netlink;
 
 	ep_desc->fd = fd;
 	ep_desc->type = EPOLL_NETLINK;
 	ep_desc->data = NULL;
-	ep_desc->next = NULL;
 
 	return ep_desc;
 

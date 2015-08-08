@@ -17,7 +17,6 @@ void netlink_process(struct ixmapfwd *ixmapfwd,
 	uint8_t *read_buf, int read_size)
 {
 	struct nlmsghdr *nlh;
-	int ret;
 
 	nlh = (struct nlmsghdr *)read_buf;
 
@@ -50,7 +49,7 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	uint32_t prefix[4] = {};
 	uint32_t nexthop[4] = {};
 	unsigned int prefix_len;
-	int ifindex, port_index;
+	int ifindex, port_index, i;
 	enum fib_type type;
 
 	route_entry = (struct rtmsg *)NLMSG_DATA(nlh);
@@ -96,11 +95,11 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
-		fib_route_update(fib, family, prefix, prefix_len,
+		fib_route_update(ixmapfwd->fib, family, prefix, prefix_len,
 			nexthop, port_index, type, ifindex);
 		break;
 	case RTM_DELROUTE:
-		fib_route_delete(fib, family, prefix, prefix_len, ifindex);
+		fib_route_delete(ixmapfwd->fib, family, prefix, prefix_len, ifindex);
 		break;
 	default:
 		break;
