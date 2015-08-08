@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <netinet/ip.h>
 
 #include "main.h"
 #include "fib.h"
@@ -20,9 +21,9 @@ struct fib *fib_alloc()
 		goto err_fib_alloc;
 
 	trie_init(&fib->tree);
-	fib->trie.trie_entry_delete = fib_entry_delete;
-	fib->trie.trie_entry_insert = fib_entry_insert;
-	fib->trie.trie_entry_delete_all = fib_entry_delete_all;
+	fib->tree.trie_entry_delete = fib_entry_delete;
+	fib->tree.trie_entry_insert = fib_entry_insert;
+	fib->tree.trie_entry_delete_all = fib_entry_delete_all;
 
 	pthread_mutex_init(&fib->mutex, NULL);
 	return fib;
@@ -33,7 +34,7 @@ err_fib_alloc:
 
 void fib_release(struct fib *fib)
 {
-	trie_delete_all(fib->tree);
+	trie_delete_all(&fib->tree);
 	free(fib);
 	return;
 }
@@ -88,7 +89,7 @@ int fib_route_update(struct fib *fib, int family,
 	uint32_t *nexthop, unsigned int port_index,
 	enum fib_type type, unsigned int id)
 {
-	struct fib_entry *entry, *entry_next;
+	struct fib_entry *entry;
 	unsigned int family_len;
 	int ret;
 
@@ -116,7 +117,7 @@ int fib_route_update(struct fib *fib, int family,
 	entry->id		= id;
 
 	ixmapfwd_mutex_lock(&fib->mutex);
-	ret = trie_add(fib->trie_root, family_len,
+	ret = trie_add(&fib->tree, family_len,
 		prefix, prefix_len, id, &entry->list);
 	if(ret < 0)
 		goto err_trie_add;
@@ -136,7 +137,6 @@ int fib_route_delete(struct fib *fib, int family,
 	uint32_t *prefix, unsigned int prefix_len,
 	unsigned int id)
 {
-	struct fib_entry *entry = NULL, *entry_next;
 	unsigned int family_len;
 	int ret;
 
@@ -153,7 +153,7 @@ int fib_route_delete(struct fib *fib, int family,
 	}
 
 	ixmapfwd_mutex_lock(&fib->mutex);
-	ret = trie_delete(fib->trie_root, family_len,
+	ret = trie_delete(&fib->tree, family_len,
 		prefix, prefix_len, id);
 	if(ret < 0)
 		goto err_trie_delete;
@@ -185,7 +185,7 @@ struct list_head *fib_lookup(struct fib *fib, int family,
 		break;
 	}
 
-	head = trie_lookup(fib->trie_root, family_len, destination);
+	head = trie_lookup(&fib->tree, family_len, destination);
 	if(!head)
 		goto err_trie_lookup;
 

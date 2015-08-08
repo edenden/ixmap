@@ -13,10 +13,21 @@ struct trie_node {
 
 struct trie_tree {
 	struct trie_node	node;
-	void			(*trie_entry_insert)();
-	void			(*trie_entry_delete)();
-	void			(*trie_entry_delete_all)();
-	void			(*trie_entry_dump)();
+	int			(*trie_entry_insert)(
+				struct list_head *,
+				unsigned int,
+				struct list_head *
+				);
+	int			(*trie_entry_delete)(
+				struct list_head *,
+				unsigned int
+				);
+	void			(*trie_entry_delete_all)(
+				struct list_head *	
+				);
+	void			(*trie_entry_dump)(
+				struct list_head *
+				);
 };
 
 void trie_init(struct trie_tree *tree);

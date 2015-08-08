@@ -19,6 +19,7 @@ struct fib_entry {
 	int			port_index; /* -1 means not ixmap interface */
 	enum fib_type		type;
 	struct list_head	list;
+	int			id;
 };
 
 struct fib {
