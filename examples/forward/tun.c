@@ -7,6 +7,9 @@
 #include <linux/if_tun.h>
 #include <linux/if_arp.h>
 
+#include "main.h"
+#include "tun.h"
+
 static int tun_assign(int fd, char *if_name);
 static int tun_mac(int fd, char *if_name, uint8_t *src_mac);
 static int tun_mtu(int fd, char *if_name, unsigned int mtu_frame);

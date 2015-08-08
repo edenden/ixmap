@@ -3,6 +3,11 @@
 #include <string.h>
 #include <stdint.h>
 
+#include "main.h"
+#include "neigh.h"
+
+static void neigh_entry_delete(struct hash_entry *entry);
+
 struct neigh_table *neigh_alloc()
 {
 	struct neigh_table *neigh;
@@ -28,7 +33,7 @@ void neigh_release(struct neigh_table *neigh)
 	return;
 }
 
-void neigh_entry_delete(struct hash_entry *entry)
+static void neigh_entry_delete(struct hash_entry *entry)
 {
 	struct neigh_entry *neigh_entry;
 

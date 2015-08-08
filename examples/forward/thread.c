@@ -17,10 +17,13 @@
 #include "main.h"
 #include "thread.h"
 
-static int thread_fd_prepare(struct epoll_desc **_ep_desc_list,
-	struct ixmap_plane *plane, uint32_t num_ports, uint32_t queue_index);
-static void thread_fd_destroy(struct epoll_desc *ep_desc_list,
-	int fd_ep, int num_ports);
+static int thread_wait(struct ixmapfwd_thread *thread,
+	int fd_ep, uint8_t *read_buf, int read_size,
+	struct ixmap_bulk **bulk_array);
+static int thread_fd_prepare(struct list_head *ep_desc_head,
+	struct ixmapfwd_thread *thread);
+static void thread_fd_destroy(struct list_head *ep_desc_head,
+	int fd_ep);
 static int thread_irq_setmask(struct ixmap_irqdev_handle *irqh, int core_id);
 static void thread_print_result(struct ixmapfwd_thread *thread);
 
@@ -173,8 +176,8 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				if(ret < 0)
 					goto err_read;
 
-				forward_process_tun(port_index,
-					read_buf, ret, bulk_array);
+				forward_process_tun(thread, port_index, bulk_array,
+					read_buf, ret);
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(thread->plane, i, thread->buf,
 						bulk_array[i]);

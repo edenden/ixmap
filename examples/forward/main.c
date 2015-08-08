@@ -15,21 +15,20 @@
 #include <urcu.h>
 #include <ixmap.h>
 
-#include "linux/list.h"
-#include "linux/list_rcu.h"
 #include "main.h"
-#include "thread.h"
-#include "tun.h"
-#include "fib.h"
-#include "neigh.h"
+
+static int ixmapfwd_wait(struct ixmapfwd *ixmapfwd, int fd_ep,
+	uint8_t *read_buf, int read_size);
+static int ixmapfwd_fd_prepare(struct list_head *ep_desc_head);
+static void ixmapfwd_fd_destroy(struct list_head *ep_desc_head,
+	int fd_ep);
+static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
+	struct ixmapfwd_thread *thread, int thread_index);
+static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread);
+static int ixmapfwd_set_signal(sigset_t *sigset);
 
 static int buf_count = 16384;
 static char *ixmap_interface_array[2];
-
-static int ixmapfwd_thread_create(struct ixmapfwd_thread *thread,
-	int thread_index, unsigned int num_ports);
-static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread);
-static int ixmapfwd_set_signal(sigset_t *sigset);
 
 int main(int argc, char **argv)
 {
@@ -169,7 +168,7 @@ err_open:
 		threads[i].neigh	= neigh;
 		threads[i].fib		= fib;
 
-		ret = ixmapfwd_thread_create(&threads[i], i, ixmapfwd.num_ports);
+		ret = ixmapfwd_thread_create(&ixmapfwd, &threads[i], i);
 		if(ret < 0){
 			goto err_thread_create;
 		}
@@ -350,14 +349,14 @@ static void ixmapfwd_fd_destroy(struct list_head *ep_desc_head,
 	return;
 }
 
-static int ixmapfwd_thread_create(struct ixmapfwd_thread *thread,
-	int thread_index, unsigned int num_ports)
+static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
+	struct ixmapfwd_thread *thread, int thread_index)
 {
 	cpu_set_t cpuset;
 	int ret;
 
 	thread->index = thread_index;
-	thread->num_ports = num_ports;
+	thread->num_ports = ixmapfwd->num_ports;
 	thread->ptid = pthread_self();
 
 	ret = pthread_create(&thread->tid, NULL, thread_process_interrupt, thread);
@@ -425,7 +424,8 @@ static int ixmapfwd_set_signal(sigset_t *sigset)
 	return 0;
 }
 
-void ixmapfwd_mutex_lock(pthread_mutex_t *mutex){
+void ixmapfwd_mutex_lock(pthread_mutex_t *mutex)
+{
 	int ret;
 
 	ret = pthread_mutex_lock(mutex);
@@ -434,7 +434,8 @@ void ixmapfwd_mutex_lock(pthread_mutex_t *mutex){
 	}
 }
 
-void ixmapfwd_mutex_unlock(pthread_mutex_t *mutex){
+void ixmapfwd_mutex_unlock(pthread_mutex_t *mutex)
+{
 	int ret;
 
 	ret = pthread_mutex_unlock(mutex);

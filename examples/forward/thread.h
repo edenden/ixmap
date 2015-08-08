@@ -1,6 +1,13 @@
 #ifndef _IXMAPFWD_THREAD_H
 #define _IXMAPFWD_THREAD_H
 
+#include <pthread.h>
+#include <ixmap.h>
+
+#include "tun.h"
+#include "neigh.h"
+#include "fib.h"
+
 struct ixmapfwd_thread {
 	int			index;
 	pthread_t		tid;

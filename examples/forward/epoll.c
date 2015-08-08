@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <sys/epoll.h>
 
+#include "main.h"
+#include "epoll.h"
+
 int epoll_add(int fd_ep, void *ptr, int fd)
 {
 	struct epoll_event event;

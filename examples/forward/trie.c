@@ -10,7 +10,9 @@
 
 static uint32_t trie_bit(uint32_t *addr, int digit);
 static struct trie_node *trie_alloc_node(struct trie_node *parent);
-static int _trie_traverse(struct trie_node *node, struct list_head *head);
+static void _trie_traverse(struct trie_tree *tree, struct trie_node *node);
+static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node);
+static void _trie_cleanup(struct trie_node *node, int index);
 
 void trie_init(struct trie_tree *tree)
 {
@@ -171,7 +173,7 @@ err_noroute_found:
 	return NULL;
 }
 
-static int _trie_cleanup(struct trie_node *node, int index)
+static void _trie_cleanup(struct trie_node *node, int index)
 {
 	struct trie_node *parent;
 

@@ -1,5 +1,9 @@
-#ifndef _HASH_H
-#define _HASH_H
+#ifndef _IXMAPFWD_HASH_H
+#define _IXMAPFWD_HASH_H
+
+#include "linux/list.h"
+#include "linux/list_rcu.h"
+#include "main.h"
 
 #define HASH_SIZE (1 << 16)
 
@@ -17,10 +21,13 @@ struct hash_table {
 	void			(*hash_entry_delete)();
 };
 
-int hash_add(struct hash *hash, void *key, int key_len,
-	void *value, int value_len);
-int hash_delete(struct hash *hash, void *key, int key_len);
-void hash_delete_walk(struct hash *hash);
-void *hash_lookup(struct hash *hash, void *key, int key_len);
+void hash_init(struct hash_table *table);
+int hash_add(struct hash_table *table, void *key, int key_len,
+	struct hash_entry *entry_new);
+int hash_delete(struct hash_table *table,
+	void *key, int key_len);
+void hash_delete_all(struct hash_table *table);
+struct hash_entry *hash_lookup(struct hash_table *table,
+	void *key, int key_len);
 
-#endif /* _HASH_H */
+#endif /* _IXMAPFWD_HASH_H */

@@ -7,6 +7,12 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include "main.h"
+#include "netlink.h"
+
+static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh);
+static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh);
+
 void netlink_process(struct ixmapfwd *ixmapfwd,
 	uint8_t *read_buf, int read_size)
 {
@@ -36,7 +42,7 @@ void netlink_process(struct ixmapfwd *ixmapfwd,
 	return;
 }
 
-void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
+static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 {
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
@@ -103,7 +109,7 @@ void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	return;
 }
 
-void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
+static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 {
 	struct ndmsg *neigh_entry;
 	struct rtattr *route_attr;

@@ -2,6 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "main.h"
+#include "fib.h"
+
+static int fib_entry_insert(struct list_head *head, unsigned int id,
+	struct list_head *list);
+static int fib_entry_delete(struct list_head *head, unsigned int id);
+static void fib_entry_delete_all(struct list_head *head);
+
 struct fib *fib_alloc()
 {
         struct fib *fib;
@@ -29,7 +37,7 @@ void fib_release(struct fib *fib)
 	return;
 }
 
-int fib_entry_insert(struct list_head *head, unsigned int id,
+static int fib_entry_insert(struct list_head *head, unsigned int id,
 	struct list_head *list)
 {
 	struct fib_entry *entry;
@@ -47,7 +55,7 @@ err_entry_exist:
 	return -1;
 }
 
-int fib_entry_delete(struct list_head *head, unsigned int id)
+static int fib_entry_delete(struct list_head *head, unsigned int id)
 {
 	struct fib_entry *entry;
 
@@ -62,7 +70,7 @@ int fib_entry_delete(struct list_head *head, unsigned int id)
 	return -1;
 }
 
-void fib_entry_delete_all(struct list_head *head)
+static void fib_entry_delete_all(struct list_head *head)
 {
 	struct fib_entry *entry;
 
@@ -99,8 +107,8 @@ int fib_route_update(struct fib *fib, int family,
 	if(!entry)
 		goto err_alloc_entry;
 
-	memcpy(entry->nexthop, nexthop, ALIGN(family_len, 8) >> 3);
-	memcpy(entry->prefix, prefix, ALIGN(family_len, 8) >> 3);
+	memcpy(entry->nexthop, nexthop, family_len >> 3);
+	memcpy(entry->prefix, prefix, family_len >> 3);
 	entry->prefix_len	= prefix_len;
 	entry->port_index	= port_index;
 	entry->type		= type;
@@ -124,7 +132,8 @@ err_invalid_family:
 }
 
 int fib_route_delete(struct fib *fib, int family,
-	uint32_t *prefix, unsigned int prefix_len, unsigned int id)
+	uint32_t *prefix, unsigned int prefix_len,
+	unsigned int id)
 {
 	struct fib_entry *entry = NULL, *entry_next;
 	unsigned int family_len;

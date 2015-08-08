@@ -4,8 +4,18 @@
 #include <stdint.h>
 #include <ixmap.h>
 
+#include "main.h"
+#include "forward.h"
+
+static int forward_arp_process(struct ixmapfwd_thread *thread,
+	unsigned int port_index, void *slot_buf, unsigned int slot_size);
+static int forward_ip_process(struct ixmapfwd_thread *thread,
+	unsigned int port_index, void *slot_buf, unsigned int slot_size);
+static void forward_ip6_process(struct ixmapfwd_thread *thread,
+	unsigned int port_index, void *slot_buf, unsigned int slot_size);
+
 #ifdef DEBUG
-static void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
+void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 {
 	unsigned short count;
 	int slot_index;
@@ -34,7 +44,7 @@ static void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
 #endif
 
 void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
-	struct ixmap_bulk **bulk_array);
+	struct ixmap_bulk **bulk_array)
 {
 	unsigned short count;
 	int slot_index, i, ret;
@@ -85,7 +95,7 @@ packet_drop:
 }
 
 void forward_process_tun(struct ixmapfwd_thread *thread, unsigned int port_index,
-	uint8_t *read_buf, int read_size, struct ixmap_bulk **bulk_array)
+	struct ixmap_bulk **bulk_array, uint8_t *read_buf, int read_size)
 {
 	int slot_index, ret;
 	void *slot_buf;
@@ -119,9 +129,8 @@ err_slot_assign:
 	return;
 }
 
-int forward_arp_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf,
-	unsigned int slot_size)
+static int forward_arp_process(struct ixmapfwd_thread *thread,
+	unsigned int port_index, void *slot_buf, unsigned int slot_size)
 {
 	int fd, ret;
 
@@ -136,7 +145,7 @@ err_write_tun:
 	return -1;
 }
 
-int forward_ip_process(struct ixmapfwd_thread *thread,
+static int forward_ip_process(struct ixmapfwd_thread *thread,
 	unsigned int port_index, void *slot_buf, unsigned int slot_size)
 {
 	struct ethhdr		*eth;
@@ -191,7 +200,7 @@ packet_drop:
 	return -1;
 }
 
-void forward_ip6_process(struct ixmapfwd_thread *thread,
+static void forward_ip6_process(struct ixmapfwd_thread *thread,
 	unsigned int port_index, void *slot_buf, unsigned int slot_size)
 {
 	struct ethhdr		*eth;

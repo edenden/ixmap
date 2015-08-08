@@ -8,7 +8,9 @@
 #include "hash.h"
 
 static unsigned int hash_key(void *key, int key_len);
-static void hash_delete_all(struct hash_table *table);
+static int hash_entry_init(struct hash_entry *entry,
+	void *key, int key_len);
+static void hash_entry_destroy(struct hash_entry *entry);
 
 static unsigned int hash_key(void *key, int key_len)
 {
@@ -32,7 +34,7 @@ void hash_init(struct hash_table *table)
 	return;
 }
 
-int hash_entry_init(struct hash_entry *entry,
+static int hash_entry_init(struct hash_entry *entry,
 	void *key, int key_len)
 {
 	entry->key = malloc(key_len);
@@ -48,7 +50,7 @@ err_alloc_key:
 	return -1;
 }
 
-void hash_entry_destroy(struct hash_entry *entry)
+static void hash_entry_destroy(struct hash_entry *entry)
 {
 	free(entry->key);
 }
@@ -136,7 +138,8 @@ void hash_delete_all(struct hash_table *table)
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
-struct hash_entry *hash_lookup(struct hash_table *table, void *key, int key_len)
+struct hash_entry *hash_lookup(struct hash_table *table,
+	void *key, int key_len)
 {
 	struct hlist_head *head;
 	struct hash_entry *entry, *entry_ret;

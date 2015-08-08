@@ -1,10 +1,13 @@
 #ifndef _IXMAPFWD_MAIN_H
 #define _IXMAPFWD_MAIN_H
 
-//#define DEBUG
+#include <pthread.h>
+#include <ixmap.h>
+#include "tun.h"
+#include "neigh.h"
+#include "fib.h"
 
-#define ALIGN(x,a)		__ALIGN_MASK(x,(typeof(x))(a)-1)
-#define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
+//#define DEBUG
 
 #define min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
@@ -41,5 +44,8 @@ struct ixmapfwd {
 	unsigned int		mtu_frame;
 	unsigned short		intr_rate;
 };
+
+void ixmapfwd_mutex_lock(pthread_mutex_t *mutex);
+void ixmapfwd_mutex_unlock(pthread_mutex_t *mutex);
 
 #endif /* _IXMAPFWD_MAIN_H */
