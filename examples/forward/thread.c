@@ -16,6 +16,7 @@
 
 #include "main.h"
 #include "thread.h"
+#include "forward.h"
 
 static int thread_wait(struct ixmapfwd_thread *thread,
 	int fd_ep, uint8_t *read_buf, int read_size,
@@ -62,7 +63,7 @@ void *thread_process_interrupt(void *data)
 	}
 
 	/* Prepare each fd in epoll */
-	fd_ep = thread_fd_prepare(&ep_desc_list, thread);
+	fd_ep = thread_fd_prepare(&ep_desc_head, thread);
 	if(fd_ep < 0){
 		printf("failed to epoll prepare\n");
 		goto err_ixgbe_epoll_prepare;
@@ -80,7 +81,7 @@ void *thread_process_interrupt(void *data)
 		goto err_wait;
 
 	rcu_unregister_thread();
-	thread_epoll_destroy(ep_desc_head, fd_ep);
+	thread_fd_destroy(&ep_desc_head, fd_ep);
 	for(i = 0; i < bulk_assigned; i++){
 		ixmap_bulk_release(bulk_array[i]);
 	}
@@ -91,14 +92,14 @@ void *thread_process_interrupt(void *data)
 
 err_wait:
 	rcu_unregister_thread();
-	thread_epoll_destroy(ep_desc_head, fd_ep);
+	thread_fd_destroy(&ep_desc_head, fd_ep);
 err_ixgbe_epoll_prepare:
 err_bulk_alloc:
 	for(i = 0; i < bulk_assigned; i++){
 		ixmap_bulk_release(bulk_array[i]);
 	}
 	free(bulk_array);
-err_bulk_array_alloc_list:
+err_bulk_array_alloc:
 	free(read_buf);
 err_alloc_read_buf:
 	printf("thread execution failed\n");
@@ -297,10 +298,9 @@ err_epoll_open:
 static void thread_fd_destroy(struct list_head *ep_desc_head,
 	int fd_ep)
 {
-	struct epoll_desc *ep_desc;
-	struct list_head *next;
+	struct epoll_desc *ep_desc, *ep_next;
 
-	list_for_each_safe(ep_desc, next, ep_desc_head, list){
+	list_for_each_entry_safe(ep_desc, ep_next, ep_desc_head, list){
 		list_del(&ep_desc->list);
 
 		switch(ep_desc->type){
