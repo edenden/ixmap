@@ -6,6 +6,7 @@
 #include "tun.h"
 #include "neigh.h"
 #include "fib.h"
+#include "epoll.h"
 
 //#define DEBUG
 

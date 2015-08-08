@@ -7,15 +7,22 @@
 #include <errno.h>
 #include <stdint.h>
 #include <endian.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <net/ethernet.h>
 #include <signal.h>
+#include <sys/signalfd.h>
+#include <sys/epoll.h>
+#include <sys/socket.h>
 #include <pthread.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 #include <urcu.h>
 #include <ixmap.h>
 
+#include "linux/list.h"
+#include "linux/list_rcu.h"
 #include "main.h"
+#include "thread.h"
+#include "netlink.h"
+#include "epoll.h"
 
 static int ixmapfwd_wait(struct ixmapfwd *ixmapfwd, int fd_ep,
 	uint8_t *read_buf, int read_size);
@@ -126,8 +133,7 @@ err_open:
 		goto err_fib_alloc;
 
 	/* Prepare read buffer */
-	read_size = max(sysconf(_SC_PAGE_SIZE),
-		sizeof(struct signalfd_siginfo));
+	read_size = max((size_t)getpagesize(), sizeof(struct signalfd_siginfo));
 	read_buf = malloc(read_size);
 	if(!read_buf)
 		goto err_alloc_read_buf;
@@ -142,7 +148,7 @@ err_open:
 	rcu_init();
 	rcu_register_thread();
 
-	threads = malloc(sizeof(struct ixmapfwd_thread) * num_cores);
+	threads = malloc(sizeof(struct ixmapfwd_thread) * ixmapfwd.num_cores);
 	if(!threads){
 		ret = -1;
 		goto err_alloc_threads;
@@ -150,7 +156,7 @@ err_open:
 
 	for(i = 0; i < ixmapfwd.num_cores; i++, cores_assigned++){
 		threads[i].buf = ixmap_buf_alloc(ixmapfwd.ih_array,
-			ixmapfwd.num_ports, ixmapfwd.buf_count, ixmapfwd.buf_size);
+			ixmapfwd.num_ports, buf_count, ixmapfwd.buf_size);
 		if(!threads[i].buf){
 			printf("failed to ixmap_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
@@ -164,9 +170,9 @@ err_open:
 			goto err_plane_alloc;
 		}
 
-		threads[i].tun		= tun;
-		threads[i].neigh	= neigh;
-		threads[i].fib		= fib;
+		threads[i].tun		= ixmapfwd.tun;
+		threads[i].neigh	= ixmapfwd.neigh;
+		threads[i].fib		= ixmapfwd.fib;
 
 		ret = ixmapfwd_thread_create(&ixmapfwd, &threads[i], i);
 		if(ret < 0){
@@ -195,8 +201,7 @@ err_assign_cores:
 	free(threads);
 err_alloc_threads:
 	rcu_unregister_thread();
-	rcu_exit();
-	ixmapfwd_fd_destroy(ep_desc_list, fd_ep);
+	ixmapfwd_fd_destroy(&ep_desc_head, fd_ep);
 err_fd_prepare:
 	free(read_buf);
 err_alloc_read_buf:
@@ -327,10 +332,9 @@ err_epoll_open:
 static void ixmapfwd_fd_destroy(struct list_head *ep_desc_head,
 	int fd_ep)
 {
-	struct epoll_desc *ep_desc;
-	struct list_head *next;
+	struct epoll_desc *ep_desc, *ep_next;
 
-	list_for_each_safe(ep_desc, next, ep_desc_head, list){
+	list_for_each_entry_safe(ep_desc, ep_next, ep_desc_head, list){
 		list_del(&ep_desc->list);
 
 		switch(ep_desc->type){
@@ -429,7 +433,7 @@ void ixmapfwd_mutex_lock(pthread_mutex_t *mutex)
 	int ret;
 
 	ret = pthread_mutex_lock(mutex);
-	if(ret)
+	if(ret){
 		perror("failed to lock");
 	}
 }

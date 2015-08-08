@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include "linux/list.h"
 #include "linux/list_rcu.h"
+#include "trie.h"
 
 enum fib_type {
 	FIB_TYPE_FORWARD = 0,

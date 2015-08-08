@@ -1,6 +1,9 @@
 #ifndef _IXMAPFWD_EPOLL_H
 #define _IXMAPFWD_EPOLL_H
 
+#include <linux/netlink.h>
+#include <signal.h>
+#include <ixmap.h>
 #include "linux/list.h"
 #include "linux/list_rcu.h"
 
@@ -26,7 +29,7 @@ struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction);
 void epoll_desc_release_irqdev(struct epoll_desc *ep_desc);
-struct epoll_desc *epoll_desc_alloc_singalfd(sigset_t *sigset);
+struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset);
 void epoll_desc_release_signalfd(struct epoll_desc *ep_desc);
 struct epoll_desc *epoll_desc_alloc_tun(struct tun **tun,
 	unsigned int port_index);

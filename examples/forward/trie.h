@@ -7,7 +7,7 @@
 struct trie_node {
 	void			*parent;
 	void			*child[2];
-	struct list_node	head;
+	struct list_head	head;
 	int			index;
 };
 

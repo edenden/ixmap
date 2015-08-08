@@ -1,6 +1,7 @@
 #ifndef _IXMAPFWD_NEIGH_H
 #define _IXMAPFWD_NEIGH_H
 
+#include <linux/if_ether.h>
 #include <pthread.h>
 #include "hash.h"
 

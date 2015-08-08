@@ -74,7 +74,7 @@ void epoll_desc_release_irqdev(struct epoll_desc *ep_desc)
 	return;
 }
 
-struct epoll_desc *epoll_desc_alloc_singalfd(sigset_t *sigset)
+struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset)
 {
 	struct epoll_desc *ep_desc;
 	int fd;

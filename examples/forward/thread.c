@@ -40,8 +40,7 @@ void *thread_process_interrupt(void *data)
 	INIT_LIST_HEAD(&ep_desc_head);
 
 	/* Prepare read buffer */
-	read_size = max(sizeof(uint32_t),
-		sizeof(struct signalfd_siginfo));
+	read_size = max(sizeof(uint32_t), sizeof(struct signalfd_siginfo));
 	for(i = 0; i < thread->num_ports; i++){
 		/* calclulate maximum buf_size we should prepare */
 		if(thread->tun[i]->mtu_frame > read_size)
