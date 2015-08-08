@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <netinet/ip.h>
 
 #include "main.h"
 #include "neigh.h"
@@ -17,7 +18,7 @@ struct neigh_table *neigh_alloc()
 		goto err_neigh_alloc;
 
 	hash_init(&neigh->table);
-	neigh->table.hash_release = neigh_entry_delete;
+	neigh->table.hash_entry_delete = neigh_entry_delete;
 
 	pthread_mutex_init(&neigh->mutex, NULL);
 	return neigh;
@@ -28,7 +29,7 @@ err_neigh_alloc:
 
 void neigh_release(struct neigh_table *neigh)
 {
-	hash_delete_all(neigh->table);
+	hash_delete_all(&neigh->table);
 	free(neigh);
 	return;
 }
@@ -67,7 +68,7 @@ int neigh_add(struct neigh_table *neigh, int family,
 	memcpy(neigh_entry->dst_mac, mac_addr, ETH_ALEN);
 
 	ixmapfwd_mutex_lock(&neigh->mutex);
-	ret = hash_add(neigh->table, dst_addr, family_len, &neigh_entry->hash);
+	ret = hash_add(&neigh->table, dst_addr, family_len, &neigh_entry->hash);
 	if(ret < 0)
 		goto err_hash_add;
 	ixmapfwd_mutex_unlock(&neigh->mutex);
@@ -77,7 +78,7 @@ int neigh_add(struct neigh_table *neigh, int family,
 err_hash_add:
 	ixmapfwd_mutex_unlock(&neigh->mutex);
 	free(neigh_entry);
-err_alloc_entry;
+err_alloc_entry:
 err_invalid_family:
 	return -1;
 }
@@ -85,8 +86,6 @@ err_invalid_family:
 int neigh_delete(struct neigh_table *neigh, int family,
 	uint32_t *dst_addr)
 {
-	struct hash_entry *hash_entry = NULL;
-	struct neigh_entry *neigh_entry;
 	int family_len, ret;
 
 	switch(family){
@@ -102,7 +101,7 @@ int neigh_delete(struct neigh_table *neigh, int family,
 	}
 
 	ixmapfwd_mutex_lock(&neigh->mutex);
-	ret = hash_delete(neigh->table, dst_addr, family_len);
+	ret = hash_delete(&neigh->table, dst_addr, family_len);
 	if(ret < 0)
 		goto err_hash_delete;
 	ixmapfwd_mutex_unlock(&neigh->mutex);
@@ -134,7 +133,7 @@ struct neigh_entry *neigh_lookup(struct neigh_table *neigh, int family,
 		break;
 	}
 
-	hash_entry = hash_lookup(neigh->table, dst_ip, sizeof(struct in_addr));
+	hash_entry = hash_lookup(&neigh->table, dst_addr, family_len);
 	if(!hash_entry)
 		goto err_hash_lookup;
 
