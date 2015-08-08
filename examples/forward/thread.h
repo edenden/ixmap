@@ -12,7 +12,7 @@ struct ixmapfwd_thread {
 	int			index;
 	pthread_t		tid;
 	pthread_t		ptid;
-	int			num_ports;
+	unsigned int		num_ports;
 	struct ixmap_buf	*buf;
 	struct ixmap_plane	*plane;
 	struct tun		**tun;

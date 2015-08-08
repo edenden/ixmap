@@ -170,14 +170,12 @@ err_open:
 			goto err_plane_alloc;
 		}
 
-		threads[i].tun		= ixmapfwd.tun;
-		threads[i].neigh	= ixmapfwd.neigh;
-		threads[i].fib		= ixmapfwd.fib;
-
 		ret = ixmapfwd_thread_create(&ixmapfwd, &threads[i], i);
 		if(ret < 0){
 			goto err_thread_create;
 		}
+
+		continue;
 
 err_thread_create:
 		ixmap_plane_release(threads[i].plane);
@@ -359,9 +357,12 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 	cpu_set_t cpuset;
 	int ret;
 
-	thread->index = thread_index;
-	thread->num_ports = ixmapfwd->num_ports;
-	thread->ptid = pthread_self();
+	thread->index		= thread_index;
+	thread->num_ports	= ixmapfwd->num_ports;
+	thread->ptid		= pthread_self();
+	thread->tun		= ixmapfwd->tun;
+	thread->neigh		= ixmapfwd->neigh;
+	thread->fib		= ixmapfwd->fib;
 
 	ret = pthread_create(&thread->tid, NULL, thread_process_interrupt, thread);
 	if(ret < 0){
