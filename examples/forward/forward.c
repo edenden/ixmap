@@ -2,16 +2,21 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/ip.h>
+#include <netinet/ip6.h>
 #include <ixmap.h>
 
 #include "main.h"
 #include "forward.h"
+#include "thread.h"
 
 static int forward_arp_process(struct ixmapfwd_thread *thread,
 	unsigned int port_index, void *slot_buf, unsigned int slot_size);
 static int forward_ip_process(struct ixmapfwd_thread *thread,
 	unsigned int port_index, void *slot_buf, unsigned int slot_size);
-static void forward_ip6_process(struct ixmapfwd_thread *thread,
+static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	unsigned int port_index, void *slot_buf, unsigned int slot_size);
 
 #ifdef DEBUG
@@ -56,7 +61,7 @@ void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
 	for(i = 0; i < count; i++){
 		ixmap_bulk_slot_get(bulk_array[thread->num_ports], i,
 			&slot_index, &slot_size);
-		slot_buf = ixmap_slot_addr_virt(buf, slot_index);
+		slot_buf = ixmap_slot_addr_virt(thread->buf, slot_index);
 
 		eth = (struct ethhdr *)slot_buf;
 		switch(ntohs(eth->h_proto)){
@@ -88,7 +93,7 @@ void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
 
 		continue;
 packet_drop:
-		ixmap_slot_release(buf, slot_index);
+		ixmap_slot_release(thread->buf, slot_index);
 	}
 
 	return;
@@ -165,14 +170,16 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	if(!head)
 		goto packet_drop;
 
-	fib_entry = list_first_or_null_rcu(head, struct fib, list);
+	fib_entry = list_first_or_null_rcu(head, struct fib_entry, list);
 	if(!fib_entry)
 		goto packet_drop;
 
-	if(unlikely(fib->type == FIB_TYPE_LOCAL))
+	if(unlikely(fib_entry->type == FIB_TYPE_LOCAL
+	|| fib_entry->port_index < 0))
 		goto packet_local;
 
-	neigh_entry = neigh_lookup(thread->neigh, AF_INET, fib_entry->nexthop);
+	neigh_entry = neigh_lookup(thread->neigh[fib_entry->port_index],
+		AF_INET, fib_entry->nexthop);
 	if(!neigh_entry)
 		goto packet_local;
 
@@ -200,7 +207,7 @@ packet_drop:
 	return -1;
 }
 
-static void forward_ip6_process(struct ixmapfwd_thread *thread,
+static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	unsigned int port_index, void *slot_buf, unsigned int slot_size)
 {
 	struct ethhdr		*eth;
@@ -215,23 +222,25 @@ static void forward_ip6_process(struct ixmapfwd_thread *thread,
 	ip6 = (struct ip6_hdr *)(slot_buf + sizeof(struct ethhdr));
 
 	if(unlikely(ip6->ip6_dst.s6_addr[0] == 0xfe
-	&& ip6->ip6_dst.s6_addr[1] & 0xc0 == 0x80))
+	&& (ip6->ip6_dst.s6_addr[1] & 0xc0) == 0x80))
 		goto packet_local;
 
 	rcu_read_lock();
 
-	head = fib_lookup(thread->fib, AF_INET6, &ip6->ip6_dst);
+	head = fib_lookup(thread->fib, AF_INET6, (uint32_t *)&ip6->ip6_dst);
 	if(!head)
 		goto packet_drop;
 
-	fib_entry = list_first_or_null_rcu(head, struct fib, list);
+	fib_entry = list_first_or_null_rcu(head, struct fib_entry, list);
 	if(!fib_entry)
 		goto packet_drop;
 
-	if(unlikely(fib->type == FIB_TYPE_LOCAL))
+	if(unlikely(fib_entry->type == FIB_TYPE_LOCAL
+	|| fib_entry->port_index < 0))
 		goto packet_local;
 
-	neigh_entry = neigh_lookup(thread->neigh, AF_INET6, fib_entry->nexthop);
+	neigh_entry = neigh_lookup(thread->neigh[fib_entry->port_index],
+		AF_INET6, fib_entry->nexthop);
 	if(!neigh_entry)
 		goto packet_local;
 
