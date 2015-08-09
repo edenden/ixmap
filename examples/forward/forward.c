@@ -113,6 +113,10 @@ void forward_process_tun(struct ixmapfwd_thread *thread, unsigned int port_index
 
 	memcpy(slot_buf, read_buf, read_size);
 
+#ifdef DEBUG
+	forward_dump(slot_buf, read_size);
+#endif
+
 	ret = ixmap_bulk_slot_push(bulk_array[port_index],
 		slot_index, read_size);
 	if(ret < 0){

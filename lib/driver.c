@@ -327,6 +327,7 @@ void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
 		ixmap_slot_release(buf, bulk->slot_index[total_xmit + i]);
 	}
 
+	bulk->count = 0;
 	return;
 }
 
