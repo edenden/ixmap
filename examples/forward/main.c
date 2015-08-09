@@ -390,6 +390,7 @@ err_pthread_create:
 static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread)
 {
 	int ret;
+
 	ret = pthread_kill(thread->tid, SIGUSR1);
 	if(ret != 0)
 		perror("failed to kill thread");
@@ -422,7 +423,7 @@ static int ixmapfwd_set_signal(sigset_t *sigset)
 	if(ret != 0)
 		return -1;
 
-	ret = sigprocmask(SIG_BLOCK, sigset, NULL);
+	ret = pthread_sigmask(SIG_BLOCK, sigset, NULL);
 	if(ret != 0)
 		return -1;
 
