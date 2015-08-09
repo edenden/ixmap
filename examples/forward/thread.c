@@ -17,6 +17,7 @@
 #include "main.h"
 #include "thread.h"
 #include "forward.h"
+#include "epoll.h"
 
 static int thread_wait(struct ixmapfwd_thread *thread,
 	int fd_ep, uint8_t *read_buf, int read_size,
@@ -44,8 +45,8 @@ void *thread_process_interrupt(void *data)
 	read_size = max(sizeof(uint32_t), sizeof(struct signalfd_siginfo));
 	for(i = 0; i < thread->num_ports; i++){
 		/* calclulate maximum buf_size we should prepare */
-		if(thread->tun[i]->mtu_frame > read_size)
-			read_size = thread->tun[i]->mtu_frame;
+		if(thread->tun_plane->ports[i].mtu_frame > read_size)
+			read_size = thread->tun_plane->ports[i].mtu_frame;
         }
 	read_buf = malloc(read_size);
 	if(!read_buf)
@@ -257,7 +258,7 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 		}
 
 		/* Register Virtual Interface fd */
-		ep_desc = epoll_desc_alloc_tun(thread->tun, i);
+		ep_desc = epoll_desc_alloc_tun(thread->tun_plane, i);
 		if(!ep_desc)
 			goto err_assign_port;
 

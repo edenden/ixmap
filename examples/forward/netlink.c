@@ -6,9 +6,13 @@
 #include <linux/rtnetlink.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <linux/if_ether.h>
 
 #include "main.h"
 #include "netlink.h"
+#include "fib.h"
+#include "neigh.h"
+#include "tun.h"
 
 static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh);
 static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh);
@@ -87,7 +91,7 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 		type = FIB_TYPE_LOCAL;
 
 	for(i = 0; i < ixmapfwd->num_ports; i++){
-		if(ixmapfwd->tun[i]->ifindex == ifindex){
+		if(ixmapfwd->tunh_array[i]->ifindex == ifindex){
 			port_index = i;
 			break;
 		}
@@ -125,7 +129,7 @@ static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	port_index 	= -1;
 
 	for(i = 0; i < ixmapfwd->num_ports; i++){
-		if(ixmapfwd->tun[i]->ifindex == ifindex){
+		if(ixmapfwd->tunh_array[i]->ifindex == ifindex){
 			port_index = i;
 			break;
 		}

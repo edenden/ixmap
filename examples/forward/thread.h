@@ -15,7 +15,7 @@ struct ixmapfwd_thread {
 	unsigned int		num_ports;
 	struct ixmap_buf	*buf;
 	struct ixmap_plane	*plane;
-	struct tun		**tun;
+	struct tun_plane	*tun_plane;
 	struct neigh_table	**neigh;
 	struct fib		*fib;
 };

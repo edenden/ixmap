@@ -121,7 +121,7 @@ void epoll_desc_release_signalfd(struct epoll_desc *ep_desc)
 	return;
 }
 
-struct epoll_desc *epoll_desc_alloc_tun(struct tun **tun,
+struct epoll_desc *epoll_desc_alloc_tun(struct tun_plane *tun_plane,
 	unsigned int port_index)
 {
 	struct epoll_desc *ep_desc;
@@ -136,7 +136,7 @@ struct epoll_desc *epoll_desc_alloc_tun(struct tun **tun,
 		goto err_alloc_data;
 	*data = port_index;
 
-	ep_desc->fd = tun[port_index]->fd;
+	ep_desc->fd = tun_plane->ports[port_index].fd;
 	ep_desc->type = EPOLL_TUN;
 	ep_desc->data = data;
 

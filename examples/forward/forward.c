@@ -139,7 +139,7 @@ static int forward_arp_process(struct ixmapfwd_thread *thread,
 {
 	int fd, ret;
 
-	fd = thread->tun[port_index]->fd;
+	fd = thread->tun_plane->ports[port_index].fd;
 	ret = write(fd, slot_buf, slot_size);
 	if(ret < 0)
 		goto err_write_tun;
@@ -200,7 +200,7 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	return ret;
 
 packet_local:
-	fd = thread->tun[port_index]->fd;
+	fd = thread->tun_plane->ports[port_index].fd;
 	write(fd, slot_buf, slot_size);
 packet_drop:
 	rcu_read_unlock();
@@ -260,7 +260,7 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	return ret;
 
 packet_local:
-	fd = thread->tun[port_index]->fd;
+	fd = thread->tun_plane->ports[port_index].fd;
 	write(fd, slot_buf, slot_size);
 packet_drop:
 	return -1;

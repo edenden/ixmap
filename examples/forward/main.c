@@ -65,10 +65,10 @@ int main(int argc, char **argv)
 		goto err_ih_array;
 	}
 
-	ixmapfwd.tun = malloc(sizeof(struct tun *) * ixmapfwd.num_ports);
-	if(!ixmapfwd.tun){
+	ixmapfwd.tunh_array = malloc(sizeof(struct tun_handle *) * ixmapfwd.num_ports);
+	if(!ixmapfwd.tunh_array){
 		ret = -1;
-		goto err_tun;
+		goto err_tunh_array;
 	}
 
 	ixmapfwd.neigh = malloc(sizeof(struct neigh *) * ixmapfwd.num_ports);
@@ -102,10 +102,8 @@ int main(int argc, char **argv)
 		if(ixmap_bufsize_get(ixmapfwd.ih_array[i]) > ixmapfwd.buf_size)
 			ixmapfwd.buf_size = ixmap_bufsize_get(ixmapfwd.ih_array[i]);
 
-		ixmapfwd.tun[i] = tun_open(ixmap_interface_array[i],
-			ixmap_macaddr_default(ixmapfwd.ih_array[i]),
-			ixmap_mtu_get(ixmapfwd.ih_array[i]));
-		if(!ixmapfwd.tun[i]){
+		ixmapfwd.tunh_array[i] = tun_open(&ixmapfwd, ixmap_interface_array[i], i);
+		if(!ixmapfwd.tunh_array[i]){
 			printf("failed to tun_open\n");
 			goto err_tun_open;
 		}
@@ -117,7 +115,7 @@ int main(int argc, char **argv)
 		continue;
 
 err_neigh_alloc:
-		tun_close(ixmapfwd.tun[i]);
+		tun_close(&ixmapfwd, i);
 err_tun_open:
 		ixmap_desc_release(ixmapfwd.ih_array[i]);
 err_desc_alloc:
@@ -170,6 +168,10 @@ err_open:
 			goto err_plane_alloc;
 		}
 
+		threads[i].tun_plane = tun_plane_alloc(&ixmapfwd, i);
+		if(!threads[i].tun_plane)
+			goto err_tun_plane_alloc;
+
 		ret = ixmapfwd_thread_create(&ixmapfwd, &threads[i], i);
 		if(ret < 0){
 			goto err_thread_create;
@@ -178,6 +180,8 @@ err_open:
 		continue;
 
 err_thread_create:
+		tun_plane_release(threads[i].tun_plane);
+err_tun_plane_alloc:
 		ixmap_plane_release(threads[i].plane);
 err_plane_alloc:
 		ixmap_buf_release(threads[i].buf,
@@ -192,6 +196,7 @@ err_buf_alloc:
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixmapfwd_thread_kill(&threads[i]);
+		tun_plane_release(threads[i].tun_plane);
 		ixmap_plane_release(threads[i].plane);
 		ixmap_buf_release(threads[i].buf,
 			ixmapfwd.ih_array, ixmapfwd.num_ports);
@@ -208,14 +213,14 @@ err_fib_alloc:
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
 		neigh_release(ixmapfwd.neigh[i]);
-		tun_close(ixmapfwd.tun[i]);
+		tun_close(&ixmapfwd, i);
 		ixmap_desc_release(ixmapfwd.ih_array[i]);
 		ixmap_close(ixmapfwd.ih_array[i]);
 	}
 	free(ixmapfwd.neigh);
 err_neigh_table:
-	free(ixmapfwd.tun);
-err_tun:
+	free(ixmapfwd.tunh_array);
+err_tunh_array:
 	free(ixmapfwd.ih_array);
 err_ih_array:
 	return ret;
@@ -361,7 +366,6 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 	thread->index		= thread_index;
 	thread->num_ports	= ixmapfwd->num_ports;
 	thread->ptid		= pthread_self();
-	thread->tun		= ixmapfwd->tun;
 	thread->neigh		= ixmapfwd->neigh;
 	thread->fib		= ixmapfwd->fib;
 

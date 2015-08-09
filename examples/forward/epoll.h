@@ -6,6 +6,7 @@
 #include <ixmap.h>
 #include "linux/list.h"
 #include "linux/list_rcu.h"
+#include "tun.h"
 
 #define EPOLL_MAXEVENTS 16
 
@@ -32,7 +33,7 @@ struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 void epoll_desc_release_irqdev(struct epoll_desc *ep_desc);
 struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset);
 void epoll_desc_release_signalfd(struct epoll_desc *ep_desc);
-struct epoll_desc *epoll_desc_alloc_tun(struct tun **tun,
+struct epoll_desc *epoll_desc_alloc_tun(struct tun_plane *tun_plane,
 	unsigned int port_index);
 void epoll_desc_release_tun(struct epoll_desc *ep_desc);
 struct epoll_desc *epoll_desc_alloc_netlink(struct sockaddr_nl *addr);

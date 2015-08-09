@@ -3,10 +3,6 @@
 
 #include <pthread.h>
 #include <ixmap.h>
-#include "tun.h"
-#include "neigh.h"
-#include "fib.h"
-#include "epoll.h"
 
 //#define DEBUG
 
@@ -37,7 +33,7 @@
 
 struct ixmapfwd {
 	struct ixmap_handle	**ih_array;
-	struct tun		**tun;
+	struct tun_handle	**tunh_array;
 	struct neigh_table	**neigh;
 	struct fib		*fib;
 	unsigned int		buf_size;
