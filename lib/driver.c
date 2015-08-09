@@ -147,7 +147,7 @@ void ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
 	int *slot_index, unsigned int *slot_size)
 {
 	*slot_index = bulk->slot_index[index];
-	*slot_index = bulk->slot_size[index];
+	*slot_size = bulk->slot_size[index];
 
 	return;
 }

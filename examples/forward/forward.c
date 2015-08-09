@@ -20,31 +20,21 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	unsigned int port_index, void *slot_buf, unsigned int slot_size);
 
 #ifdef DEBUG
-void forward_dump(struct ixmap_buf *buf, struct ixmap_bulk *bulk)
+void forward_dump(void *slot_buf, unsigned int slot_size)
 {
-	unsigned short count;
-	int slot_index;
-	unsigned int size;
-	struct ether_header *eth;
-	int i;
+	struct ethhdr *eth;
 
-	count = ixmap_bulk_count_get(bulk);
-	for(i = 0; i < count; i++){
-		slot_index = ixmap_bulk_slot_index_get(bulk, i);
-		size = ixmap_bulk_slot_size_get(bulk, i);
-		eth = (struct ether_header *)ixmap_slot_addr_virt(buf,
-			slot_index);
+	eth = (struct ethhdr *)slot_buf;
 
-		printf("packet dump:\n");
-		printf("\tsrc %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
-			eth->ether_shost[0], eth->ether_shost[1], eth->ether_shost[2],
-			eth->ether_shost[3], eth->ether_shost[4], eth->ether_shost[5]);
-		printf("\tdst %2.2x:%2.2x:%2.2x:%2.2x:%2.2x:%2.2x\n",
-			eth->ether_dhost[0], eth->ether_dhost[1], eth->ether_dhost[2],
-			eth->ether_dhost[3], eth->ether_dhost[4], eth->ether_dhost[5]);
-		printf("\ttype 0x%x\n", eth->ether_type);
-		printf("\tsize %d bytes\n", size);
-	}
+	printf("packet dump:\n");
+	printf("\tsrc %02x:%02x:%02x:%02x:%02x:%02x\n",
+		eth->h_source[0], eth->h_source[1], eth->h_source[2],
+		eth->h_source[3], eth->h_source[4], eth->h_source[5]);
+	printf("\tdst  %02x:%02x:%02x:%02x:%02x:%02x\n",
+		eth->h_dest[0], eth->h_dest[1], eth->h_dest[2],
+		eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
+	printf("\ttype 0x%x\n", eth->h_proto);
+	printf("\tsize %d bytes\n", slot_size);
 }
 #endif
 
@@ -62,6 +52,10 @@ void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
 		ixmap_bulk_slot_get(bulk_array[thread->num_ports], i,
 			&slot_index, &slot_size);
 		slot_buf = ixmap_slot_addr_virt(thread->buf, slot_index);
+
+#ifdef DEBUG
+		forward_dump(slot_buf, slot_size);
+#endif
 
 		eth = (struct ethhdr *)slot_buf;
 		switch(ntohs(eth->h_proto)){

@@ -137,10 +137,6 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 					thread->buf, bulk_array[thread->num_ports]);
 				ixmap_rx_alloc(thread->plane, port_index, thread->buf);
 
-#ifdef DEBUG
-				forward_dump(buf, bulk_array[thread->num_ports]);
-#endif
-
 				forward_process(thread, port_index, bulk_array);
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(thread->plane, i, thread->buf,
