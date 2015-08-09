@@ -25,6 +25,17 @@ int epoll_add(int fd_ep, void *ptr, int fd)
 	return 0;
 }
 
+int epoll_del(int fd_ep, int fd)
+{
+	int ret;
+
+	ret = epoll_ctl(fd_ep, EPOLL_CTL_DEL, fd, NULL);
+	if(ret < 0)
+		return -1;
+
+	return 0;
+}
+
 struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction)

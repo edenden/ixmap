@@ -334,6 +334,7 @@ static void ixmapfwd_fd_destroy(struct list_head *ep_desc_head,
 
 	list_for_each_entry_safe(ep_desc, ep_next, ep_desc_head, list){
 		list_del(&ep_desc->list);
+		epoll_del(fd_ep, ep_desc->fd);
 
 		switch(ep_desc->type){
 		case EPOLL_SIGNAL:

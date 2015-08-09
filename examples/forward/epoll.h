@@ -25,6 +25,7 @@ struct epoll_desc {
 };
 
 int epoll_add(int fd_ep, void *ptr, int fd);
+int epoll_del(int fd_ep, int fd);
 struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 	unsigned int port_index, unsigned int queue_index,
 	enum ixmap_irq_direction direction);
