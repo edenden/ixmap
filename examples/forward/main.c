@@ -377,7 +377,6 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 		perror("failed to set affinity");
 		goto err_set_affinity;
 	}
-	
 
 	return 0;
 
