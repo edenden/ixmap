@@ -8,7 +8,7 @@
 #include "main.h"
 #include "trie.h"
 
-static inline int trie_bit(void *addr, int digit);
+static inline int trie_bit(uint8_t *addr, int digit);
 static struct trie_node *trie_alloc_node(struct trie_node *parent, int index);
 static void _trie_traverse(struct trie_tree *tree, struct trie_node *node);
 static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node);
@@ -27,14 +27,14 @@ void trie_init(struct trie_tree *tree)
 	return;
 }
 
-static inline int trie_bit(void *addr, int digit)
+static inline int trie_bit(uint8_t *addr, int digit)
 {
 	int index, shift;
 
 	index = digit >> 3;
 	shift = (8 - 1) - digit % 8;
 
-	return (((uint8_t *)addr)[index] >> shift) & 0x1;
+	return (addr[index] >> shift) & 0x1;
 }
 
 static struct trie_node *trie_alloc_node(struct trie_node *parent, int index)
