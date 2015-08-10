@@ -30,7 +30,7 @@ void forward_dump(void *slot_buf, unsigned int slot_size)
 	printf("\tsrc %02x:%02x:%02x:%02x:%02x:%02x\n",
 		eth->h_source[0], eth->h_source[1], eth->h_source[2],
 		eth->h_source[3], eth->h_source[4], eth->h_source[5]);
-	printf("\tdst  %02x:%02x:%02x:%02x:%02x:%02x\n",
+	printf("\tdst %02x:%02x:%02x:%02x:%02x:%02x\n",
 		eth->h_dest[0], eth->h_dest[1], eth->h_dest[2],
 		eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
 	printf("\ttype 0x%x\n", eth->h_proto);
@@ -172,12 +172,28 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	if(!fib_entry)
 		goto packet_drop;
 
-	if(unlikely(fib_entry->type == FIB_TYPE_LOCAL
-	|| fib_entry->port_index < 0))
+	if(unlikely(fib_entry->port_index < 0))
 		goto packet_local;
 
-	neigh_entry = neigh_lookup(thread->neigh[fib_entry->port_index],
-		AF_INET, fib_entry->nexthop);
+	switch(fib_entry->type){
+	case FIB_TYPE_LOCAL:
+		goto packet_local;
+		break;
+	case FIB_TYPE_LINK:
+		neigh_entry = neigh_lookup(
+			thread->neigh[fib_entry->port_index],
+			AF_INET, &ip->daddr);
+		break;
+	case FIB_TYPE_FORWARD:
+		neigh_entry = neigh_lookup(
+			thread->neigh[fib_entry->port_index],
+			AF_INET, fib_entry->nexthop);
+		break;
+	default:
+		neigh_entry = NULL;
+		break;
+	}
+
 	if(!neigh_entry)
 		goto packet_local;
 
@@ -233,12 +249,28 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	if(!fib_entry)
 		goto packet_drop;
 
-	if(unlikely(fib_entry->type == FIB_TYPE_LOCAL
-	|| fib_entry->port_index < 0))
+	if(unlikely(fib_entry->port_index < 0))
 		goto packet_local;
 
-	neigh_entry = neigh_lookup(thread->neigh[fib_entry->port_index],
-		AF_INET6, fib_entry->nexthop);
+	switch(fib_entry->type){
+	case FIB_TYPE_LOCAL:
+		goto packet_local;
+		break;
+	case FIB_TYPE_LINK:
+		neigh_entry = neigh_lookup(
+			thread->neigh[fib_entry->port_index],
+			AF_INET6, &ip6->ip6_dst);
+		break;
+	case FIB_TYPE_FORWARD:
+		neigh_entry = neigh_lookup(
+			thread->neigh[fib_entry->port_index],
+			AF_INET6, fib_entry->nexthop);
+		break;
+	default:
+		neigh_entry = NULL;
+		break;
+	}
+
 	if(!neigh_entry)
 		goto packet_local;
 

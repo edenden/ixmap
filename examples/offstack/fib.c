@@ -43,7 +43,7 @@ static void fib_update_print(int family, enum fib_type type,
 		strcpy(family_a, "AF_INET6");
 		break;
 	default:
-		printf("UNKNOWN");
+		strcpy(family_a, "UNKNOWN");
 		break;
 	}
 	printf("\tFAMILY: %s\n", family_a);
@@ -81,7 +81,7 @@ static void fib_delete_print(int family, void *prefix,
 	char prefix_a[128];
 	char family_a[128];
 
-	printf("fib update:\n");
+	printf("fib delete:\n");
 
 	switch(family){
 	case AF_INET:
@@ -91,7 +91,7 @@ static void fib_delete_print(int family, void *prefix,
 		strcpy(family_a, "AF_INET6");
 		break;
 	default:
-		printf("UNKNOWN");
+		strcpy(family_a, "UNKNOWN");
 		break;
 	}
 	printf("\tFAMILY: %s\n", family_a);

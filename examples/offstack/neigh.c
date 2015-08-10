@@ -3,11 +3,80 @@
 #include <string.h>
 #include <stdint.h>
 #include <netinet/ip.h>
+#include <arpa/inet.h>
 
 #include "main.h"
 #include "neigh.h"
 
 static void neigh_entry_delete(struct hash_entry *entry);
+
+#ifdef DEBUG
+static void neigh_add_print(int family,
+	void *dst_addr, void *mac_addr);
+static void neigh_delete_print(int family,
+	void *dst_addr);
+#endif
+
+#ifdef DEBUG
+static void neigh_add_print(int family,
+	void *dst_addr, void *mac_addr)
+{
+	char dst_addr_a[128];
+	char family_a[128];
+
+	printf("neigh update:\n");
+
+	switch(family){
+	case AF_INET:
+		strcpy(family_a, "AF_INET");
+		break;
+	case AF_INET6:
+		strcpy(family_a, "AF_INET6");
+		break;
+	default:
+		strcpy(family_a, "UNKNOWN");
+		break;
+	}
+	printf("\tFAMILY: %s\n", family_a);
+
+	inet_ntop(family, dst_addr, dst_addr_a, sizeof(dst_addr_a));
+	printf("\tDST: %s\n", dst_addr_a);
+
+	printf("\tMAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		((uint8_t *)mac_addr)[0], ((uint8_t *)mac_addr)[1],
+		((uint8_t *)mac_addr)[2], ((uint8_t *)mac_addr)[3],
+		((uint8_t *)mac_addr)[4], ((uint8_t *)mac_addr)[5]);
+
+	return;
+}
+
+static void neigh_delete_print(int family,
+	void *dst_addr)
+{
+	char dst_addr_a[128];
+	char family_a[128];
+
+	printf("neigh delete:\n");
+
+	switch(family){
+	case AF_INET:
+		strcpy(family_a, "AF_INET");
+		break;
+	case AF_INET6:
+		strcpy(family_a, "AF_INET6");
+		break;
+	default:
+		strcpy(family_a, "UNKNOWN");
+		break;
+	}
+	printf("\tFAMILY: %s\n", family_a);
+
+	inet_ntop(family, dst_addr, dst_addr_a, sizeof(dst_addr_a));
+	printf("\tDST: %s\n", dst_addr_a);
+
+	return;
+}
+#endif
 
 struct neigh_table *neigh_alloc()
 {
@@ -67,6 +136,10 @@ int neigh_add(struct neigh_table *neigh, int family,
 
 	memcpy(neigh_entry->dst_mac, mac_addr, ETH_ALEN);
 
+#ifdef DEBUG
+	neigh_add_print(family, dst_addr, mac_addr);
+#endif
+
 	ixmapfwd_mutex_lock(&neigh->mutex);
 	ret = hash_add(&neigh->table, dst_addr, family_len, &neigh_entry->hash);
 	if(ret < 0)
@@ -99,6 +172,10 @@ int neigh_delete(struct neigh_table *neigh, int family,
 		goto err_invalid_family;
 		break;
 	}
+
+#ifdef DEBUG
+	neigh_delete_print(family, dst_addr);
+#endif
 
 	ixmapfwd_mutex_lock(&neigh->mutex);
 	ret = hash_delete(&neigh->table, dst_addr, family_len);
