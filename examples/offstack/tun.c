@@ -214,7 +214,7 @@ static int tun_ifindex(int fd, char *if_name)
 		goto err_tun_ioctl;
 	}
 
-	return 0;
+	return ifr.ifr_ifindex;
 
 err_tun_ioctl:
 	return -1;

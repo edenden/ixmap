@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <netinet/ip.h>
+#include <arpa/inet.h>
 
 #include "linux/list.h"
 #include "linux/list_rcu.h"
@@ -13,6 +14,96 @@ static int fib_entry_insert(struct list_head *head, unsigned int id,
 	struct list_head *list);
 static int fib_entry_delete(struct list_head *head, unsigned int id);
 static void fib_entry_delete_all(struct list_head *head);
+
+#ifdef DEBUG
+static void fib_update_print(int family, enum fib_type type,
+	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	int port_index, int id);
+static void fib_delete_print(int family, uint32_t *prefix,
+	unsigned int prefix_len, int id);
+#endif
+
+#ifdef DEBUG
+static void fib_update_print(int family, enum fib_type type,
+	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	int port_index, int id)
+{
+	char prefix_a[128];
+	char nexthop_a[128];
+	char family_a[128];
+	char type_a[128];
+
+	printf("fib update:\n");
+
+	switch(family){
+	case AF_INET:
+		strcpy(family_a, "AF_INET");
+		break;
+	case AF_INET6:
+		strcpy(family_a, "AF_INET6");
+		break;
+	default:
+		printf("UNKNOWN");
+		break;
+	}
+	printf("\tFAMILY: %s\n", family_a);
+
+	switch(type){
+	case FIB_TYPE_FORWARD:
+		strcpy(type_a, "FIB_TYPE_FORWARD");
+		break;
+	case FIB_TYPE_LINK:
+		strcpy(type_a, "FIB_TYPE_LINK");
+		break;
+	case FIB_TYPE_LOCAL:
+		strcpy(type_a, "FIB_TYPE_LOCAL");
+		break;
+	default:
+		break;
+	}
+	printf("\tTYPE: %s\n", type_a);
+
+	inet_ntop(family, prefix, prefix_a, sizeof(prefix_a));
+	printf("\tPREFIX: %s/%d\n", prefix_a, prefix_len);
+
+	inet_ntop(family, nexthop, nexthop_a, sizeof(nexthop_a));
+	printf("\tNEXTHOP: %s\n", nexthop_a);
+
+	printf("\tPORT: %d\n", port_index);
+	printf("\tID: %d\n", id);
+
+	return;
+}
+
+static void fib_delete_print(int family, uint32_t *prefix,
+	unsigned int prefix_len, int id)
+{
+	char prefix_a[128];
+	char family_a[128];
+
+	printf("fib update:\n");
+
+	switch(family){
+	case AF_INET:
+		strcpy(family_a, "AF_INET");
+		break;
+	case AF_INET6:
+		strcpy(family_a, "AF_INET6");
+		break;
+	default:
+		printf("UNKNOWN");
+		break;
+	}
+	printf("\tFAMILY: %s\n", family_a);
+
+	inet_ntop(family, prefix, prefix_a, sizeof(prefix_a));
+	printf("\tPREFIX: %s/%d\n", prefix_a, prefix_len);
+
+	printf("\tID: %d\n", id);
+
+	return;
+}
+#endif
 
 struct fib *fib_alloc()
 {
@@ -86,10 +177,9 @@ static void fib_entry_delete_all(struct list_head *head)
 	return;
 }
 
-int fib_route_update(struct fib *fib, int family,
-	uint32_t *prefix, unsigned int prefix_len,
-	uint32_t *nexthop, unsigned int port_index,
-	enum fib_type type, unsigned int id)
+int fib_route_update(struct fib *fib, int family, enum fib_type type,
+	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	int port_index, int id)
 {
 	struct fib_entry *entry;
 	unsigned int family_len;
@@ -118,6 +208,11 @@ int fib_route_update(struct fib *fib, int family,
 	entry->type		= type;
 	entry->id		= id;
 
+#ifdef DEBUG
+	fib_update_print(family, type, prefix, prefix_len,
+		nexthop, port_index, id);
+#endif
+
 	ixmapfwd_mutex_lock(&fib->mutex);
 	ret = trie_add(&fib->tree, family_len,
 		prefix, prefix_len, id, &entry->list);
@@ -137,7 +232,7 @@ err_invalid_family:
 
 int fib_route_delete(struct fib *fib, int family,
 	uint32_t *prefix, unsigned int prefix_len,
-	unsigned int id)
+	int id)
 {
 	unsigned int family_len;
 	int ret;
@@ -153,6 +248,10 @@ int fib_route_delete(struct fib *fib, int family,
 		goto err_invalid_family;
 		break;
 	}
+
+#ifdef DEBUG
+	fib_delete_print(family, prefix, prefix_len, id);
+#endif
 
 	ixmapfwd_mutex_lock(&fib->mutex);
 	ret = trie_delete(&fib->tree, family_len,

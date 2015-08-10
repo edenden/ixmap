@@ -29,13 +29,12 @@ struct fib {
 
 struct fib *fib_alloc();
 void fib_release(struct fib *fib);
-int fib_route_update(struct fib *fib, int family,
-	uint32_t *prefix, unsigned int prefix_len,
-	uint32_t *nexthop, unsigned int port_index,
-	enum fib_type type, unsigned int id);
+int fib_route_update(struct fib *fib, int family, enum fib_type type,
+	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	int port_index, int id);
 int fib_route_delete(struct fib *fib, int family,
 	uint32_t *prefix, unsigned int prefix_len,
-	unsigned int id);
+	int id);
 struct list_head *fib_lookup(struct fib *fib, int family,
 	uint32_t *destination);
 

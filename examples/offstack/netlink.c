@@ -99,8 +99,8 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
-		fib_route_update(ixmapfwd->fib, family, prefix, prefix_len,
-			nexthop, port_index, type, ifindex);
+		fib_route_update(ixmapfwd->fib, family, type,
+			prefix, prefix_len, nexthop, port_index, ifindex);
 		break;
 	case RTM_DELROUTE:
 		fib_route_delete(ixmapfwd->fib, family, prefix, prefix_len, ifindex);
