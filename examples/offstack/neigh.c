@@ -44,7 +44,7 @@ static void neigh_entry_delete(struct hash_entry *entry)
 }
 
 int neigh_add(struct neigh_table *neigh, int family,
-	uint32_t *dst_addr, uint8_t *mac_addr)
+	void *dst_addr, void *mac_addr)
 {
 	struct neigh_entry *neigh_entry;
 	int family_len, ret;
@@ -84,7 +84,7 @@ err_invalid_family:
 }
 
 int neigh_delete(struct neigh_table *neigh, int family,
-	uint32_t *dst_addr)
+	void *dst_addr)
 {
 	int family_len, ret;
 
@@ -115,7 +115,7 @@ err_invalid_family:
 }
 
 struct neigh_entry *neigh_lookup(struct neigh_table *neigh, int family,
-	uint32_t *dst_addr)
+	void *dst_addr)
 {
 	struct hash_entry *hash_entry;
 	struct neigh_entry *neigh_entry;

@@ -13,9 +13,9 @@ enum fib_type {
 };
 
 struct fib_entry {
-	uint32_t		prefix[4];
+	uint8_t			prefix[16];
 	unsigned int		prefix_len;
-	uint32_t		nexthop[4];
+	uint8_t			nexthop[16];
 	int			port_index; /* -1 means not ixmap interface */
 	enum fib_type		type;
 	struct list_head	list;
@@ -30,12 +30,12 @@ struct fib {
 struct fib *fib_alloc();
 void fib_release(struct fib *fib);
 int fib_route_update(struct fib *fib, int family, enum fib_type type,
-	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	void *prefix, unsigned int prefix_len, void *nexthop,
 	int port_index, int id);
 int fib_route_delete(struct fib *fib, int family,
-	uint32_t *prefix, unsigned int prefix_len,
+	void *prefix, unsigned int prefix_len,
 	int id);
 struct list_head *fib_lookup(struct fib *fib, int family,
-	uint32_t *destination);
+	void *destination);
 
 #endif /* _IXMAPFWD_FIB_H */

@@ -18,10 +18,10 @@ struct neigh_entry {
 struct neigh_table *neigh_alloc();
 void neigh_release(struct neigh_table *neigh);
 int neigh_add(struct neigh_table *neigh, int family,
-	uint32_t *dst_addr, uint8_t *mac_addr);
+	void *dst_addr, void *mac_addr);
 int neigh_delete(struct neigh_table *neigh, int family,
-	uint32_t *dst_addr);
+	void *dst_addr);
 struct neigh_entry *neigh_lookup(struct neigh_table *neigh, int family,
-	uint32_t *dst_addr);
+	void *dst_addr);
 
 #endif /* _IXMAPFWD_NEIGH_H */

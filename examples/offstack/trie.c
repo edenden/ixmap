@@ -8,7 +8,7 @@
 #include "main.h"
 #include "trie.h"
 
-static int trie_bit(uint32_t *addr, int digit);
+static inline int trie_bit(void *addr, int digit);
 static struct trie_node *trie_alloc_node(struct trie_node *parent, int index);
 static void _trie_traverse(struct trie_tree *tree, struct trie_node *node);
 static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node);
@@ -27,14 +27,14 @@ void trie_init(struct trie_tree *tree)
 	return;
 }
 
-static int trie_bit(uint32_t *addr, int digit)
+static inline int trie_bit(void *addr, int digit)
 {
 	int index, shift;
 
-	index = digit >> 5;
-	shift = digit % 32;
+	index = digit >> 3;
+	shift = (8 - 1) - digit % 8;
 
-	return (addr[index] >> shift) & 0x1;
+	return (((uint8_t *)addr)[index] >> shift) & 0x1;
 }
 
 static struct trie_node *trie_alloc_node(struct trie_node *parent, int index)
@@ -78,17 +78,15 @@ static void _trie_traverse(struct trie_tree *tree, struct trie_node *node)
 
 /* rcu_read_lock needs to be hold by caller from readside */
 int trie_traverse(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len)
+	void *prefix, unsigned int prefix_len)
 {
 	struct trie_node *node;
-	int rest_len, index;
+	int index, i;
 
 	node = &tree->node;
-	rest_len = prefix_len;
 
-	while(rest_len > 0){
-		rest_len--;
-		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
+	for(i = 0; i < prefix_len; i++){
+		index = trie_bit(prefix, i);
 
 		node = rcu_dereference(node->child[index]);
 		if(node == NULL){
@@ -136,19 +134,17 @@ void trie_delete_all(struct trie_tree *tree)
 
 /* rcu_read_lock needs to be hold by caller from readside */
 struct list_head *trie_lookup(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *destination)
+	void *destination)
 {
 	struct trie_node *node;
 	struct list_head *head;
-	int rest_len, index;
+	int index, i;
 
 	node = &tree->node;
 	head = NULL;
-	rest_len = family_len;
 
-	while(rest_len > 0){
-		rest_len--;
-		index = trie_bit(destination, rest_len);
+	for(i = 0; i < family_len; i++){
+		index = trie_bit(destination, i);
 
 		node = rcu_dereference(node->child[index]);
 		if(node == NULL){
@@ -191,18 +187,16 @@ static void _trie_cleanup(struct trie_node *node, int index)
 }
 
 int trie_add(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, unsigned int id,
+	void *prefix, unsigned int prefix_len, unsigned int id,
 	struct list_head *list)
 {
 	struct trie_node *node, *parent;
-	int rest_len, index, ret;
+	int index, ret, i;
 
 	node = &tree->node;
-	rest_len = prefix_len;
 
-	while(rest_len > 0){
-		rest_len--;
-		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
+	for(i = 0; i < prefix_len; i++){
+		index = trie_bit(prefix, i);
 		parent = node;
 
 		node = rcu_dereference(parent->child[index]);
@@ -213,7 +207,6 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 
 			rcu_assign_pointer(parent->child[index], node);
 		}
-
 	}
 
 	ret = tree->trie_entry_insert(&node->head, id, list);
@@ -229,17 +222,15 @@ err_insert:
 }
 
 int trie_delete(struct trie_tree *tree, unsigned int family_len,
-	uint32_t *prefix, unsigned int prefix_len, unsigned int id)
+	void *prefix, unsigned int prefix_len, unsigned int id)
 {
 	struct trie_node *node, *parent;
-	int rest_len, index, ret;
+	int index, ret, i;
 
 	node = &tree->node;
-	rest_len = prefix_len;
 
-	while(rest_len > 0){
-		rest_len--;
-		index = trie_bit(prefix, (family_len - (prefix_len - rest_len)));
+	for(i = 0; i < prefix_len; i++){
+		index = trie_bit(prefix, i);
 		parent = node;
 
 		node = rcu_dereference(parent->child[index]);

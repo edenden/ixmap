@@ -50,8 +50,8 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
 	int route_attr_len, family;
-	uint32_t prefix[4] = {};
-	uint32_t nexthop[4] = {};
+	uint8_t prefix[16] = {};
+	uint8_t nexthop[16] = {};
 	unsigned int prefix_len;
 	int ifindex, port_index, i;
 	enum fib_type type;
@@ -119,7 +119,7 @@ static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	int route_attr_len;
 	int ifindex;
 	int family;
-	uint32_t dst_addr[4] = {};
+	uint8_t dst_addr[16] = {};
 	uint8_t dst_mac[ETH_ALEN] = {};
 	int i, port_index = -1;
 

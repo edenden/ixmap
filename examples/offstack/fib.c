@@ -17,15 +17,15 @@ static void fib_entry_delete_all(struct list_head *head);
 
 #ifdef DEBUG
 static void fib_update_print(int family, enum fib_type type,
-	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	void *prefix, unsigned int prefix_len, void *nexthop,
 	int port_index, int id);
-static void fib_delete_print(int family, uint32_t *prefix,
+static void fib_delete_print(int family, void *prefix,
 	unsigned int prefix_len, int id);
 #endif
 
 #ifdef DEBUG
 static void fib_update_print(int family, enum fib_type type,
-	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	void *prefix, unsigned int prefix_len, void *nexthop,
 	int port_index, int id)
 {
 	char prefix_a[128];
@@ -75,7 +75,7 @@ static void fib_update_print(int family, enum fib_type type,
 	return;
 }
 
-static void fib_delete_print(int family, uint32_t *prefix,
+static void fib_delete_print(int family, void *prefix,
 	unsigned int prefix_len, int id)
 {
 	char prefix_a[128];
@@ -178,7 +178,7 @@ static void fib_entry_delete_all(struct list_head *head)
 }
 
 int fib_route_update(struct fib *fib, int family, enum fib_type type,
-	uint32_t *prefix, unsigned int prefix_len, uint32_t *nexthop,
+	void *prefix, unsigned int prefix_len, void *nexthop,
 	int port_index, int id)
 {
 	struct fib_entry *entry;
@@ -231,7 +231,7 @@ err_invalid_family:
 }
 
 int fib_route_delete(struct fib *fib, int family,
-	uint32_t *prefix, unsigned int prefix_len,
+	void *prefix, unsigned int prefix_len,
 	int id)
 {
 	unsigned int family_len;
@@ -269,7 +269,7 @@ err_invalid_family:
 }
 
 struct list_head *fib_lookup(struct fib *fib, int family,
-	uint32_t *destination)
+	void *destination)
 {
 	struct list_head *head;
 	unsigned int family_len;
