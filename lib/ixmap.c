@@ -184,14 +184,14 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 			goto err_rx_assign;
 		}
 
-		addr_virtual	+= (i * size_rx_desc);
-		addr_dma	+= (i * size_rx_desc);
-
 		ih->rx_ring[i].addr_dma = addr_dma;
 		ih->rx_ring[i].addr_virtual = addr_virtual;
 		ih->rx_ring[i].next_to_use = 0;
 		ih->rx_ring[i].next_to_clean = 0;
 		ih->rx_ring[i].slot_index = slot_index;
+
+		addr_virtual	+= size_rx_desc;
+		addr_dma	+= size_rx_desc;
 	}
 
 	/* Tx descripter ring allocation */
@@ -203,14 +203,14 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 			goto err_tx_assign;
 		}
 
-		addr_virtual	+= (i * size_tx_desc);
-		addr_dma	+= (i * size_tx_desc);
-
 		ih->tx_ring[i].addr_dma = addr_dma;
 		ih->tx_ring[i].addr_virtual = addr_virtual;
 		ih->tx_ring[i].next_to_use = 0;
 		ih->tx_ring[i].next_to_clean = 0;
 		ih->tx_ring[i].slot_index = slot_index;
+
+		addr_virtual	+= size_tx_desc;
+		addr_dma	+= size_tx_desc;
 	}
 
 	ih->num_rx_desc = num_rx_desc;

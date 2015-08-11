@@ -157,6 +157,7 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	struct fib_entry	*fib_entry;
 	struct neigh_entry	*neigh_entry;
 	uint8_t			*dst_mac, *src_mac;
+	uint32_t		check;
 	int			fd, ret;
 
 	eth = (struct ethhdr *)slot_buf;
@@ -201,7 +202,10 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 		goto packet_local;
 
 	ip->ttl--;
-	ip->check--;
+
+	check = ip->check;
+	check += htons(0x0100);
+	ip->check = check + ((check >= 0xFFFF) ? 1 : 0);
 
 	dst_mac = neigh_entry->dst_mac;
 	src_mac = ixmap_macaddr(thread->plane, fib_entry->port_index);
