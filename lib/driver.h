@@ -52,6 +52,4 @@
 #define IXGBE_TX_DESC(R, i)	\
 	(&(((union ixmap_adv_tx_desc *)((R)->addr_virtual))[i]))
 
-#define IXMAP_BULK_RESERVED 128
-
 #endif /* _IXMAP_DRIVER_H */

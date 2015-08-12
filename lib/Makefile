@@ -2,7 +2,7 @@
 #char code "LF(UNIX)" is required!!
 
 CC = gcc
-CFLAGS = -Wall -fPIC
+CFLAGS = -Wall -fPIC -O2
 LDFLAGS = -shared 
 TARGET = ixmap
 LIBS = 

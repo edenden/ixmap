@@ -102,7 +102,6 @@ struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_plane *plane,
 			max_bulk_count = plane->ports[i].budget;
 		}
 	}
-	max_bulk_count += IXMAP_BULK_RESERVED;
 
 	bulk = malloc(sizeof(struct ixmap_bulk));
 	if(!bulk)
@@ -197,7 +196,7 @@ void ixmap_rx_alloc(struct ixmap_plane *plane, unsigned int port_index,
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
-	unsigned int total_allocated = 0;
+	unsigned int total_allocated;
 	uint16_t max_allocation;
 
 	port = &plane->ports[port_index];
@@ -207,7 +206,8 @@ void ixmap_rx_alloc(struct ixmap_plane *plane, unsigned int port_index,
 	if (!max_allocation)
 		return;
 
-	do{
+	total_allocated = 0;
+	while(likely(total_allocated < max_allocation)){
 		union ixmap_adv_rx_desc *rx_desc;
 		uint16_t next_to_use;
 		uint64_t addr_dma;
@@ -234,7 +234,7 @@ void ixmap_rx_alloc(struct ixmap_plane *plane, unsigned int port_index,
 			(next_to_use < port->num_rx_desc) ? next_to_use : 0;
 
 		total_allocated++;
-	}while(likely(total_allocated < max_allocation));
+	}
 
 	if(likely(total_allocated)){
 		/*
@@ -254,7 +254,7 @@ void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
-	unsigned int total_xmit = 0;
+	unsigned int total_xmit;
 	uint16_t unused_count;
 	uint32_t tx_flags;
 	int i;
@@ -272,7 +272,8 @@ void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
 	unused_count =	min(bulk->count,
 			ixmap_desc_unused(tx_ring, port->num_tx_desc));
 
-	do{
+	total_xmit = 0;
+	while(likely(total_xmit < unused_count)){
 		union ixmap_adv_tx_desc *tx_desc;
 		uint16_t next_to_use;
 		int slot_index;
@@ -285,8 +286,10 @@ void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
 
 		slot_index = bulk->slot_index[total_xmit];
 		slot_size = bulk->slot_size[total_xmit];
-		if(unlikely(slot_size > IXGBE_MAX_DATA_PER_TXD))
-			continue;
+		if(unlikely(slot_size > IXGBE_MAX_DATA_PER_TXD)){
+			ixmap_print("BUG: slot_size is bigger than MAX_DATA\n");
+			break;
+		}
 
 		ixmap_slot_attach(tx_ring, tx_ring->next_to_use, slot_index);
 		addr_dma = (uint64_t)ixmap_slot_addr_dma(buf,
@@ -306,7 +309,7 @@ void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
 			(next_to_use < port->num_tx_desc) ? next_to_use : 0;
 
 		total_xmit++;
-	}while(likely(total_xmit < unused_count));
+	}
 
 	if(likely(total_xmit)){
 		/*
@@ -336,12 +339,13 @@ int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
-	unsigned int total_rx_packets = 0;
+	unsigned int total_rx_packets;
 
 	port = &plane->ports[port_index];
 	rx_ring = port->rx_ring;
 
-	do{
+	total_rx_packets = 0;
+	while(likely(total_rx_packets < port->budget)){
 		union ixmap_adv_rx_desc *rx_desc;
 		uint16_t next_to_clean;
 		int slot_index;
@@ -391,7 +395,7 @@ int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 		/* XXX: Should we prefetch the next_to_clean desc ? */
 
 		total_rx_packets++;
-	}while(likely(total_rx_packets < port->budget));
+	}
 
 	bulk->count = total_rx_packets;
 	port->count_rx_clean_total += total_rx_packets;
@@ -403,12 +407,13 @@ int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
-	unsigned int total_tx_packets = 0;
+	unsigned int total_tx_packets;
 
 	port = &plane->ports[port_index];
 	tx_ring = port->tx_ring;
 
-	do {
+	total_tx_packets = 0;
+	while(likely(total_tx_packets < port->budget)){
 		union ixmap_adv_tx_desc *tx_desc;
 		uint16_t next_to_clean;
 		int slot_index;
@@ -431,7 +436,7 @@ int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 			(next_to_clean < port->num_tx_desc) ? next_to_clean : 0;
 
 		total_tx_packets++;
-	}while(likely(total_tx_packets < port->budget));
+	}
 
 	port->count_tx_clean_total += total_tx_packets;
 	return total_tx_packets;
