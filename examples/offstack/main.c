@@ -34,7 +34,7 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread);
 static int ixmapfwd_set_signal(sigset_t *sigset);
 
-static int buf_count = 16384;
+static int buf_count = 65536;
 static char *ixmap_interface_array[2];
 
 int main(int argc, char **argv)
