@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <ixmap.h>
 
-#define DEBUG
+//#define DEBUG
 
 #define min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
