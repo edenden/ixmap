@@ -49,8 +49,8 @@ void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
 
 	count = ixmap_bulk_slot_count(bulk_array[thread->num_ports]);
 	for(i = 0; i < count; i++){
-		ixmap_bulk_slot_get(bulk_array[thread->num_ports], i,
-			&slot_index, &slot_size);
+		slot_index = ixmap_bulk_slot_index(bulk_array[thread->num_ports], i);
+		slot_size = ixmap_bulk_slot_size(bulk_array[thread->num_ports], i);
 		slot_buf = ixmap_slot_addr_virt(thread->buf, slot_index);
 
 #ifdef DEBUG

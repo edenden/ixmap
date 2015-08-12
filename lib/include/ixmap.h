@@ -68,12 +68,12 @@ struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_plane *plane,
 	unsigned int num_ports);
 void ixmap_bulk_release(struct ixmap_bulk *bulk);
 
-unsigned short ixmap_bulk_slot_count(struct ixmap_bulk *bulk);
-void ixmap_bulk_slot_get(struct ixmap_bulk *bulk, unsigned short index,
-	int *slot_index, unsigned int *slot_size);
-int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
+inline unsigned short ixmap_bulk_slot_count(struct ixmap_bulk *bulk);
+inline int ixmap_bulk_slot_index(struct ixmap_bulk *bulk, unsigned short index);
+inline unsigned int ixmap_bulk_slot_size(struct ixmap_bulk *bulk, unsigned short index);
+inline int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
 	int slot_index, unsigned int slot_size);
-int ixmap_bulk_slot_pop(struct ixmap_bulk *bulk,
+inline int ixmap_bulk_slot_pop(struct ixmap_bulk *bulk,
 	int *slot_index, unsigned int *slot_size);
 
 void ixmap_rx_alloc(struct ixmap_plane *plane, unsigned int port_index,
