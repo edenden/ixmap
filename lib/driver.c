@@ -73,15 +73,6 @@ inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
 	return;
 }
 
-inline unsigned int ixmap_budget(struct ixmap_plane *plane,
-	unsigned int port_index)
-{
-	unsigned int budget;
-
-	budget = plane->ports[port_index].budget;
-	return budget;
-}
-
 inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh)
 {
 	unsigned int port_index;
@@ -227,7 +218,7 @@ void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index)
 	return;
 }
 
-int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
+void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf, void *opaque,
 	void (*process)(int, unsigned int, unsigned int, void *))
 {
@@ -291,10 +282,10 @@ int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	}
 
 	port->count_rx_clean_total += total_rx_packets;
-	return total_rx_packets;
+	return;
 }
 
-int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
+void ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf)
 {
 	struct ixmap_port *port;
@@ -331,7 +322,7 @@ int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	}
 
 	port->count_tx_clean_total += total_tx_packets;
-	return total_tx_packets;
+	return;
 }
 
 uint8_t *ixmap_macaddr(struct ixmap_plane *plane,

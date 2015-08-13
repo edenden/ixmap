@@ -108,36 +108,33 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				port_index = ixmap_port_index(irqh);
 
 				/* Rx descripter cleaning */
-				ret = ixmap_rx_clean(thread->plane, port_index,
+				ixmap_rx_clean(thread->plane, port_index,
 					thread->buf, thread, forward_process);
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(thread->plane, i);
 				}
 
-				ixmap_rx_assign(thread->plane, port_index, thread->buf);
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					goto err_read;
 
-				if(ret < ixmap_budget(thread->plane, port_index)){
-					ret = read(ep_desc->fd, read_buf, read_size);
-					if(ret < 0)
-						goto err_read;
-
-					ixmap_irq_unmask_queues(thread->plane, irqh);
-				}
+				ixmap_irq_unmask_queues(thread->plane, irqh);
 				break;
 			case EPOLL_IRQ_TX:
 				irqh = (struct ixmap_irqdev_handle *)ep_desc->data;
 				port_index = ixmap_port_index(irqh);
 
 				/* Tx descripter cleaning */
-				ret = ixmap_tx_clean(thread->plane, port_index, thread->buf);
-
-				if(ret < ixmap_budget(thread->plane, port_index)){
-					ret = read(ep_desc->fd, read_buf, read_size);
-					if(ret < 0)
-						goto err_read;
-
-					ixmap_irq_unmask_queues(thread->plane, irqh);
+				ixmap_tx_clean(thread->plane, port_index, thread->buf);
+				for(i = 0; i < thread->num_ports; i++){
+					ixmap_rx_assign(thread->plane, i, thread->buf);
 				}
+
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					goto err_read;
+
+				ixmap_irq_unmask_queues(thread->plane, irqh);
 				break;
 			case EPOLL_TUN:
 				port_index = *(unsigned int *)ep_desc->data;

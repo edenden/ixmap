@@ -60,8 +60,6 @@ int ixmap_irqdev_fd(struct ixmap_irqdev_handle *irqh);
 
 inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
 	struct ixmap_irqdev_handle *irqh);
-inline unsigned int ixmap_budget(struct ixmap_plane *plane,
-	unsigned int port_index);
 inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh);
 
 void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
@@ -69,10 +67,10 @@ void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
 void ixmap_tx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf, int slot_index, unsigned int slot_size);
 void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index);
-int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
+void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf, void *opaque,
 	void (*process)(int, unsigned int, unsigned int, void *));
-int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
+void ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);
 
 uint8_t *ixmap_macaddr(struct ixmap_plane *plane,
