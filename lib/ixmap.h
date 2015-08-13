@@ -76,13 +76,6 @@ struct ixmap_buf {
 	int32_t		*free_index;
 };
 
-struct ixmap_bulk {
-	uint16_t	count;
-	uint16_t	max_count;
-	int32_t		*slot_index;
-	uint32_t	*slot_size;
-};
-
 struct ixmap_handle {
  	int			fd;
 	void			*bar;
@@ -118,6 +111,7 @@ struct ixmap_port {
 	void			*irqreg[2];
 	struct ixmap_ring	*rx_ring;
 	struct ixmap_ring	*tx_ring;
+	uint32_t		tx_suspended;
 	uint32_t		mtu_frame;
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;

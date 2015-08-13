@@ -26,7 +26,6 @@ struct ixmap_handle;
 struct ixmap_irqdev_handle;
 struct ixmap_buf;
 struct ixmap_plane;
-struct ixmap_bulk;
 
 enum ixmap_irq_direction {
 	IXMAP_IRQ_RX = 0,
@@ -64,24 +63,15 @@ inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
 inline unsigned int ixmap_budget(struct ixmap_plane *plane,
 	unsigned int port_index);
 inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh);
-struct ixmap_bulk *ixmap_bulk_alloc(struct ixmap_plane *plane,
-	unsigned int num_ports);
-void ixmap_bulk_release(struct ixmap_bulk *bulk);
 
-inline unsigned short ixmap_bulk_slot_count(struct ixmap_bulk *bulk);
-inline int ixmap_bulk_slot_index(struct ixmap_bulk *bulk, unsigned short index);
-inline unsigned int ixmap_bulk_slot_size(struct ixmap_bulk *bulk, unsigned short index);
-inline int ixmap_bulk_slot_push(struct ixmap_bulk *bulk,
-	int slot_index, unsigned int slot_size);
-inline int ixmap_bulk_slot_pop(struct ixmap_bulk *bulk,
-	int *slot_index, unsigned int *slot_size);
-
-void ixmap_rx_alloc(struct ixmap_plane *plane, unsigned int port_index,
+void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);
-void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index,
-	struct ixmap_buf *buf, struct ixmap_bulk *bulk);
+void ixmap_tx_assign(struct ixmap_plane *plane, unsigned int port_index,
+	struct ixmap_buf *buf, int slot_index, unsigned int slot_size);
+void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index);
 int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
-	struct ixmap_buf *buf, struct ixmap_bulk *bulk);
+	struct ixmap_buf *buf, void *opaque,
+	void (*process)(int, unsigned int, unsigned int, void *));
 int ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);
 

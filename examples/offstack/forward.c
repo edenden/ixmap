@@ -38,67 +38,59 @@ void forward_dump(void *slot_buf, unsigned int slot_size)
 }
 #endif
 
-void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
-	struct ixmap_bulk **bulk_array)
+void forward_process(int slot_index, unsigned int slot_size,
+	unsigned int port_index, void *opaque)
 {
-	unsigned short count;
-	int slot_index, i, ret;
-	unsigned int slot_size;
+	struct ixmapfwd_thread *thread;
 	void *slot_buf;
 	struct ethhdr *eth;
+	int ret;
 
-	count = ixmap_bulk_slot_count(bulk_array[thread->num_ports]);
-	for(i = 0; i < count; i++){
-		slot_index = ixmap_bulk_slot_index(bulk_array[thread->num_ports], i);
-		slot_size = ixmap_bulk_slot_size(bulk_array[thread->num_ports], i);
-		slot_buf = ixmap_slot_addr_virt(thread->buf, slot_index);
+	thread = (struct ixmapfwd_thread *)opaque;
+	slot_buf = ixmap_slot_addr_virt(thread->buf, slot_index);
 
 #ifdef DEBUG
-		forward_dump(slot_buf, slot_size);
+	forward_dump(slot_buf, slot_size);
 #endif
 
-		eth = (struct ethhdr *)slot_buf;
-		switch(ntohs(eth->h_proto)){
-		case ETH_P_ARP:
-			ret = forward_arp_process(thread, port_index, slot_buf,
-				slot_size);
-			break;
-		case ETH_P_IP:
-			ret = forward_ip_process(thread, port_index, slot_buf,
-				slot_size);
-			break;
-		case ETH_P_IPV6:
-			ret = forward_ip6_process(thread, port_index, slot_buf,
-				slot_size);
-			break;
-		default:
-			ret = -1;
-			break;
-		}
-
-		if(ret < 0){
-			goto packet_drop;
-		}
-
-		ret = ixmap_bulk_slot_push(bulk_array[ret],
-			slot_index, slot_size);
-		if(ret < 0)
-			goto packet_drop;
-
-		continue;
-packet_drop:
-		ixmap_slot_release(thread->buf, slot_index);
+	eth = (struct ethhdr *)slot_buf;
+	switch(ntohs(eth->h_proto)){
+	case ETH_P_ARP:
+		ret = forward_arp_process(thread, port_index, slot_buf,
+			slot_size);
+		break;
+	case ETH_P_IP:
+		ret = forward_ip_process(thread, port_index, slot_buf,
+			slot_size);
+		break;
+	case ETH_P_IPV6:
+		ret = forward_ip6_process(thread, port_index, slot_buf,
+			slot_size);
+		break;
+	default:
+		ret = -1;
+		break;
 	}
 
+	if(ret < 0){
+		goto packet_drop;
+	}
+
+	ixmap_tx_assign(thread->plane, ret, thread->buf,
+		slot_index, slot_size);
+	return;
+
+packet_drop:
+	ixmap_slot_release(thread->buf, slot_index);
 	return;
 }
 
 void forward_process_tun(struct ixmapfwd_thread *thread, unsigned int port_index,
-	struct ixmap_bulk **bulk_array, uint8_t *read_buf, int read_size)
+	uint8_t *read_buf, unsigned int read_size)
 {
-	int slot_index, ret;
-	void *slot_buf;
+	int slot_index;
 	unsigned int slot_size;
+	void *slot_buf;
 
 	slot_index = ixmap_slot_assign(thread->buf);
 	if(slot_index < 0){
@@ -117,15 +109,10 @@ void forward_process_tun(struct ixmapfwd_thread *thread, unsigned int port_index
 	forward_dump(slot_buf, read_size);
 #endif
 
-	ret = ixmap_bulk_slot_push(bulk_array[port_index],
+	ixmap_tx_assign(thread->plane, port_index, thread->buf,
 		slot_index, read_size);
-	if(ret < 0){
-		goto err_slot_push;
-	}
-
 	return;
 
-err_slot_push:
 err_slot_size:
 	ixmap_slot_release(thread->buf, slot_index);
 err_slot_assign:

@@ -104,6 +104,7 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 		plane->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
 		plane->ports[i].rx_ring = &(ih_list[i]->rx_ring[queue_index]);
 		plane->ports[i].tx_ring = &(ih_list[i]->tx_ring[queue_index]);
+		plane->ports[i].tx_suspended = 0;
 		plane->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
 		plane->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
 		plane->ports[i].num_queues = ih_list[i]->num_queues;

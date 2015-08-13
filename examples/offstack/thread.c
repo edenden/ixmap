@@ -20,8 +20,7 @@
 #include "epoll.h"
 
 static int thread_wait(struct ixmapfwd_thread *thread,
-	int fd_ep, uint8_t *read_buf, int read_size,
-	struct ixmap_bulk **bulk_array);
+	int fd_ep, uint8_t *read_buf, int read_size);
 static int thread_fd_prepare(struct list_head *ep_desc_head,
 	struct ixmapfwd_thread *thread);
 static void thread_fd_destroy(struct list_head *ep_desc_head,
@@ -32,11 +31,9 @@ static void thread_print_result(struct ixmapfwd_thread *thread);
 void *thread_process_interrupt(void *data)
 {
 	struct ixmapfwd_thread	*thread = data;
-	struct ixmap_bulk	**bulk_array;
 	struct list_head	ep_desc_head;
 	uint8_t			*read_buf;
-	int			read_size, fd_ep, i, ret,
-				bulk_assigned = 0;
+	int			read_size, fd_ep, i, ret;
 
 	ixgbe_print("thread %d started\n", thread->index);
 	INIT_LIST_HEAD(&ep_desc_head);
@@ -52,17 +49,6 @@ void *thread_process_interrupt(void *data)
 	if(!read_buf)
 		goto err_alloc_read_buf;
 
-	bulk_array = malloc(sizeof(struct ixmap_bulk *) * (thread->num_ports + 1));
-	if(!bulk_array)
-		goto err_bulk_array_alloc;
-
-	for(i = 0; i < thread->num_ports + 1; i++, bulk_assigned++){
-		bulk_array[i] = ixmap_bulk_alloc(thread->plane,
-			thread->num_ports);
-		if(!bulk_array[i])
-			goto err_bulk_alloc;
-	}
-
 	/* Prepare each fd in epoll */
 	fd_ep = thread_fd_prepare(&ep_desc_head, thread);
 	if(fd_ep < 0){
@@ -72,21 +58,17 @@ void *thread_process_interrupt(void *data)
 
 	/* Prepare initial RX buffer */
 	for(i = 0; i < thread->num_ports; i++){
-		ixmap_rx_alloc(thread->plane, i, thread->buf);
+		ixmap_rx_assign(thread->plane, i, thread->buf);
 	}
 
 	rcu_register_thread();
 
-	ret = thread_wait(thread, fd_ep, read_buf, read_size, bulk_array);
+	ret = thread_wait(thread, fd_ep, read_buf, read_size);
 	if(ret < 0)
 		goto err_wait;
 
 	rcu_unregister_thread();
 	thread_fd_destroy(&ep_desc_head, fd_ep);
-	for(i = 0; i < bulk_assigned; i++){
-		ixmap_bulk_release(bulk_array[i]);
-	}
-	free(bulk_array);
 	free(read_buf);
 	thread_print_result(thread);
 	return NULL;
@@ -95,12 +77,6 @@ err_wait:
 	rcu_unregister_thread();
 	thread_fd_destroy(&ep_desc_head, fd_ep);
 err_ixgbe_epoll_prepare:
-err_bulk_alloc:
-	for(i = 0; i < bulk_assigned; i++){
-		ixmap_bulk_release(bulk_array[i]);
-	}
-	free(bulk_array);
-err_bulk_array_alloc:
 	free(read_buf);
 err_alloc_read_buf:
 	printf("thread execution failed\n");
@@ -109,8 +85,7 @@ err_alloc_read_buf:
 }
 
 static int thread_wait(struct ixmapfwd_thread *thread,
-	int fd_ep, uint8_t *read_buf, int read_size,
-	struct ixmap_bulk **bulk_array)
+	int fd_ep, uint8_t *read_buf, int read_size)
 {
         struct epoll_desc *ep_desc;
         struct ixmap_irqdev_handle *irqh;
@@ -134,14 +109,12 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 
 				/* Rx descripter cleaning */
 				ret = ixmap_rx_clean(thread->plane, port_index,
-					thread->buf, bulk_array[thread->num_ports]);
-				ixmap_rx_alloc(thread->plane, port_index, thread->buf);
-
-				forward_process(thread, port_index, bulk_array);
+					thread->buf, thread, forward_process);
 				for(i = 0; i < thread->num_ports; i++){
-					ixmap_tx_xmit(thread->plane, i, thread->buf,
-						bulk_array[i]);
+					ixmap_tx_xmit(thread->plane, i);
 				}
+
+				ixmap_rx_assign(thread->plane, port_index, thread->buf);
 
 				if(ret < ixmap_budget(thread->plane, port_index)){
 					ret = read(ep_desc->fd, read_buf, read_size);
@@ -173,11 +146,9 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				if(ret < 0)
 					goto err_read;
 
-				forward_process_tun(thread, port_index, bulk_array,
-					read_buf, ret);
+				forward_process_tun(thread, port_index, read_buf, ret);
 				for(i = 0; i < thread->num_ports; i++){
-					ixmap_tx_xmit(thread->plane, i, thread->buf,
-						bulk_array[i]);
+					ixmap_tx_xmit(thread->plane, i);
 				}
 				break;
 			case EPOLL_SIGNAL:
