@@ -164,7 +164,6 @@ void ixmap_tx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	port = &plane->ports[port_index];
 	tx_ring = port->tx_ring;
 
-	/* set type for advanced descriptor with frame checksum insertion */
 	unused_count = ixmap_desc_unused(tx_ring, port->num_tx_desc);
 	if(!unused_count){
 		port->count_tx_xmit_failed++;
@@ -185,6 +184,7 @@ void ixmap_tx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	ixmap_print("Tx: packet sending DMAaddr = %p size = %d\n",
 		(void *)addr_dma, size);
 
+	/* set type for advanced descriptor with frame checksum insertion */
 	tx_flags = IXGBE_ADVTXD_DTYP_DATA | IXGBE_ADVTXD_DCMD_DEXT
 		| IXGBE_ADVTXD_DCMD_IFCS;
 	cmd_type = slot_size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS | tx_flags;
