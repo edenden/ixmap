@@ -44,7 +44,8 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 void ixmap_buf_release(struct ixmap_buf *buf,
 	struct ixmap_handle **ih_list, int ih_num);
 struct ixmap_handle *ixmap_open(char *interface_name,
-	unsigned int num_queues_req, unsigned int budget, unsigned short intr_rate,
+	unsigned int num_queues_req, unsigned short intr_rate,
+	unsigned int rx_budget, unsigned int tx_budget,
 	unsigned int mtu_frame, unsigned int promisc);
 void ixmap_close(struct ixmap_handle *ih);
 unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);

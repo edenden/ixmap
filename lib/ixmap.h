@@ -67,13 +67,13 @@ struct ixmap_ring {
 };
 
 struct ixmap_buf {
-	void		*addr_virtual;
-	unsigned long	*addr_dma;
-	uint32_t	buf_size;
-	uint32_t	count;
+	void			*addr_virtual;
+	unsigned long		*addr_dma;
+	uint32_t		buf_size;
+	uint32_t		count;
 
-	uint32_t	free_count;
-	int32_t		*free_index;
+	uint32_t		free_count;
+	int32_t			*free_index;
 };
 
 struct ixmap_handle {
@@ -90,7 +90,8 @@ struct ixmap_handle {
 	unsigned long		addr_dma;
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;
-	uint32_t		budget;
+	uint32_t		rx_budget;
+	uint32_t		tx_budget;
 
 	uint32_t		num_queues;
 	uint16_t		num_interrupt_rate;
@@ -116,7 +117,8 @@ struct ixmap_port {
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;
 	uint32_t		num_queues;
-	uint32_t		budget;
+	uint32_t		rx_budget;
+	uint32_t		tx_budget;
 	uint8_t			mac_addr[ETH_ALEN];
 
 	unsigned long		count_rx_alloc_failed;

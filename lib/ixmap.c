@@ -108,7 +108,8 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 		plane->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
 		plane->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
 		plane->ports[i].num_queues = ih_list[i]->num_queues;
-		plane->ports[i].budget = ih_list[i]->budget;
+		plane->ports[i].rx_budget = ih_list[i]->rx_budget;
+		plane->ports[i].tx_budget = ih_list[i]->tx_budget;
 		plane->ports[i].mtu_frame = ih_list[i]->mtu_frame;
 		plane->ports[i].count_rx_alloc_failed = 0;
 		plane->ports[i].count_rx_clean_total = 0;
@@ -390,7 +391,8 @@ static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma)
 }
 
 struct ixmap_handle *ixmap_open(char *interface_name,
-	unsigned int num_queues_req, unsigned int budget, unsigned short intr_rate,
+	unsigned int num_queues_req, unsigned short intr_rate,
+	unsigned int rx_budget, unsigned int tx_budget,
 	unsigned int mtu_frame, unsigned int promisc)
 {
 	struct ixmap_handle *ih;
@@ -438,7 +440,8 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 	ih->bar_size = req_info.mmio_size;
 	ih->promisc = !!promisc;
 	ih->interface_name = interface_name;
-	ih->budget = budget;
+	ih->rx_budget = rx_budget;
+	ih->tx_budget = tx_budget;
 	ih->mtu_frame = mtu_frame;
 	memcpy(ih->mac_addr, req_info.mac_addr, ETH_ALEN);
 

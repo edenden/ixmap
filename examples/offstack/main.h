@@ -39,7 +39,8 @@ struct ixmapfwd {
 	unsigned int		buf_size;
 	unsigned int		num_cores;
 	unsigned int		num_ports;
-	unsigned int		budget;
+	unsigned int		rx_budget;
+	unsigned int		tx_budget;
 	unsigned int		promisc;
 	unsigned int		mtu_frame;
 	unsigned short		intr_rate;

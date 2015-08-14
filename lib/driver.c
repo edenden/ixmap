@@ -230,7 +230,7 @@ void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	rx_ring = port->rx_ring;
 
 	total_rx_packets = 0;
-	while(likely(total_rx_packets < port->budget)){
+	while(likely(total_rx_packets < port->rx_budget)){
 		union ixmap_adv_rx_desc *rx_desc;
 		uint16_t next_to_clean;
 		int slot_index;
@@ -296,7 +296,7 @@ void ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	tx_ring = port->tx_ring;
 
 	total_tx_packets = 0;
-	while(likely(total_tx_packets < port->budget)){
+	while(likely(total_tx_packets < port->tx_budget)){
 		union ixmap_adv_tx_desc *tx_desc;
 		uint16_t next_to_clean;
 		int slot_index;
@@ -355,10 +355,7 @@ static inline void ixmap_slot_attach(struct ixmap_ring *ring,
 static inline int ixmap_slot_detach(struct ixmap_ring *ring,
 	uint16_t desc_index)
 {
-	int slot_index;
-
-	slot_index = ring->slot_index[desc_index];
-	return slot_index;
+	return ring->slot_index[desc_index];
 }
 
 inline void ixmap_slot_release(struct ixmap_buf *buf,
