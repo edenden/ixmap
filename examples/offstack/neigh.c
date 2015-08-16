@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
+#include <stddef.h>
 
 #include "main.h"
 #include "neigh.h"
@@ -88,8 +89,6 @@ struct neigh_table *neigh_alloc()
 
 	hash_init(&neigh->table);
 	neigh->table.hash_entry_delete = neigh_entry_delete;
-
-	pthread_mutex_init(&neigh->mutex, NULL);
 	return neigh;
 
 err_neigh_alloc:
@@ -140,16 +139,13 @@ int neigh_add(struct neigh_table *neigh, int family,
 	neigh_add_print(family, dst_addr, mac_addr);
 #endif
 
-	ixmapfwd_mutex_lock(&neigh->mutex);
 	ret = hash_add(&neigh->table, dst_addr, family_len, &neigh_entry->hash);
 	if(ret < 0)
 		goto err_hash_add;
-	ixmapfwd_mutex_unlock(&neigh->mutex);
 
 	return 0;
 
 err_hash_add:
-	ixmapfwd_mutex_unlock(&neigh->mutex);
 	free(neigh_entry);
 err_alloc_entry:
 err_invalid_family:
@@ -177,16 +173,13 @@ int neigh_delete(struct neigh_table *neigh, int family,
 	neigh_delete_print(family, dst_addr);
 #endif
 
-	ixmapfwd_mutex_lock(&neigh->mutex);
 	ret = hash_delete(&neigh->table, dst_addr, family_len);
 	if(ret < 0)
 		goto err_hash_delete;
-	ixmapfwd_mutex_unlock(&neigh->mutex);
 
 	return 0;
 
 err_hash_delete:
-	ixmapfwd_mutex_unlock(&neigh->mutex);
 err_invalid_family:
 	return -1;
 }

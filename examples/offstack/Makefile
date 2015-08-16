@@ -2,10 +2,10 @@
 #char code "LF(UNIX)" is required!!
 
 CC = gcc
-CFLAGS = -Wall
+CFLAGS = -Wall -O2
 LDFLAGS =
 TARGET = ixmapfwd
-LIBS = -lpthread -lurcu -lixmap
+LIBS = -lpthread -lixmap
 OBJECTS = main.o thread.o forward.o epoll.o netlink.o tun.o fib.o neigh.o trie.o hash.o
 
 .SUFFIXES: .c .o

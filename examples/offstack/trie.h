@@ -2,7 +2,6 @@
 #define _IXMAPFWD_TRIE_H
 
 #include "linux/list.h"
-#include "linux/list_rcu.h"
 
 struct trie_node {
 	void			*parent;

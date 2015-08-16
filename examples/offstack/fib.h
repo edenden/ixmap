@@ -3,7 +3,6 @@
 
 #include <pthread.h>
 #include "linux/list.h"
-#include "linux/list_rcu.h"
 #include "trie.h"
 
 enum fib_type {
@@ -24,7 +23,6 @@ struct fib_entry {
 
 struct fib {
 	struct trie_tree	tree;
-	pthread_mutex_t		mutex;
 };
 
 struct fib *fib_alloc();

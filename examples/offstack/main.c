@@ -12,23 +12,12 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <pthread.h>
-#include <linux/netlink.h>
-#include <linux/rtnetlink.h>
-#include <urcu.h>
 #include <ixmap.h>
 
 #include "linux/list.h"
-#include "linux/list_rcu.h"
 #include "main.h"
 #include "thread.h"
-#include "netlink.h"
-#include "epoll.h"
 
-static int ixmapfwd_wait(struct ixmapfwd *ixmapfwd, int fd_ep,
-	uint8_t *read_buf, int read_size);
-static int ixmapfwd_fd_prepare(struct list_head *ep_desc_head);
-static void ixmapfwd_fd_destroy(struct list_head *ep_desc_head,
-	int fd_ep);
 static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 	struct ixmapfwd_thread *thread, int thread_index);
 static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread);
@@ -41,11 +30,10 @@ int main(int argc, char **argv)
 {
 	struct ixmapfwd		ixmapfwd;
 	struct ixmapfwd_thread	*threads;
-	struct list_head	ep_desc_head;
-	uint8_t			*read_buf;
-	int			ret, i, fd_ep, read_size;
+	int			ret, i, signal;
 	int			cores_assigned = 0,
 				ports_assigned = 0;
+	sigset_t		sigset;
 
 	ixmap_interface_array[0] = "ixgbe0";
 	ixmap_interface_array[1] = "ixgbe1";
@@ -58,7 +46,6 @@ int main(int argc, char **argv)
 	ixmapfwd.promisc = 1;
 	ixmapfwd.mtu_frame = 0; /* MTU=1522 is used by default. */
 	ixmapfwd.intr_rate = IXGBE_20K_ITR;
-	INIT_LIST_HEAD(&ep_desc_head);
 
 	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * ixmapfwd.num_ports);
 	if(!ixmapfwd.ih_array){
@@ -70,12 +57,6 @@ int main(int argc, char **argv)
 	if(!ixmapfwd.tunh_array){
 		ret = -1;
 		goto err_tunh_array;
-	}
-
-	ixmapfwd.neigh = malloc(sizeof(struct neigh *) * ixmapfwd.num_ports);
-	if(!ixmapfwd.neigh){
-		ret = -1;
-		goto err_neigh_table;
 	}
 
 	for(i = 0; i < ixmapfwd.num_ports; i++, ports_assigned++){
@@ -110,14 +91,8 @@ int main(int argc, char **argv)
 			goto err_tun_open;
 		}
 
-		ixmapfwd.neigh[i] = neigh_alloc();
-		if(!ixmapfwd.neigh[i])
-			goto err_neigh_alloc;
-
 		continue;
 
-err_neigh_alloc:
-		tun_close(&ixmapfwd, i);
 err_tun_open:
 		ixmap_desc_release(ixmapfwd.ih_array[i]);
 err_desc_alloc:
@@ -127,26 +102,10 @@ err_open:
 		goto err_assign_ports;
 	}
 
-	/* Prepare fib */
-	ixmapfwd.fib = fib_alloc();
-	if(!ixmapfwd.fib)
-		goto err_fib_alloc;
-
-	/* Prepare read buffer */
-	read_size = max((size_t)getpagesize(), sizeof(struct signalfd_siginfo));
-	read_buf = malloc(read_size);
-	if(!read_buf)
-		goto err_alloc_read_buf;
-
-	/* Prepare each fd in epoll */
-	fd_ep = ixmapfwd_fd_prepare(&ep_desc_head);
-	if(fd_ep < 0){
-		printf("failed to epoll prepare\n");
-		goto err_fd_prepare;
+	ret = ixmapfwd_set_signal(&sigset);
+	if(ret != 0){
+		goto err_set_signal;
 	}
-
-	rcu_init();
-	rcu_register_thread();
 
 	threads = malloc(sizeof(struct ixmapfwd_thread) * ixmapfwd.num_cores);
 	if(!threads){
@@ -193,7 +152,12 @@ err_buf_alloc:
 		goto err_assign_cores;
 	}
 
-	ret = ixmapfwd_wait(&ixmapfwd, fd_ep, read_buf, read_size);
+	while(1){
+		if(sigwait(&sigset, &signal) == 0){
+			break;
+		}
+	}
+	ret = 0;
 
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
@@ -205,158 +169,18 @@ err_assign_cores:
 	}
 	free(threads);
 err_alloc_threads:
-	rcu_unregister_thread();
-	ixmapfwd_fd_destroy(&ep_desc_head, fd_ep);
-err_fd_prepare:
-	free(read_buf);
-err_alloc_read_buf:
-	fib_release(ixmapfwd.fib);
-err_fib_alloc:
+err_set_signal:
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
-		neigh_release(ixmapfwd.neigh[i]);
 		tun_close(&ixmapfwd, i);
 		ixmap_desc_release(ixmapfwd.ih_array[i]);
 		ixmap_close(ixmapfwd.ih_array[i]);
 	}
-	free(ixmapfwd.neigh);
-err_neigh_table:
 	free(ixmapfwd.tunh_array);
 err_tunh_array:
 	free(ixmapfwd.ih_array);
 err_ih_array:
 	return ret;
-}
-
-static int ixmapfwd_wait(struct ixmapfwd *ixmapfwd, int fd_ep,
-	uint8_t *read_buf, int read_size)
-{
-	struct epoll_event events[EPOLL_MAXEVENTS];
-	struct epoll_desc *ep_desc;
-	int ret, i, num_fd;
-
-	while(1){
-		num_fd = epoll_wait(fd_ep, events, EPOLL_MAXEVENTS, -1);
-		if(num_fd < 0){
-			perror("epoll error");
-			continue;
-		}
-
-		for(i = 0; i < num_fd; i++){
-			ep_desc = (struct epoll_desc *)events[i].data.ptr;
-			
-			switch(ep_desc->type){
-			case EPOLL_NETLINK:
-				ret = read(ep_desc->fd, read_buf, read_size);
-				if(ret < 0)
-					goto err_read;
-
-				netlink_process(ixmapfwd, read_buf, ret);
-				break;
-			case EPOLL_SIGNAL:
-				ret = read(ep_desc->fd, read_buf, read_size);
-				if(ret < 0)
-					goto err_read;
-
-				goto out;
-				break;
-			default:
-				break;
-			}
-		}
-	}
-
-out:
-	return 0;
-
-err_read:
-	return -1;
-}
-
-static int ixmapfwd_fd_prepare(struct list_head *ep_desc_head)
-{
-	struct epoll_desc	*ep_desc;
-	sigset_t		sigset;
-	struct sockaddr_nl	addr;
-	int			fd_ep, ret;
-
-	/* epoll fd preparing */
-	fd_ep = epoll_create(EPOLL_MAXEVENTS);
-	if(fd_ep < 0){
-		perror("failed to make epoll fd");
-		goto err_epoll_open;
-	}
-
-	/* signalfd preparing */
-	ret = ixmapfwd_set_signal(&sigset);
-	if(ret != 0){
-		goto err_set_signal;
-	}
-
-	ep_desc = epoll_desc_alloc_signalfd(&sigset);
-	if(!ep_desc)
-		goto err_epoll_desc_signalfd;
-
-	list_add(&ep_desc->list, ep_desc_head);
-
-	ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
-	if(ret < 0){
-		perror("failed to add fd in epoll");
-		goto err_epoll_add_signalfd;
-	}
-
-	/* netlink preparing */
-	memset(&addr, 0, sizeof(struct sockaddr_nl));
-	addr.nl_family = AF_NETLINK;
-	addr.nl_groups = RTMGRP_NEIGH | RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE;
-
-	ep_desc = epoll_desc_alloc_netlink(&addr);
-	if(!ep_desc)
-		goto err_epoll_desc_netlink;
-
-	list_add(&ep_desc->list, ep_desc_head);
-
-	ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
-	if(ret < 0){
-		perror("failed to add fd in epoll");
-		goto err_epoll_add_netlink;
-	}
-
-	return fd_ep;
-
-err_epoll_add_netlink:
-err_epoll_desc_netlink:
-err_epoll_add_signalfd:
-err_epoll_desc_signalfd:
-err_set_signal:
-	ixmapfwd_fd_destroy(ep_desc_head, fd_ep);
-err_epoll_open:
-	return -1;
-}
-
-static void ixmapfwd_fd_destroy(struct list_head *ep_desc_head,
-	int fd_ep)
-{
-	struct epoll_desc *ep_desc, *ep_next;
-
-	list_for_each_entry_safe(ep_desc, ep_next, ep_desc_head, list){
-		list_del(&ep_desc->list);
-		epoll_del(fd_ep, ep_desc->fd);
-
-		switch(ep_desc->type){
-		case EPOLL_SIGNAL:
-			epoll_desc_release_signalfd(ep_desc);
-			break;
-		case EPOLL_NETLINK:
-			epoll_desc_release_netlink(ep_desc);
-			break;
-		default:
-			break;
-		}
-	}
-
-	close(fd_ep);
-	return;
 }
 
 static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
@@ -368,8 +192,6 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 	thread->index		= thread_index;
 	thread->num_ports	= ixmapfwd->num_ports;
 	thread->ptid		= pthread_self();
-	thread->neigh		= ixmapfwd->neigh;
-	thread->fib		= ixmapfwd->fib;
 
 	ret = pthread_create(&thread->tid, NULL, thread_process_interrupt, thread);
 	if(ret < 0){
@@ -436,22 +258,3 @@ static int ixmapfwd_set_signal(sigset_t *sigset)
 	return 0;
 }
 
-void ixmapfwd_mutex_lock(pthread_mutex_t *mutex)
-{
-	int ret;
-
-	ret = pthread_mutex_lock(mutex);
-	if(ret){
-		perror("failed to lock");
-	}
-}
-
-void ixmapfwd_mutex_unlock(pthread_mutex_t *mutex)
-{
-	int ret;
-
-	ret = pthread_mutex_unlock(mutex);
-	if(ret){
-		perror("failed to unlock");
-	}
-}

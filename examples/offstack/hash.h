@@ -2,7 +2,6 @@
 #define _IXMAPFWD_HASH_H
 
 #include "linux/list.h"
-#include "linux/list_rcu.h"
 #include "main.h"
 
 #define HASH_SIZE (1 << 16)

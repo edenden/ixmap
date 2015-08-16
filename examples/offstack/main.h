@@ -34,8 +34,6 @@
 struct ixmapfwd {
 	struct ixmap_handle	**ih_array;
 	struct tun_handle	**tunh_array;
-	struct neigh_table	**neigh;
-	struct fib		*fib;
 	unsigned int		buf_size;
 	unsigned int		num_cores;
 	unsigned int		num_ports;
@@ -45,8 +43,5 @@ struct ixmapfwd {
 	unsigned int		mtu_frame;
 	unsigned short		intr_rate;
 };
-
-void ixmapfwd_mutex_lock(pthread_mutex_t *mutex);
-void ixmapfwd_mutex_unlock(pthread_mutex_t *mutex);
 
 #endif /* _IXMAPFWD_MAIN_H */

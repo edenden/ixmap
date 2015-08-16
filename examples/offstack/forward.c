@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
+#include <stddef.h>
 #include <ixmap.h>
 
 #include "main.h"
@@ -150,13 +151,11 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	eth = (struct ethhdr *)slot_buf;
 	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
 
-	rcu_read_lock();
-
 	head = fib_lookup(thread->fib, AF_INET, &ip->daddr);
 	if(!head)
 		goto packet_drop;
 
-	fib_entry = list_first_or_null_rcu(head, struct fib_entry, list);
+	fib_entry = list_first_entry_or_null(head, struct fib_entry, list);
 	if(!fib_entry)
 		goto packet_drop;
 
@@ -200,15 +199,12 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	memcpy(eth->h_source, src_mac, ETH_ALEN);
 
 	ret = fib_entry->port_index;
-	rcu_read_unlock();
-
 	return ret;
 
 packet_local:
 	fd = thread->tun_plane->ports[port_index].fd;
 	write(fd, slot_buf, slot_size);
 packet_drop:
-	rcu_read_unlock();
 	return -1;
 }
 
@@ -230,13 +226,11 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	&& (ip6->ip6_dst.s6_addr[1] & 0xc0) == 0x80))
 		goto packet_local;
 
-	rcu_read_lock();
-
 	head = fib_lookup(thread->fib, AF_INET6, (uint32_t *)&ip6->ip6_dst);
 	if(!head)
 		goto packet_drop;
 
-	fib_entry = list_first_or_null_rcu(head, struct fib_entry, list);
+	fib_entry = list_first_entry_or_null(head, struct fib_entry, list);
 	if(!fib_entry)
 		goto packet_drop;
 
@@ -276,8 +270,6 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	memcpy(eth->h_source, src_mac, ETH_ALEN);
 
 	ret = fib_entry->port_index;
-	rcu_read_unlock();
-
 	return ret;
 
 packet_local:

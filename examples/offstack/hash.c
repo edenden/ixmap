@@ -2,10 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <urcu.h>
+#include <stddef.h>
 
 #include "linux/list.h"
-#include "linux/list_rcu.h"
 #include "main.h"
 #include "hash.h"
 
@@ -72,14 +71,14 @@ int hash_add(struct hash_table *table, void *key, int key_len,
 	hash_key = hash_key_crc32(key, key_len);
 	head = &table->head[hash_key];
 
-	hlist_for_each_entry_rcu(entry, head, list){
+	hlist_for_each_entry(entry, head, list){
 		if(entry->key_len == key_len
 		&& !memcmp(entry->key, key, key_len)){
 			goto err_entry_exist;
 		}
 	}
 
-	hlist_add_head_rcu(&entry_new->list, head);
+	hlist_add_head(&entry_new->list, head);
 
 	return 0;
 
@@ -100,7 +99,7 @@ int hash_delete(struct hash_table *table,
 	hash_key = hash_key_crc32(key, key_len);
 	head = &table->head[hash_key];
 
-	hlist_for_each_entry_rcu(entry, head, list){
+	hlist_for_each_entry(entry, head, list){
 		if(entry->key_len == key_len
 		&& !memcmp(entry->key, key, key_len)){
 			target = entry;
@@ -111,7 +110,7 @@ int hash_delete(struct hash_table *table,
 	if(!target)
 		goto err_not_found;
 
-	hlist_del_init_rcu(&target->list);
+	hlist_del_init(&target->list);
 	hash_entry_destroy(target);
 	table->hash_entry_delete(target);
 
@@ -124,13 +123,14 @@ err_not_found:
 void hash_delete_all(struct hash_table *table)
 {
 	struct hlist_head *head;
+	struct hlist_node *next;
 	struct hash_entry *entry;
 	unsigned int i;
 
 	for(i = 0; i < HASH_SIZE; i++){
 		head = &table->head[i];
-		hlist_for_each_entry_rcu(entry, head, list){
-			hlist_del_init_rcu(&entry->list);
+		hlist_for_each_entry_safe(entry, next, head, list){
+			hlist_del_init(&entry->list);
 			hash_entry_destroy(entry);
 			table->hash_entry_delete(entry);
 		}
@@ -139,7 +139,6 @@ void hash_delete_all(struct hash_table *table)
 	return;
 }
 
-/* rcu_read_lock needs to be hold by caller from readside */
 struct hash_entry *hash_lookup(struct hash_table *table,
 	void *key, int key_len)
 {
@@ -151,7 +150,7 @@ struct hash_entry *hash_lookup(struct hash_table *table,
 	hash_key = hash_key_crc32(key, key_len);
 	head = &table->head[hash_key];
 
-	hlist_for_each_entry_rcu(entry, head, list){
+	hlist_for_each_entry(entry, head, list){
 		if(entry->key_len == key_len
 		&& !memcmp(entry->key, key, key_len)){
 			entry_ret = entry;

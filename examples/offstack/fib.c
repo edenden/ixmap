@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include <netinet/ip.h>
 #include <arpa/inet.h>
+#include <stddef.h>
 
 #include "linux/list.h"
-#include "linux/list_rcu.h"
 #include "main.h"
 #include "fib.h"
 
@@ -117,8 +117,6 @@ struct fib *fib_alloc()
 	fib->tree.trie_entry_delete = fib_entry_delete;
 	fib->tree.trie_entry_insert = fib_entry_insert;
 	fib->tree.trie_entry_delete_all = fib_entry_delete_all;
-
-	pthread_mutex_init(&fib->mutex, NULL);
 	return fib;
 
 err_fib_alloc:
@@ -137,13 +135,13 @@ static int fib_entry_insert(struct list_head *head, unsigned int id,
 {
 	struct fib_entry *entry;
 
-	list_for_each_entry_rcu(entry, head, list){
+	list_for_each_entry(entry, head, list){
 		if(entry->id == id){
 			goto err_entry_exist;
 		}
 	}
 
-	list_add_rcu(list, head);
+	list_add(list, head);
 	return 0;
 
 err_entry_exist:
@@ -152,11 +150,11 @@ err_entry_exist:
 
 static int fib_entry_delete(struct list_head *head, unsigned int id)
 {
-	struct fib_entry *entry;
+	struct fib_entry *entry, *entry_n;
 
-	list_for_each_entry_rcu(entry, head, list){
+	list_for_each_entry_safe(entry, entry_n, head, list){
 		if(entry->id == id){
-			list_del_rcu(&entry->list);
+			list_del(&entry->list);
 			free(entry);
 			return 0;
 		}
@@ -167,10 +165,10 @@ static int fib_entry_delete(struct list_head *head, unsigned int id)
 
 static void fib_entry_delete_all(struct list_head *head)
 {
-	struct fib_entry *entry;
+	struct fib_entry *entry, *entry_n;
 
-	list_for_each_entry_rcu(entry, head, list){
-		list_del_rcu(&entry->list);
+	list_for_each_entry_safe(entry, entry_n, head, list){
+		list_del(&entry->list);
 		free(entry);
 	}
 
@@ -213,17 +211,14 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 		nexthop, port_index, id);
 #endif
 
-	ixmapfwd_mutex_lock(&fib->mutex);
 	ret = trie_add(&fib->tree, family_len,
 		prefix, prefix_len, id, &entry->list);
 	if(ret < 0)
 		goto err_trie_add;
-	ixmapfwd_mutex_unlock(&fib->mutex);
 
 	return 0;
 
 err_trie_add:
-	ixmapfwd_mutex_unlock(&fib->mutex);
 	free(entry);
 err_alloc_entry:
 err_invalid_family:
@@ -253,17 +248,14 @@ int fib_route_delete(struct fib *fib, int family,
 	fib_delete_print(family, prefix, prefix_len, id);
 #endif
 
-	ixmapfwd_mutex_lock(&fib->mutex);
 	ret = trie_delete(&fib->tree, family_len,
 		prefix, prefix_len, id);
 	if(ret < 0)
 		goto err_trie_delete;
-	ixmapfwd_mutex_unlock(&fib->mutex);
 
 	return 0;
 
 err_trie_delete:
-	ixmapfwd_mutex_unlock(&fib->mutex);
 err_invalid_family:
 	return -1;
 }

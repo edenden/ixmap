@@ -7,17 +7,21 @@
 #include <stdint.h>
 #include <sys/ioctl.h>
 #include <sys/epoll.h>
+#include <sys/socket.h>
 #include <net/ethernet.h>
 #include <signal.h>
 #include <sys/signalfd.h>
 #include <pthread.h>
-#include <urcu.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#include <stddef.h>
 #include <ixmap.h>
 
 #include "main.h"
 #include "thread.h"
 #include "forward.h"
 #include "epoll.h"
+#include "netlink.h"
 
 static int thread_wait(struct ixmapfwd_thread *thread,
 	int fd_ep, uint8_t *read_buf, int read_size);
@@ -34,17 +38,38 @@ void *thread_process_interrupt(void *data)
 	struct list_head	ep_desc_head;
 	uint8_t			*read_buf;
 	int			read_size, fd_ep, i, ret;
+	int			ports_assigned = 0;
 
 	ixgbe_print("thread %d started\n", thread->index);
+	read_size = getpagesize();
 	INIT_LIST_HEAD(&ep_desc_head);
 
-	/* Prepare read buffer */
-	read_size = max(sizeof(uint32_t), sizeof(struct signalfd_siginfo));
-	for(i = 0; i < thread->num_ports; i++){
+	/* Prepare fib */
+	thread->fib = fib_alloc();
+	if(!thread->fib)
+		goto err_fib_alloc;
+
+	thread->neigh = malloc(sizeof(struct neigh *) * thread->num_ports);
+	if(!thread->neigh){
+		goto err_neigh_table;
+	}
+
+	for(i = 0; i < thread->num_ports; i++, ports_assigned++){
+		thread->neigh[i] = neigh_alloc();
+		if(!thread->neigh[i])
+			goto err_neigh_alloc;
+
 		/* calclulate maximum buf_size we should prepare */
 		if(thread->tun_plane->ports[i].mtu_frame > read_size)
 			read_size = thread->tun_plane->ports[i].mtu_frame;
-        }
+
+		continue;
+
+err_neigh_alloc:
+		goto err_assign_ports;
+	}
+
+	/* Prepare read buffer */
 	read_buf = malloc(read_size);
 	if(!read_buf)
 		goto err_alloc_read_buf;
@@ -61,25 +86,24 @@ void *thread_process_interrupt(void *data)
 		ixmap_rx_assign(thread->plane, i, thread->buf);
 	}
 
-	rcu_register_thread();
-
 	ret = thread_wait(thread, fd_ep, read_buf, read_size);
 	if(ret < 0)
 		goto err_wait;
 
-	rcu_unregister_thread();
-	thread_fd_destroy(&ep_desc_head, fd_ep);
-	free(read_buf);
-	thread_print_result(thread);
-	return NULL;
-
 err_wait:
-	rcu_unregister_thread();
 	thread_fd_destroy(&ep_desc_head, fd_ep);
 err_ixgbe_epoll_prepare:
 	free(read_buf);
 err_alloc_read_buf:
-	printf("thread execution failed\n");
+err_assign_ports:
+	for(i = 0; i < ports_assigned; i++){
+		neigh_release(thread->neigh[i]);
+	}
+	free(thread->neigh);
+err_neigh_table:
+	fib_release(thread->fib);
+err_fib_alloc:
+	thread_print_result(thread);
 	pthread_kill(thread->ptid, SIGINT);
 	return NULL;
 }
@@ -148,6 +172,13 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 					ixmap_tx_xmit(thread->plane, i);
 				}
 				break;
+			case EPOLL_NETLINK:
+				ret = read(ep_desc->fd, read_buf, read_size);
+				if(ret < 0)
+					goto err_read;
+
+				netlink_process(thread, read_buf, ret);
+                                break;
 			case EPOLL_SIGNAL:
 				ret = read(ep_desc->fd, read_buf, read_size);
 				if(ret < 0)
@@ -173,6 +204,7 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 {
 	struct epoll_desc 	*ep_desc;
 	sigset_t		sigset;
+	struct sockaddr_nl	addr;
 	int			fd_ep, i, ret;
 
 	/* epoll fd preparing */
@@ -250,8 +282,27 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 		goto err_epoll_add_signalfd;
 	}
 
+	/* netlink preparing */
+	memset(&addr, 0, sizeof(struct sockaddr_nl));
+	addr.nl_family = AF_NETLINK;
+	addr.nl_groups = RTMGRP_NEIGH | RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE;
+
+	ep_desc = epoll_desc_alloc_netlink(&addr);
+	if(!ep_desc)
+		goto err_epoll_desc_netlink;
+
+	list_add(&ep_desc->list, ep_desc_head);
+
+	ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
+	if(ret < 0){
+		perror("failed to add fd in epoll");
+		goto err_epoll_add_netlink;
+	}
+
 	return fd_ep;
 
+err_epoll_add_netlink:
+err_epoll_desc_netlink:
 err_epoll_add_signalfd:
 err_epoll_desc_signalfd:
 err_assign_port:

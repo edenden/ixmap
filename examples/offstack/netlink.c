@@ -9,15 +9,16 @@
 #include <linux/if_ether.h>
 
 #include "main.h"
+#include "thread.h"
 #include "netlink.h"
 #include "fib.h"
 #include "neigh.h"
 #include "tun.h"
 
-static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh);
-static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh);
+static void netlink_route(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh);
+static void netlink_neigh(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh);
 
-void netlink_process(struct ixmapfwd *ixmapfwd,
+void netlink_process(struct ixmapfwd_thread *thread,
 	uint8_t *read_buf, int read_size)
 {
 	struct nlmsghdr *nlh;
@@ -28,11 +29,11 @@ void netlink_process(struct ixmapfwd *ixmapfwd,
 		switch(nlh->nlmsg_type){
 		case RTM_NEWROUTE:
 		case RTM_DELROUTE:
-			netlink_route(ixmapfwd, nlh);
+			netlink_route(thread, nlh);
 			break;
 		case RTM_NEWNEIGH:
 		case RTM_DELNEIGH:
-			netlink_neigh(ixmapfwd, nlh);
+			netlink_neigh(thread, nlh);
 			break;
 		default:
 			printf("unknown type\n");
@@ -45,7 +46,7 @@ void netlink_process(struct ixmapfwd *ixmapfwd,
 	return;
 }
 
-static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
+static void netlink_route(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 {
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
@@ -90,8 +91,8 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	if(route_entry->rtm_table == RT_TABLE_LOCAL)
 		type = FIB_TYPE_LOCAL;
 
-	for(i = 0; i < ixmapfwd->num_ports; i++){
-		if(ixmapfwd->tunh_array[i]->ifindex == ifindex){
+	for(i = 0; i < thread->num_ports; i++){
+		if(thread->tun_plane->ports[i].ifindex == ifindex){
 			port_index = i;
 			break;
 		}
@@ -99,11 +100,11 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
-		fib_route_update(ixmapfwd->fib, family, type,
+		fib_route_update(thread->fib, family, type,
 			prefix, prefix_len, nexthop, port_index, ifindex);
 		break;
 	case RTM_DELROUTE:
-		fib_route_delete(ixmapfwd->fib, family, prefix, prefix_len, ifindex);
+		fib_route_delete(thread->fib, family, prefix, prefix_len, ifindex);
 		break;
 	default:
 		break;
@@ -112,7 +113,7 @@ static void netlink_route(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	return;
 }
 
-static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
+static void netlink_neigh(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 {
 	struct ndmsg *neigh_entry;
 	struct rtattr *route_attr;
@@ -128,8 +129,8 @@ static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 	ifindex		= neigh_entry->ndm_ifindex;
 	port_index 	= -1;
 
-	for(i = 0; i < ixmapfwd->num_ports; i++){
-		if(ixmapfwd->tunh_array[i]->ifindex == ifindex){
+	for(i = 0; i < thread->num_ports; i++){
+		if(thread->tun_plane->ports[i].ifindex == ifindex){
 			port_index = i;
 			break;
 		}
@@ -160,11 +161,11 @@ static void netlink_neigh(struct ixmapfwd *ixmapfwd, struct nlmsghdr *nlh)
 
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:
-		neigh_add(ixmapfwd->neigh[port_index],
+		neigh_add(thread->neigh[port_index],
 			family, dst_addr, dst_mac);
 		break;
 	case RTM_DELNEIGH:
-		neigh_delete(ixmapfwd->neigh[port_index],
+		neigh_delete(thread->neigh[port_index],
 			family, dst_addr);
 		break;
 	default:
