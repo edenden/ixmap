@@ -57,7 +57,7 @@
 				IXGBE_EIMS_OTHER)
 
 struct ixmap_ring {
-	void		*addr_virtual;
+	void		*addr_virt;
 	unsigned long	addr_dma;
 
 	uint8_t		*tail;
@@ -67,7 +67,7 @@ struct ixmap_ring {
 };
 
 struct ixmap_buf {
-	void			*addr_virtual;
+	void			*addr_virt;
 	unsigned long		*addr_dma;
 	uint32_t		buf_size;
 	uint32_t		count;
@@ -86,8 +86,8 @@ struct ixmap_handle {
 	struct ixmap_ring	*rx_ring;
 	struct ixmap_buf	*buf;
 
-	void			*addr_virtual;
-	unsigned long		addr_dma;
+	void			**addr_virt;
+	unsigned long		*addr_dma;
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;
 	uint32_t		rx_budget;
@@ -229,7 +229,7 @@ struct ixmap_link_req {
 
 #define IXMAP_MAP		_IOW('U', 210, int)
 struct ixmap_map_req {
-	unsigned long		addr_virtual;
+	unsigned long		addr_virt;
 	unsigned long		addr_dma;
 	unsigned long		size;
 	uint8_t			cache;

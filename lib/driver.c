@@ -377,7 +377,7 @@ static inline unsigned long ixmap_slot_addr_dma(struct ixmap_buf *buf,
 inline void *ixmap_slot_addr_virt(struct ixmap_buf *buf,
 	uint16_t slot_index)
 {
-	return buf->addr_virtual + (buf->buf_size * slot_index);
+	return buf->addr_virt + (buf->buf_size * slot_index);
 }
 
 inline unsigned int ixmap_slot_size(struct ixmap_buf *buf)

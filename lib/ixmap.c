@@ -16,7 +16,7 @@
 #include "ixmap.h"
 
 static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask);
-static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
+static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virt,
 	unsigned long *addr_dma, unsigned long size);
 static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma);
 
@@ -138,10 +138,9 @@ void ixmap_plane_release(struct ixmap_plane *plane)
 int ixmap_desc_alloc(struct ixmap_handle *ih,
 	uint32_t num_rx_desc, uint32_t num_tx_desc)
 {
-	int rx_assigned = 0, tx_assigned = 0, i, ret;
+	int desc_assigned = 0;
+	int i, ret;
 	unsigned long size_tx_desc, size_rx_desc;
-	void *addr_virtual;
-	unsigned long addr_dma;
 
 	ih->rx_ring = malloc(sizeof(struct ixmap_ring) * ih->num_queues);
 	if(!ih->rx_ring)
@@ -151,68 +150,86 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 	if(!ih->tx_ring)
 		goto err_alloc_tx_ring;
 
+	ih->addr_virt = malloc(sizeof(void *) * ih->num_queues);
+	if(!ih->addr_virt)
+		goto err_alloc_virt;
+
+	ih->addr_dma = malloc(sizeof(unsigned long) * ih->num_queues);
+	if(!ih->addr_dma)
+		goto err_alloc_dma;
+
 	size_rx_desc = sizeof(union ixmap_adv_rx_desc) * num_rx_desc;
 	size_rx_desc = ALIGN(size_rx_desc, 128); /* needs 128-byte alignment */
 	size_tx_desc = sizeof(union ixmap_adv_tx_desc) * num_tx_desc;
 	size_tx_desc = ALIGN(size_tx_desc, 128); /* needs 128-byte alignment */
 
-	/*
-	 * XXX: We don't support NUMA-aware memory allocation in userspace.
-	 * To support, mbind() or set_mempolicy() will be useful.
-	 */
-	ih->addr_virtual = mmap(NULL,
-		ih->num_queues * (size_rx_desc + size_tx_desc),
-		PROT_READ | PROT_WRITE,
-		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
-	if(ih->addr_virtual == MAP_FAILED){
-		goto err_mmap;
-	}
-
-	ret = ixmap_dma_map(ih, ih->addr_virtual, &ih->addr_dma,
-		ih->num_queues * (size_rx_desc + size_tx_desc));
-	if(ret < 0){
-		goto err_dma_map;
-	}
-
-	addr_virtual	= ih->addr_virtual;
-	addr_dma	= ih->addr_dma;
-
-	/* Rx descripter ring allocation */
-	for(i = 0; i < ih->num_queues; i++, rx_assigned++){
+	for(i = 0; i < ih->num_queues; i++, desc_assigned++){
 		int *slot_index;
+		void *addr_virt;
+		unsigned long addr_dma;
 
+		/*
+		 * XXX: We don't support NUMA-aware memory allocation in userspace.
+		 * To support, mbind() or set_mempolicy() will be useful.
+		 */
+		ih->addr_virt[i] = mmap(NULL,
+			ih->num_queues * (size_rx_desc + size_tx_desc),
+			PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
+		if(ih->addr_virt == MAP_FAILED){
+			goto err_mmap;
+		}
+
+		ret = ixmap_dma_map(ih, ih->addr_virt[i], &ih->addr_dma[i],
+			ih->num_queues * (size_rx_desc + size_tx_desc));
+		if(ret < 0){
+			goto err_dma_map;
+		}
+
+		addr_virt	= ih->addr_virt[i];
+		addr_dma	= ih->addr_dma[i];
+
+		/* Rx descripter ring allocation */
 		slot_index = malloc(sizeof(int32_t) * num_rx_desc);
 		if(!slot_index){
 			goto err_rx_assign;
 		}
 
 		ih->rx_ring[i].addr_dma = addr_dma;
-		ih->rx_ring[i].addr_virtual = addr_virtual;
+		ih->rx_ring[i].addr_virt = addr_virt;
 		ih->rx_ring[i].next_to_use = 0;
 		ih->rx_ring[i].next_to_clean = 0;
 		ih->rx_ring[i].slot_index = slot_index;
 
-		addr_virtual	+= size_rx_desc;
+		addr_virt	+= size_rx_desc;
 		addr_dma	+= size_rx_desc;
-	}
 
-	/* Tx descripter ring allocation */
-	for(i = 0; i < ih->num_queues; i++, tx_assigned++){
-		int *slot_index;
-
+		/* Tx descripter ring allocation */
 		slot_index = malloc(sizeof(int32_t) * num_tx_desc);
 		if(!slot_index){
 			goto err_tx_assign;
 		}
 
 		ih->tx_ring[i].addr_dma = addr_dma;
-		ih->tx_ring[i].addr_virtual = addr_virtual;
+		ih->tx_ring[i].addr_virt = addr_virt;
 		ih->tx_ring[i].next_to_use = 0;
 		ih->tx_ring[i].next_to_clean = 0;
 		ih->tx_ring[i].slot_index = slot_index;
 
-		addr_virtual	+= size_tx_desc;
+		addr_virt	+= size_tx_desc;
 		addr_dma	+= size_tx_desc;
+
+		continue;
+
+err_tx_assign:
+		free(ih->rx_ring[i].slot_index);
+err_rx_assign:
+		ixmap_dma_unmap(ih, ih->addr_dma[i]);
+err_dma_map:
+		munmap(ih->addr_virt[i],
+			size_rx_desc + size_tx_desc);
+err_mmap:
+		goto err_desc_assign;
 	}
 
 	ih->num_rx_desc = num_rx_desc;
@@ -220,48 +237,45 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 
 	return 0;
 
-err_tx_assign:
-	for(i = 0; i < tx_assigned; i++){
+err_desc_assign:
+	for(i = 0; i < desc_assigned; i++){
 		free(ih->tx_ring[i].slot_index);
-	}
-err_rx_assign:
-	for(i = 0; i < rx_assigned; i++){
 		free(ih->rx_ring[i].slot_index);
+		ixmap_dma_unmap(ih, ih->addr_dma[i]);
+		munmap(ih->addr_virt[i],
+			size_rx_desc + size_tx_desc);
 	}
-	ixmap_dma_unmap(ih, ih->addr_dma);
-err_dma_map:
-	munmap(ih->addr_virtual,
-		ih->num_queues * (size_rx_desc + size_tx_desc));
-err_mmap:
+	free(ih->addr_dma);
+err_alloc_dma:
+	free(ih->addr_virt);
+err_alloc_virt:
 	free(ih->tx_ring);
 err_alloc_tx_ring:
 	free(ih->rx_ring);
 err_alloc_rx_ring:
-
 	return -1;
 }
 
 void ixmap_desc_release(struct ixmap_handle *ih)
 {
-	int i, ret;
 	unsigned long size_rx_desc, size_tx_desc;
-
-	for(i = 0; i < ih->num_queues; i++){
-		free(ih->rx_ring[i].slot_index);
-		free(ih->tx_ring[i].slot_index);
-	}
-
-	ret = ixmap_dma_unmap(ih, ih->addr_dma);
-	if(ret < 0)
-		perror("failed to unmap descring");
+	int i;
 
 	size_rx_desc = sizeof(union ixmap_adv_rx_desc) * ih->num_rx_desc;
 	size_rx_desc = ALIGN(size_rx_desc, 128);
 	size_tx_desc = sizeof(union ixmap_adv_tx_desc) * ih->num_tx_desc;
 	size_tx_desc = ALIGN(size_tx_desc, 128);
-	munmap(ih->rx_ring[i].addr_virtual,
-		ih->num_queues * (size_rx_desc + size_tx_desc));
 
+	for(i = 0; i < ih->num_queues; i++){
+		free(ih->rx_ring[i].slot_index);
+		free(ih->tx_ring[i].slot_index);
+		ixmap_dma_unmap(ih, ih->addr_dma[i]);
+		munmap(ih->addr_virt[i],
+			size_rx_desc + size_tx_desc);
+	}
+
+	free(ih->addr_dma);
+	free(ih->addr_virt);
 	free(ih->tx_ring);
 	free(ih->rx_ring);
 
@@ -272,7 +286,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	int ih_num, uint32_t count, uint32_t buf_size)
 {
 	struct ixmap_buf *buf;
-	void	*addr_virtual;
+	void	*addr_virt;
 	unsigned long addr_dma, size;
 	int *free_index;
 	int ret, i, mapped_ports = 0;
@@ -295,13 +309,13 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	 * XXX: We don't support NUMA-aware memory allocation in userspace.
 	 * To support, mbind() or set_mempolicy() will be useful.
 	 */
-	addr_virtual = mmap(NULL, size, PROT_READ | PROT_WRITE,
+	addr_virt = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
-	if(addr_virtual == MAP_FAILED)
+	if(addr_virt == MAP_FAILED)
 		goto err_mmap;
 
 	for(i = 0; i < ih_num; i++, mapped_ports++){
-		ret = ixmap_dma_map(ih_list[i], addr_virtual, &addr_dma, size);
+		ret = ixmap_dma_map(ih_list[i], addr_virt, &addr_dma, size);
 		if(ret < 0)
 			goto err_ixmap_dma_map;
 
@@ -312,7 +326,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	if(!free_index)
 		goto err_alloc_free_index;
 
-	buf->addr_virtual = addr_virtual;
+	buf->addr_virt = addr_virt;
 	buf->buf_size = buf_size;
 	buf->count = count;
 	buf->free_count = 0;
@@ -330,7 +344,7 @@ err_ixmap_dma_map:
 	for(i = 0; i < mapped_ports; i++){
 		ixmap_dma_unmap(ih_list[i], buf->addr_dma[i]);
 	}
-	munmap(addr_virtual, size);
+	munmap(addr_virt, size);
 err_mmap:
 	free(buf->addr_dma);
 err_alloc_buf_addr_dma:
@@ -354,19 +368,19 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 	}
 
 	size = buf->buf_size * buf->count;
-	munmap(buf->addr_virtual, size);
+	munmap(buf->addr_virt, size);
 	free(buf->addr_dma);
 	free(buf);
 
 	return;
 }
 
-static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virtual,
+static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virt,
 	unsigned long *addr_dma, unsigned long size)
 {
 	struct ixmap_map_req req_map;
 
-	req_map.addr_virtual = (unsigned long)addr_virtual;
+	req_map.addr_virt = (unsigned long)addr_virt;
 	req_map.addr_dma = 0;
 	req_map.size = size;
 	req_map.cache = IXGBE_DMA_CACHE_DISABLE;
