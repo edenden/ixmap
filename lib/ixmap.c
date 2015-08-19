@@ -173,7 +173,7 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 		 * To support, mbind() or set_mempolicy() will be useful.
 		 */
 		ih->addr_virt[i] = mmap(NULL,
-			ih->num_queues * (size_rx_desc + size_tx_desc),
+			size_rx_desc + size_tx_desc,
 			PROT_READ | PROT_WRITE,
 			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 		if(ih->addr_virt == MAP_FAILED){
@@ -181,7 +181,7 @@ int ixmap_desc_alloc(struct ixmap_handle *ih,
 		}
 
 		ret = ixmap_dma_map(ih, ih->addr_virt[i], &ih->addr_dma[i],
-			ih->num_queues * (size_rx_desc + size_tx_desc));
+			size_rx_desc + size_tx_desc);
 		if(ret < 0){
 			goto err_dma_map;
 		}
