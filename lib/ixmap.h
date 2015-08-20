@@ -7,6 +7,7 @@
 #define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
 
 #define FILENAME_SIZE 256
+#define PAGE_1GB (1ul << 30)
 
 #define min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
@@ -66,6 +67,10 @@ struct ixmap_ring {
 	int32_t		*slot_index;
 };
 
+struct ixmap_desc {
+	void			*addr_virt;
+};
+
 struct ixmap_buf {
 	void			*addr_virt;
 	unsigned long		*addr_dma;
@@ -86,8 +91,6 @@ struct ixmap_handle {
 	struct ixmap_ring	*rx_ring;
 	struct ixmap_buf	*buf;
 
-	void			**addr_virt;
-	unsigned long		*addr_dma;
 	uint32_t		num_tx_desc;
 	uint32_t		num_rx_desc;
 	uint32_t		rx_budget;

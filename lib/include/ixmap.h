@@ -24,6 +24,7 @@
 
 struct ixmap_handle;
 struct ixmap_irqdev_handle;
+struct ixmap_desc;
 struct ixmap_buf;
 struct ixmap_plane;
 
@@ -36,9 +37,10 @@ void ixmap_irq_enable(struct ixmap_handle *ih);
 struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 	int ih_num, int queue_index);
 void ixmap_plane_release(struct ixmap_plane *plane);
-int ixmap_desc_alloc(struct ixmap_handle *ih,
-	uint32_t num_rx_desc, uint32_t num_tx_desc);
-void ixmap_desc_release(struct ixmap_handle *ih);
+struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
+	int queue_index);
+void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
+        int queue_index, struct ixmap_desc *desc);
 struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	int ih_num, uint32_t count, uint32_t buf_size);
 void ixmap_buf_release(struct ixmap_buf *buf,
@@ -46,7 +48,8 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 struct ixmap_handle *ixmap_open(char *interface_name,
 	unsigned int num_queues_req, unsigned short intr_rate,
 	unsigned int rx_budget, unsigned int tx_budget,
-	unsigned int mtu_frame, unsigned int promisc);
+	unsigned int mtu_frame, unsigned int promisc,
+	unsigned int num_rx_desc, unsigned int num_tx_desc);
 void ixmap_close(struct ixmap_handle *ih);
 unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);
 uint8_t *ixmap_macaddr_default(struct ixmap_handle *ih);

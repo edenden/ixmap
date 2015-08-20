@@ -135,150 +135,131 @@ void ixmap_plane_release(struct ixmap_plane *plane)
 	return;
 }
 
-int ixmap_desc_alloc(struct ixmap_handle *ih,
-	uint32_t num_rx_desc, uint32_t num_tx_desc)
+struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
+	int queue_index)
 {
-	int desc_assigned = 0;
-	int i, ret;
+	struct ixmap_desc *desc;
 	unsigned long size_tx_desc, size_rx_desc;
+	void *addr_virt;
+	int i, ret;
+	int desc_assigned = 0;
 
-	ih->rx_ring = malloc(sizeof(struct ixmap_ring) * ih->num_queues);
-	if(!ih->rx_ring)
-		goto err_alloc_rx_ring;
+	desc = malloc(sizeof(struct ixmap_desc));
+	if(!desc)
+		goto err_alloc_desc;
 
-	ih->tx_ring = malloc(sizeof(struct ixmap_ring) * ih->num_queues);
-	if(!ih->tx_ring)
-		goto err_alloc_tx_ring;
+	/*
+	 * XXX: We don't support NUMA-aware memory allocation in userspace.
+	 * To support, mbind() or set_mempolicy() will be useful.
+	 */
+	desc->addr_virt = mmap(NULL, PAGE_1GB, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
+	if(desc->addr_virt == MAP_FAILED){
+		goto err_mmap;
+	}
 
-	ih->addr_virt = malloc(sizeof(void *) * ih->num_queues);
-	if(!ih->addr_virt)
-		goto err_alloc_virt;
+	addr_virt = desc->addr_virt;
 
-	ih->addr_dma = malloc(sizeof(unsigned long) * ih->num_queues);
-	if(!ih->addr_dma)
-		goto err_alloc_dma;
-
-	size_rx_desc = sizeof(union ixmap_adv_rx_desc) * num_rx_desc;
-	size_rx_desc = ALIGN(size_rx_desc, 128); /* needs 128-byte alignment */
-	size_tx_desc = sizeof(union ixmap_adv_tx_desc) * num_tx_desc;
-	size_tx_desc = ALIGN(size_tx_desc, 128); /* needs 128-byte alignment */
-
-	for(i = 0; i < ih->num_queues; i++, desc_assigned++){
+	for(i = 0; i < ih_num; i++, desc_assigned++){
 		int *slot_index;
-		void *addr_virt;
+		struct ixmap_handle *ih;
 		unsigned long addr_dma;
 
-		/*
-		 * XXX: We don't support NUMA-aware memory allocation in userspace.
-		 * To support, mbind() or set_mempolicy() will be useful.
-		 */
-		ih->addr_virt[i] = mmap(NULL,
-			size_rx_desc + size_tx_desc,
-			PROT_READ | PROT_WRITE,
-			MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
-		if(ih->addr_virt == MAP_FAILED){
-			goto err_mmap;
-		}
+		ih = ih_list[i];
 
-		ret = ixmap_dma_map(ih, ih->addr_virt[i], &ih->addr_dma[i],
-			size_rx_desc + size_tx_desc);
-		if(ret < 0){
-			goto err_dma_map;
-		}
-
-		addr_virt	= ih->addr_virt[i];
-		addr_dma	= ih->addr_dma[i];
+		size_rx_desc = sizeof(union ixmap_adv_rx_desc) * ih->num_rx_desc;
+		size_rx_desc = ALIGN(size_rx_desc, 128); /* needs 128-byte alignment */
+		size_tx_desc = sizeof(union ixmap_adv_tx_desc) * ih->num_tx_desc;
+		size_tx_desc = ALIGN(size_tx_desc, 128); /* needs 128-byte alignment */
 
 		/* Rx descripter ring allocation */
-		slot_index = malloc(sizeof(int32_t) * num_rx_desc);
+		ret = ixmap_dma_map(ih, addr_virt, &addr_dma, size_rx_desc);
+		if(ret < 0){
+			goto err_rx_dma_map;
+		}
+
+		ih->rx_ring[queue_index].addr_dma = addr_dma;
+		ih->rx_ring[queue_index].addr_virt = addr_virt;
+
+		slot_index = malloc(sizeof(int32_t) * ih->num_rx_desc);
 		if(!slot_index){
 			goto err_rx_assign;
 		}
 
-		ih->rx_ring[i].addr_dma = addr_dma;
-		ih->rx_ring[i].addr_virt = addr_virt;
-		ih->rx_ring[i].next_to_use = 0;
-		ih->rx_ring[i].next_to_clean = 0;
-		ih->rx_ring[i].slot_index = slot_index;
+		ih->rx_ring[queue_index].next_to_use = 0;
+		ih->rx_ring[queue_index].next_to_clean = 0;
+		ih->rx_ring[queue_index].slot_index = slot_index;
 
-		addr_virt	+= size_rx_desc;
-		addr_dma	+= size_rx_desc;
+		addr_virt += size_rx_desc;
 
 		/* Tx descripter ring allocation */
-		slot_index = malloc(sizeof(int32_t) * num_tx_desc);
+		ret = ixmap_dma_map(ih, addr_virt, &addr_dma, size_tx_desc);
+		if(ret < 0){
+			goto err_tx_dma_map;
+		}
+
+		ih->tx_ring[queue_index].addr_dma = addr_dma;
+		ih->tx_ring[queue_index].addr_virt = addr_virt;
+
+		slot_index = malloc(sizeof(int32_t) * ih->num_tx_desc);
 		if(!slot_index){
 			goto err_tx_assign;
 		}
 
-		ih->tx_ring[i].addr_dma = addr_dma;
-		ih->tx_ring[i].addr_virt = addr_virt;
-		ih->tx_ring[i].next_to_use = 0;
-		ih->tx_ring[i].next_to_clean = 0;
-		ih->tx_ring[i].slot_index = slot_index;
+		ih->tx_ring[queue_index].next_to_use = 0;
+		ih->tx_ring[queue_index].next_to_clean = 0;
+		ih->tx_ring[queue_index].slot_index = slot_index;
 
-		addr_virt	+= size_tx_desc;
-		addr_dma	+= size_tx_desc;
+		addr_virt += size_rx_desc;
 
 		continue;
 
 err_tx_assign:
-		free(ih->rx_ring[i].slot_index);
+		ixmap_dma_unmap(ih, ih->tx_ring[queue_index].addr_dma);
+err_tx_dma_map:
+		free(ih->rx_ring[queue_index].slot_index);
 err_rx_assign:
-		ixmap_dma_unmap(ih, ih->addr_dma[i]);
-err_dma_map:
-		munmap(ih->addr_virt[i],
-			size_rx_desc + size_tx_desc);
-err_mmap:
+		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
+err_rx_dma_map:
 		goto err_desc_assign;
 	}
 
-	ih->num_rx_desc = num_rx_desc;
-	ih->num_tx_desc = num_tx_desc;
-
-	return 0;
+	return desc;
 
 err_desc_assign:
 	for(i = 0; i < desc_assigned; i++){
-		free(ih->tx_ring[i].slot_index);
-		free(ih->rx_ring[i].slot_index);
-		ixmap_dma_unmap(ih, ih->addr_dma[i]);
-		munmap(ih->addr_virt[i],
-			size_rx_desc + size_tx_desc);
+		struct ixmap_handle *ih;
+
+		ih = ih_list[i];
+		free(ih->tx_ring[queue_index].slot_index);
+		ixmap_dma_unmap(ih, ih->tx_ring[queue_index].addr_dma);
+		free(ih->rx_ring[queue_index].slot_index);
+		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
 	}
-	free(ih->addr_dma);
-err_alloc_dma:
-	free(ih->addr_virt);
-err_alloc_virt:
-	free(ih->tx_ring);
-err_alloc_tx_ring:
-	free(ih->rx_ring);
-err_alloc_rx_ring:
-	return -1;
+	munmap(desc->addr_virt, PAGE_1GB);
+err_mmap:
+	free(desc);
+err_alloc_desc:
+	return NULL;
 }
 
-void ixmap_desc_release(struct ixmap_handle *ih)
+void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
+	int queue_index, struct ixmap_desc *desc)
 {
-	unsigned long size_rx_desc, size_tx_desc;
 	int i;
 
-	size_rx_desc = sizeof(union ixmap_adv_rx_desc) * ih->num_rx_desc;
-	size_rx_desc = ALIGN(size_rx_desc, 128);
-	size_tx_desc = sizeof(union ixmap_adv_tx_desc) * ih->num_tx_desc;
-	size_tx_desc = ALIGN(size_tx_desc, 128);
+	for(i = 0; i < ih_num; i++){
+		struct ixmap_handle *ih;
 
-	for(i = 0; i < ih->num_queues; i++){
-		free(ih->rx_ring[i].slot_index);
-		free(ih->tx_ring[i].slot_index);
-		ixmap_dma_unmap(ih, ih->addr_dma[i]);
-		munmap(ih->addr_virt[i],
-			size_rx_desc + size_tx_desc);
+		ih = ih_list[i];
+		free(ih->tx_ring[queue_index].slot_index);
+		ixmap_dma_unmap(ih, ih->tx_ring[queue_index].addr_dma);
+		free(ih->rx_ring[queue_index].slot_index);
+		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
 	}
 
-	free(ih->addr_dma);
-	free(ih->addr_virt);
-	free(ih->tx_ring);
-	free(ih->rx_ring);
-
+	munmap(desc->addr_virt, PAGE_1GB);
+	free(desc);
 	return;
 }
 
@@ -407,7 +388,8 @@ static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma)
 struct ixmap_handle *ixmap_open(char *interface_name,
 	unsigned int num_queues_req, unsigned short intr_rate,
 	unsigned int rx_budget, unsigned int tx_budget,
-	unsigned int mtu_frame, unsigned int promisc)
+	unsigned int mtu_frame, unsigned int promisc,
+	unsigned int num_rx_desc, unsigned int num_tx_desc)
 {
 	struct ixmap_handle *ih;
 	char filename[FILENAME_SIZE];
@@ -451,16 +433,30 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 	if(ih->bar == MAP_FAILED)
 		goto err_mmap;
 
+	ih->rx_ring = malloc(sizeof(struct ixmap_ring) * ih->num_queues);
+	if(!ih->rx_ring)
+		goto err_alloc_rx_ring;
+
+	ih->tx_ring = malloc(sizeof(struct ixmap_ring) * ih->num_queues);
+	if(!ih->tx_ring)
+		goto err_alloc_tx_ring;
+
 	ih->bar_size = req_info.mmio_size;
 	ih->promisc = !!promisc;
 	ih->interface_name = interface_name;
 	ih->rx_budget = rx_budget;
 	ih->tx_budget = tx_budget;
 	ih->mtu_frame = mtu_frame;
+	ih->num_rx_desc = num_rx_desc;
+	ih->num_tx_desc = num_tx_desc;
 	memcpy(ih->mac_addr, req_info.mac_addr, ETH_ALEN);
 
 	return ih;
 
+err_alloc_tx_ring:
+	free(ih->rx_ring);
+err_alloc_rx_ring:
+	munmap(ih->bar, ih->bar_size);
 err_mmap:
 err_ioctl_up:
 err_ioctl_info:
@@ -473,6 +469,8 @@ err_alloc_ih:
 
 void ixmap_close(struct ixmap_handle *ih)
 {
+	free(ih->tx_ring);
+	free(ih->rx_ring);
 	munmap(ih->bar, ih->bar_size);
 	close(ih->fd);
 	free(ih);

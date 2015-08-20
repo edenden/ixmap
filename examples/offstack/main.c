@@ -32,7 +32,9 @@ int main(int argc, char **argv)
 	struct ixmapfwd_thread	*threads;
 	int			ret, i, signal;
 	int			cores_assigned = 0,
-				ports_assigned = 0;
+				ports_assigned = 0,
+				tun_assigned = 0,
+				desc_assigned = 0;
 	sigset_t		sigset;
 
 	ixmap_interface_array[0] = "ixgbe0";
@@ -59,24 +61,37 @@ int main(int argc, char **argv)
 		goto err_tunh_array;
 	}
 
+	threads = malloc(sizeof(struct ixmapfwd_thread) * ixmapfwd.num_cores);
+	if(!threads){
+		ret = -1;
+		goto err_alloc_threads;
+	}
+
 	for(i = 0; i < ixmapfwd.num_ports; i++, ports_assigned++){
 		ixmapfwd.ih_array[i] = ixmap_open(ixmap_interface_array[i],
 			ixmapfwd.num_cores, ixmapfwd.intr_rate,
 			ixmapfwd.rx_budget, ixmapfwd.tx_budget,
-			ixmapfwd.mtu_frame, ixmapfwd.promisc);
+			ixmapfwd.mtu_frame, ixmapfwd.promisc,
+			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
 		if(!ixmapfwd.ih_array[i]){
 			printf("failed to ixmap_open, idx = %d\n", i);
+			ret = -1;
 			goto err_open;
 		}
+	}
 
-		ret = ixmap_desc_alloc(ixmapfwd.ih_array[i],
-			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
-		if(ret < 0){
+	for(i = 0; i < ixmapfwd.num_cores; i++, desc_assigned++){
+		threads[i].desc = ixmap_desc_alloc(ixmapfwd.ih_array,
+			ixmapfwd.num_ports, i);
+		if(!threads[i].desc){
 			printf("failed to ixmap_alloc_descring, idx = %d\n", i);
 			printf("please decrease descripter or enable iommu\n");
+			ret = -1;
 			goto err_desc_alloc;
 		}
+	}
 
+	for(i = 0; i < ixmapfwd.num_ports; i++){
 		ixmap_configure_rx(ixmapfwd.ih_array[i]);
 		ixmap_configure_tx(ixmapfwd.ih_array[i]);
 		ixmap_irq_enable(ixmapfwd.ih_array[i]);
@@ -84,33 +99,20 @@ int main(int argc, char **argv)
 		/* calclulate maximum buf_size we should prepare */
 		if(ixmap_bufsize_get(ixmapfwd.ih_array[i]) > ixmapfwd.buf_size)
 			ixmapfwd.buf_size = ixmap_bufsize_get(ixmapfwd.ih_array[i]);
+	}
 
+	for(i = 0; i < ixmapfwd.num_ports; i++, tun_assigned++){
 		ixmapfwd.tunh_array[i] = tun_open(&ixmapfwd, ixmap_interface_array[i], i);
 		if(!ixmapfwd.tunh_array[i]){
 			printf("failed to tun_open\n");
+			ret = -1;
 			goto err_tun_open;
 		}
-
-		continue;
-
-err_tun_open:
-		ixmap_desc_release(ixmapfwd.ih_array[i]);
-err_desc_alloc:
-		ixmap_close(ixmapfwd.ih_array[i]);
-err_open:
-		ret = -1;
-		goto err_assign_ports;
 	}
 
 	ret = ixmapfwd_set_signal(&sigset);
 	if(ret != 0){
 		goto err_set_signal;
-	}
-
-	threads = malloc(sizeof(struct ixmapfwd_thread) * ixmapfwd.num_cores);
-	if(!threads){
-		ret = -1;
-		goto err_alloc_threads;
 	}
 
 	for(i = 0; i < ixmapfwd.num_cores; i++, cores_assigned++){
@@ -167,15 +169,22 @@ err_assign_cores:
 		ixmap_buf_release(threads[i].buf,
 			ixmapfwd.ih_array, ixmapfwd.num_ports);
 	}
-	free(threads);
-err_alloc_threads:
 err_set_signal:
-err_assign_ports:
-	for(i = 0; i < ports_assigned; i++){
+err_tun_open:
+	for(i = 0; i < tun_assigned; i++){
 		tun_close(&ixmapfwd, i);
-		ixmap_desc_release(ixmapfwd.ih_array[i]);
+	}
+err_desc_alloc:
+	for(i = 0; i < desc_assigned; i++){
+		ixmap_desc_release(ixmapfwd.ih_array,
+			ixmapfwd.num_ports, i, threads[i].desc);
+	}
+err_open:
+	for(i = 0; i < ports_assigned; i++){
 		ixmap_close(ixmapfwd.ih_array[i]);
 	}
+	free(threads);
+err_alloc_threads:
 	free(ixmapfwd.tunh_array);
 err_tunh_array:
 	free(ixmapfwd.ih_array);
