@@ -225,8 +225,8 @@ err_rx_dma_map:
 		goto err_desc_assign;
 	}
 
-	addr_mem = (void *)ALIGN((unsigned long)addr_virt, 128);
-	size_mem = SIZE_1GB - (addr_virt - desc->addr_virt);
+	addr_mem = (void *)ALIGN((unsigned long)addr_virt, L1_CACHE_BYTES);
+	size_mem = SIZE_1GB - (addr_mem - desc->addr_virt);
 	desc->node = ixmap_mem_init(addr_mem, size_mem);
 	if(!desc->node)
 		goto err_mem_init;

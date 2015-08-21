@@ -88,7 +88,7 @@ static void _ixmap_mem_destroy(struct ixmap_mnode *node)
 struct ixmap_marea *ixmap_mem_alloc(struct ixmap_desc *desc,
 	unsigned int size)
 {
-	return _ixmap_mem_alloc(desc->node, size);
+	return _ixmap_mem_alloc(desc->node, ALIGN(size, L1_CACHE_BYTES));
 }
 
 static struct ixmap_marea *_ixmap_mem_alloc(struct ixmap_mnode *node,
