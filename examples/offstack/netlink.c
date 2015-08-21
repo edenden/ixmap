@@ -101,10 +101,12 @@ static void netlink_route(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
 		fib_route_update(thread->fib, family, type,
-			prefix, prefix_len, nexthop, port_index, ifindex);
+			prefix, prefix_len, nexthop, port_index, ifindex,
+			thread->desc);
 		break;
 	case RTM_DELROUTE:
-		fib_route_delete(thread->fib, family, prefix, prefix_len, ifindex);
+		fib_route_delete(thread->fib, family,
+			prefix, prefix_len, ifindex);
 		break;
 	default:
 		break;
@@ -162,7 +164,8 @@ static void netlink_neigh(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:
 		neigh_add(thread->neigh[port_index],
-			family, dst_addr, dst_mac);
+			family, dst_addr, dst_mac,
+			thread->desc);
 		break;
 	case RTM_DELNEIGH:
 		neigh_delete(thread->neigh[port_index],

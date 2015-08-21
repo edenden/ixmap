@@ -5,6 +5,7 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <stddef.h>
+#include <ixmap.h>
 
 #include "main.h"
 #include "neigh.h"
@@ -79,16 +80,20 @@ static void neigh_delete_print(int family,
 }
 #endif
 
-struct neigh_table *neigh_alloc()
+struct neigh_table *neigh_alloc(struct ixmap_desc *desc)
 {
 	struct neigh_table *neigh;
+	struct ixmap_marea *area;
 
-	neigh = malloc(sizeof(struct neigh_table));
-	if(!neigh)
+	area = ixmap_mem_alloc(desc, sizeof(struct neigh_table));
+	if(!area)
 		goto err_neigh_alloc;
+
+	neigh = area->ptr;
 
 	hash_init(&neigh->table);
 	neigh->table.hash_entry_delete = neigh_entry_delete;
+	neigh->area = area;
 	return neigh;
 
 err_neigh_alloc:
@@ -98,7 +103,7 @@ err_neigh_alloc:
 void neigh_release(struct neigh_table *neigh)
 {
 	hash_delete_all(&neigh->table);
-	free(neigh);
+	ixmap_mem_free(neigh->area);
 	return;
 }
 
@@ -107,14 +112,15 @@ static void neigh_entry_delete(struct hash_entry *entry)
 	struct neigh_entry *neigh_entry;
 
 	neigh_entry = hash_entry(entry, struct neigh_entry, hash);
-	free(neigh_entry);
+	ixmap_mem_free(neigh_entry->area);
 	return;
 }
 
 int neigh_add(struct neigh_table *neigh, int family,
-	void *dst_addr, void *mac_addr)
+	void *dst_addr, void *mac_addr, struct ixmap_desc *desc) 
 {
 	struct neigh_entry *neigh_entry;
+	struct ixmap_marea *area;
 	int family_len, ret;
 
 	switch(family){
@@ -129,11 +135,14 @@ int neigh_add(struct neigh_table *neigh, int family,
 		break;
 	}
 
-	neigh_entry = malloc(sizeof(struct neigh_entry));
-	if(!neigh_entry)
+	area = ixmap_mem_alloc(desc, sizeof(struct neigh_entry));
+	if(!area)
 		goto err_alloc_entry;
 
+	neigh_entry = area->ptr;
+
 	memcpy(neigh_entry->dst_mac, mac_addr, ETH_ALEN);
+	neigh_entry->area = area;
 
 #ifdef DEBUG
 	neigh_add_print(family, dst_addr, mac_addr);

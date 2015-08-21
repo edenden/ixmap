@@ -8,7 +8,8 @@
 #include "trie.h"
 
 static inline int trie_bit(uint8_t *addr, int digit);
-static struct trie_node *trie_alloc_node(struct trie_node *parent, int index);
+static struct trie_node *trie_alloc_node(struct trie_node *parent, int index,
+	struct ixmap_desc *desc);
 static void _trie_traverse(struct trie_tree *tree, struct trie_node *node);
 static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node);
 static void _trie_cleanup(struct trie_node *node, int index);
@@ -36,18 +37,23 @@ static inline int trie_bit(uint8_t *addr, int digit)
 	return (addr[index] >> shift) & 0x1;
 }
 
-static struct trie_node *trie_alloc_node(struct trie_node *parent, int index)
+static struct trie_node *trie_alloc_node(struct trie_node *parent, int index,
+	struct ixmap_desc *desc)
 {
 	struct trie_node *node;
+	struct ixmap_marea *area;
 
-	node = malloc(sizeof(struct trie_node));
-	if(!node)
+	area = ixmap_mem_alloc(desc, sizeof(struct trie_node));
+	if(!area)
 		goto err_alloc_node;
+
+	node = area->ptr;
 
 	memset(node, 0, sizeof(struct trie_node));
 	node->parent = parent;
 	node->index = index;
 	INIT_LIST_HEAD(&node->head);
+	node->area = area;
 
 	return node;
 
@@ -116,7 +122,7 @@ static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node)
 			_trie_delete_all(tree, child);
 
 			node->child[i] = NULL;
-			free(child);
+			ixmap_mem_free(child->area);
 		}
 	}
 
@@ -172,7 +178,7 @@ static void _trie_cleanup(struct trie_node *node, int index)
 		if(!node->child[!index]
 		&& list_empty(&node->head)){
 			_trie_cleanup(parent, node->index);
-			free(node);
+			ixmap_mem_free(node->area);
 			return;
 		}
 	}
@@ -183,7 +189,7 @@ static void _trie_cleanup(struct trie_node *node, int index)
 
 int trie_add(struct trie_tree *tree, unsigned int family_len,
 	void *prefix, unsigned int prefix_len, unsigned int id,
-	struct list_head *list)
+	struct list_head *list, struct ixmap_desc *desc)
 {
 	struct trie_node *node, *parent;
 	int index, ret, i;
@@ -196,7 +202,7 @@ int trie_add(struct trie_tree *tree, unsigned int family_len,
 
 		node = parent->child[index];
 		if(!node){
-			node = trie_alloc_node(parent, index);
+			node = trie_alloc_node(parent, index, desc);
 			if(!node){
 				_trie_cleanup(parent, index);
 				goto err_alloc_child;
@@ -243,7 +249,7 @@ int trie_delete(struct trie_tree *tree, unsigned int family_len,
 
 	if(parent){
 		parent->child[index] = NULL;
-		free(node);
+		ixmap_mem_free(node->area);
 		_trie_cleanup(parent, index);
 	}
 

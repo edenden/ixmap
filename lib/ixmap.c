@@ -14,6 +14,7 @@
 #include <pthread.h>
 
 #include "ixmap.h"
+#include "memory.h"
 
 static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask);
 static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virt,
@@ -139,8 +140,8 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 	int queue_index)
 {
 	struct ixmap_desc *desc;
-	unsigned long size_tx_desc, size_rx_desc;
-	void *addr_virt;
+	unsigned long size_tx_desc, size_rx_desc, size_mem;
+	void *addr_virt, *addr_mem;
 	int i, ret;
 	int desc_assigned = 0;
 
@@ -152,7 +153,7 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 	 * XXX: We don't support NUMA-aware memory allocation in userspace.
 	 * To support, mbind() or set_mempolicy() will be useful.
 	 */
-	desc->addr_virt = mmap(NULL, PAGE_1GB, PROT_READ | PROT_WRITE,
+	desc->addr_virt = mmap(NULL, SIZE_1GB, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 	if(desc->addr_virt == MAP_FAILED){
 		goto err_mmap;
@@ -224,8 +225,15 @@ err_rx_dma_map:
 		goto err_desc_assign;
 	}
 
+	addr_mem = (void *)ALIGN((unsigned long)addr_virt, 128);
+	size_mem = SIZE_1GB - (addr_virt - desc->addr_virt);
+	desc->node = ixmap_mem_init(addr_mem, size_mem);
+	if(!desc->node)
+		goto err_mem_init;
+
 	return desc;
 
+err_mem_init:
 err_desc_assign:
 	for(i = 0; i < desc_assigned; i++){
 		struct ixmap_handle *ih;
@@ -236,7 +244,7 @@ err_desc_assign:
 		free(ih->rx_ring[queue_index].slot_index);
 		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
 	}
-	munmap(desc->addr_virt, PAGE_1GB);
+	munmap(desc->addr_virt, SIZE_1GB);
 err_mmap:
 	free(desc);
 err_alloc_desc:
@@ -248,6 +256,8 @@ void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
 {
 	int i;
 
+	ixmap_mem_destroy(desc->node);
+
 	for(i = 0; i < ih_num; i++){
 		struct ixmap_handle *ih;
 
@@ -258,7 +268,7 @@ void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
 		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
 	}
 
-	munmap(desc->addr_virt, PAGE_1GB);
+	munmap(desc->addr_virt, SIZE_1GB);
 	free(desc);
 	return;
 }

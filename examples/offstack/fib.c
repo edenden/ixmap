@@ -5,6 +5,7 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <stddef.h>
+#include <ixmap.h>
 
 #include "linux/list.h"
 #include "main.h"
@@ -105,18 +106,22 @@ static void fib_delete_print(int family, void *prefix,
 }
 #endif
 
-struct fib *fib_alloc()
+struct fib *fib_alloc(struct ixmap_desc *desc)
 {
         struct fib *fib;
+	struct ixmap_marea *area;
 
-	fib = malloc(sizeof(struct fib));
-	if(!fib)
+	area = ixmap_mem_alloc(desc, sizeof(struct fib));
+	if(!area)
 		goto err_fib_alloc;
+
+	fib = area->ptr;
 
 	trie_init(&fib->tree);
 	fib->tree.trie_entry_delete = fib_entry_delete;
 	fib->tree.trie_entry_insert = fib_entry_insert;
 	fib->tree.trie_entry_delete_all = fib_entry_delete_all;
+	fib->area = area;
 	return fib;
 
 err_fib_alloc:
@@ -126,7 +131,7 @@ err_fib_alloc:
 void fib_release(struct fib *fib)
 {
 	trie_delete_all(&fib->tree);
-	free(fib);
+	ixmap_mem_free(fib->area);
 	return;
 }
 
@@ -155,7 +160,7 @@ static int fib_entry_delete(struct list_head *head, unsigned int id)
 	list_for_each_entry_safe(entry, entry_n, head, list){
 		if(entry->id == id){
 			list_del(&entry->list);
-			free(entry);
+			ixmap_mem_free(entry->area);
 			return 0;
 		}
 	}
@@ -169,7 +174,7 @@ static void fib_entry_delete_all(struct list_head *head)
 
 	list_for_each_entry_safe(entry, entry_n, head, list){
 		list_del(&entry->list);
-		free(entry);
+		ixmap_mem_free(entry->area);
 	}
 
 	return;
@@ -177,9 +182,10 @@ static void fib_entry_delete_all(struct list_head *head)
 
 int fib_route_update(struct fib *fib, int family, enum fib_type type,
 	void *prefix, unsigned int prefix_len, void *nexthop,
-	int port_index, int id)
+	int port_index, int id, struct ixmap_desc *desc)
 {
 	struct fib_entry *entry;
+	struct ixmap_marea *area;
 	unsigned int family_len;
 	int ret;
 
@@ -195,9 +201,11 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 		break;
 	}
 
-	entry = malloc(sizeof(struct fib_entry));
-	if(!entry)
+	area = ixmap_mem_alloc(desc, sizeof(struct fib_entry));
+	if(!area)
 		goto err_alloc_entry;
+
+	entry = area->ptr;
 
 	memcpy(entry->nexthop, nexthop, family_len >> 3);
 	memcpy(entry->prefix, prefix, family_len >> 3);
@@ -205,6 +213,7 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 	entry->port_index	= port_index;
 	entry->type		= type;
 	entry->id		= id;
+	entry->area		= area;
 
 #ifdef DEBUG
 	fib_update_print(family, type, prefix, prefix_len,
@@ -212,14 +221,14 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 #endif
 
 	ret = trie_add(&fib->tree, family_len,
-		prefix, prefix_len, id, &entry->list);
+		prefix, prefix_len, id, &entry->list, desc);
 	if(ret < 0)
 		goto err_trie_add;
 
 	return 0;
 
 err_trie_add:
-	free(entry);
+	ixmap_mem_free(entry->area);
 err_alloc_entry:
 err_invalid_family:
 	return -1;

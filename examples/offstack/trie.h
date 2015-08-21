@@ -8,6 +8,7 @@ struct trie_node {
 	void			*parent;
 	void			*child[2];
 	int			index;
+	struct ixmap_marea	*area;
 };
 
 struct trie_tree {
@@ -37,7 +38,7 @@ struct list_head *trie_lookup(struct trie_tree *tree, unsigned int family_len,
 	void *destination);
 int trie_add(struct trie_tree *tree, unsigned int family_len,
 	void *prefix, unsigned int prefix_len, unsigned int id,
-	struct list_head *list);
+	struct list_head *list, struct ixmap_desc *desc);
 int trie_delete(struct trie_tree *tree, unsigned int family_len,
 	void *prefix, unsigned int prefix_len, unsigned int id);
 

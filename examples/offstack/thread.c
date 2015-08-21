@@ -45,7 +45,7 @@ void *thread_process_interrupt(void *data)
 	INIT_LIST_HEAD(&ep_desc_head);
 
 	/* Prepare fib */
-	thread->fib = fib_alloc();
+	thread->fib = fib_alloc(thread->desc);
 	if(!thread->fib)
 		goto err_fib_alloc;
 
@@ -55,7 +55,7 @@ void *thread_process_interrupt(void *data)
 	}
 
 	for(i = 0; i < thread->num_ports; i++, ports_assigned++){
-		thread->neigh[i] = neigh_alloc();
+		thread->neigh[i] = neigh_alloc(thread->desc);
 		if(!thread->neigh[i])
 			goto err_neigh_alloc;
 

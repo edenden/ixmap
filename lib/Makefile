@@ -8,7 +8,7 @@ TARGET = ixmap
 LIBS = 
 MAJOR = 1
 MINOR = 0
-OBJECTS = ixmap.o driver.o rxinit.o txinit.o
+OBJECTS = ixmap.o driver.o rxinit.o txinit.o memory.o
 
 .SUFFIXES: .c .o
 

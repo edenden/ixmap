@@ -7,7 +7,7 @@
 #define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
 
 #define FILENAME_SIZE 256
-#define PAGE_1GB (1ul << 30)
+#define SIZE_1GB (1ul << 30)
 
 #define min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
@@ -69,6 +69,7 @@ struct ixmap_ring {
 
 struct ixmap_desc {
 	void			*addr_virt;
+	struct ixmap_mnode	*node;
 };
 
 struct ixmap_buf {
