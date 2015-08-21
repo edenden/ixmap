@@ -169,8 +169,8 @@ static int neigh_key_compare_v4(void *key_tgt, void *key_ent)
 static int neigh_key_compare_v6(void *key_tgt, void *key_ent)
 {
 	return ((uint64_t *)key_tgt)[0] ^ ((uint64_t *)key_ent)[0] ?
-		(((uint64_t *)key_tgt)[1] ^ ((uint64_t *)key_ent)[1] ?
-		1 : 0) : 0;
+		1 : (((uint64_t *)key_tgt)[1] ^ ((uint64_t *)key_ent)[1] ?
+		1 : 0);
 }
 
 int neigh_add(struct neigh_table *neigh, int family,
