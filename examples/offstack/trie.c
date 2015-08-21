@@ -51,10 +51,11 @@ static struct trie_node *trie_alloc_node(struct trie_node *parent, int index,
 	node = area->ptr;
 	node->area = area;
 
-	memset(node, 0, sizeof(struct trie_node));
-	node->parent = parent;
-	node->index = index;
 	INIT_LIST_HEAD(&node->head);
+	node->parent = parent;
+	node->child[0] = NULL;
+	node->child[1] = NULL;
+	node->index = index;
 
 	return node;
 
