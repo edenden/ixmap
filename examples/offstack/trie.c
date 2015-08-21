@@ -49,12 +49,12 @@ static struct trie_node *trie_alloc_node(struct trie_node *parent, int index,
 		goto err_alloc_node;
 
 	node = area->ptr;
+	node->area = area;
 
 	memset(node, 0, sizeof(struct trie_node));
 	node->parent = parent;
 	node->index = index;
 	INIT_LIST_HEAD(&node->head);
-	node->area = area;
 
 	return node;
 

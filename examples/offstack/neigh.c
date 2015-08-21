@@ -96,10 +96,10 @@ struct neigh_table *neigh_alloc(struct ixmap_desc *desc, int family)
 		goto err_neigh_alloc;
 
 	neigh = area->ptr;
+	neigh->area = area;
 
 	hash_init(&neigh->table);
 	neigh->table.hash_entry_delete = neigh_entry_delete;
-	neigh->area = area;
 
 	switch(family){
 	case AF_INET:
