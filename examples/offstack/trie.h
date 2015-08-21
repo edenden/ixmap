@@ -4,9 +4,9 @@
 #include "linux/list.h"
 
 struct trie_node {
+	struct list_head	head;
 	void			*parent;
 	void			*child[2];
-	struct list_head	head;
 	int			index;
 };
 

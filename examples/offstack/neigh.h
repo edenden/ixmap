@@ -10,8 +10,8 @@ struct neigh_table {
 };
 
 struct neigh_entry {
-	uint8_t			dst_mac[ETH_ALEN];
 	struct hash_entry	hash;
+	uint8_t			dst_mac[ETH_ALEN];
 };
 
 struct neigh_table *neigh_alloc();

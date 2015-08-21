@@ -12,12 +12,12 @@ enum fib_type {
 };
 
 struct fib_entry {
+	struct list_head	list;
 	uint8_t			prefix[16];
 	unsigned int		prefix_len;
 	uint8_t			nexthop[16];
 	int			port_index; /* -1 means not ixmap interface */
 	enum fib_type		type;
-	struct list_head	list;
 	int			id;
 };
 

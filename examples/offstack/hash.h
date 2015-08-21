@@ -10,9 +10,9 @@
 	container_of(ptr, type, member)
 
 struct hash_entry {
+	struct hlist_node	list;
 	void			*key;
 	unsigned int		key_len;
-	struct hlist_node	list;
 };
 
 struct hash_table {
