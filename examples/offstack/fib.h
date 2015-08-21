@@ -27,7 +27,7 @@ struct fib {
 	struct ixmap_marea	*area;
 };
 
-struct fib *fib_alloc(struct ixmap_desc *desc);
+struct fib *fib_alloc(struct ixmap_desc *desc, int family);
 void fib_release(struct fib *fib);
 int fib_route_update(struct fib *fib, int family, enum fib_type type,
 	void *prefix, unsigned int prefix_len, void *nexthop,
@@ -35,7 +35,6 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 int fib_route_delete(struct fib *fib, int family,
 	void *prefix, unsigned int prefix_len,
 	int id);
-struct list_head *fib_lookup(struct fib *fib, int family,
-	void *destination);
+struct list_head *fib_lookup(struct fib *fib, void *destination);
 
 #endif /* _IXMAPFWD_FIB_H */

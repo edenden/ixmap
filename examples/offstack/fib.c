@@ -106,7 +106,7 @@ static void fib_delete_print(int family, void *prefix,
 }
 #endif
 
-struct fib *fib_alloc(struct ixmap_desc *desc)
+struct fib *fib_alloc(struct ixmap_desc *desc, int family)
 {
         struct fib *fib;
 	struct ixmap_marea *area;
@@ -116,14 +116,28 @@ struct fib *fib_alloc(struct ixmap_desc *desc)
 		goto err_fib_alloc;
 
 	fib = area->ptr;
+	fib->area = area;
 
-	trie_init(&fib->tree);
+	switch(family){
+	case AF_INET:
+		trie_init(&fib->tree, 32);
+		break;
+	case AF_INET6:
+		trie_init(&fib->tree, 128);
+		break;
+	default:
+		goto err_invalid_family;
+		break;
+	}
+
 	fib->tree.trie_entry_delete = fib_entry_delete;
 	fib->tree.trie_entry_insert = fib_entry_insert;
 	fib->tree.trie_entry_delete_all = fib_entry_delete_all;
-	fib->area = area;
+
 	return fib;
 
+err_invalid_family:
+	ixmap_mem_free(fib->area);
 err_fib_alloc:
 	return NULL;
 }
@@ -186,51 +200,50 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 {
 	struct fib_entry *entry;
 	struct ixmap_marea *area;
-	unsigned int family_len;
 	int ret;
-
-	switch(family){
-	case AF_INET:
-		family_len = 32;
-		break;
-	case AF_INET6:
-		family_len = 128;
-		break;
-	default:
-		goto err_invalid_family;
-		break;
-	}
 
 	area = ixmap_mem_alloc(desc, sizeof(struct fib_entry));
 	if(!area)
 		goto err_alloc_entry;
 
 	entry = area->ptr;
+	entry->area = area;
 
-	memcpy(entry->nexthop, nexthop, family_len >> 3);
-	memcpy(entry->prefix, prefix, family_len >> 3);
+	switch(family){
+	case AF_INET:
+		memcpy(entry->nexthop, nexthop, 4);
+		memcpy(entry->prefix, prefix, 4);
+		break;
+	case AF_INET6:
+		memcpy(entry->nexthop, nexthop, 16);
+		memcpy(entry->prefix, prefix, 16);
+		break;
+	default:
+		goto err_invalid_family;
+		break;
+	}
+
 	entry->prefix_len	= prefix_len;
 	entry->port_index	= port_index;
 	entry->type		= type;
 	entry->id		= id;
-	entry->area		= area;
 
 #ifdef DEBUG
 	fib_update_print(family, type, prefix, prefix_len,
 		nexthop, port_index, id);
 #endif
 
-	ret = trie_add(&fib->tree, family_len,
-		prefix, prefix_len, id, &entry->list, desc);
+	ret = trie_add(&fib->tree, prefix, prefix_len,
+		id, &entry->list, desc);
 	if(ret < 0)
 		goto err_trie_add;
 
 	return 0;
 
 err_trie_add:
+err_invalid_family:
 	ixmap_mem_free(entry->area);
 err_alloc_entry:
-err_invalid_family:
 	return -1;
 }
 
@@ -238,62 +251,33 @@ int fib_route_delete(struct fib *fib, int family,
 	void *prefix, unsigned int prefix_len,
 	int id)
 {
-	unsigned int family_len;
 	int ret;
-
-	switch(family){
-	case AF_INET:
-		family_len = 32;
-		break;
-	case AF_INET6:
-		family_len = 128;
-		break;
-	default:
-		goto err_invalid_family;
-		break;
-	}
 
 #ifdef DEBUG
 	fib_delete_print(family, prefix, prefix_len, id);
 #endif
 
-	ret = trie_delete(&fib->tree, family_len,
-		prefix, prefix_len, id);
+	ret = trie_delete(&fib->tree, prefix, prefix_len, id);
 	if(ret < 0)
 		goto err_trie_delete;
 
 	return 0;
 
 err_trie_delete:
-err_invalid_family:
 	return -1;
 }
 
-struct list_head *fib_lookup(struct fib *fib, int family,
+struct list_head *fib_lookup(struct fib *fib,
 	void *destination)
 {
 	struct list_head *head;
-	unsigned int family_len;
 
-	switch(family){
-	case AF_INET:
-		family_len = 32;
-		break;
-	case AF_INET6:
-		family_len = 128;
-		break;
-	default:
-		goto err_invalid_family;
-		break;
-	}
-
-	head = trie_lookup(&fib->tree, family_len, destination);
+	head = trie_lookup(&fib->tree, destination);
 	if(!head)
 		goto err_trie_lookup;
 
 	return head;
 
 err_trie_lookup:
-err_invalid_family:
 	return NULL;
 }

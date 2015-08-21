@@ -14,10 +14,11 @@ static void _trie_traverse(struct trie_tree *tree, struct trie_node *node);
 static void _trie_delete_all(struct trie_tree *tree, struct trie_node *node);
 static void _trie_cleanup(struct trie_node *node, int index);
 
-void trie_init(struct trie_tree *tree)
+void trie_init(struct trie_tree *tree, unsigned int max_depth)
 {
 	struct trie_node *node;
 
+	tree->max_depth = max_depth;
 	node = &tree->node;
 
 	memset(node, 0, sizeof(struct trie_node));
@@ -135,7 +136,7 @@ void trie_delete_all(struct trie_tree *tree)
 	return;
 }
 
-struct list_head *trie_lookup(struct trie_tree *tree, unsigned int family_len,
+struct list_head *trie_lookup(struct trie_tree *tree,
 	void *destination)
 {
 	struct trie_node *node;
@@ -145,7 +146,7 @@ struct list_head *trie_lookup(struct trie_tree *tree, unsigned int family_len,
 	node = &tree->node;
 	head = NULL;
 
-	for(i = 0; i < family_len; i++){
+	for(i = 0; i < tree->max_depth; i++){
 		index = trie_bit(destination, i);
 
 		node = node->child[index];
@@ -187,8 +188,8 @@ static void _trie_cleanup(struct trie_node *node, int index)
 	return;
 }
 
-int trie_add(struct trie_tree *tree, unsigned int family_len,
-	void *prefix, unsigned int prefix_len, unsigned int id,
+int trie_add(struct trie_tree *tree, void *prefix,
+	unsigned int prefix_len, unsigned int id,
 	struct list_head *list, struct ixmap_desc *desc)
 {
 	struct trie_node *node, *parent;
@@ -223,8 +224,8 @@ err_insert:
 	return -1;
 }
 
-int trie_delete(struct trie_tree *tree, unsigned int family_len,
-	void *prefix, unsigned int prefix_len, unsigned int id)
+int trie_delete(struct trie_tree *tree, void *prefix,
+	unsigned int prefix_len, unsigned int id)
 {
 	struct trie_node *node, *parent;
 	int index, ret, i;

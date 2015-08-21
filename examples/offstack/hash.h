@@ -4,7 +4,8 @@
 #include "linux/list.h"
 #include "main.h"
 
-#define HASH_SIZE (1 << 16)
+#define HASH_BIT 16
+#define HASH_SIZE (1 << HASH_BIT)
 
 #define hash_entry(ptr, type, member)	\
 	container_of(ptr, type, member)
@@ -12,7 +13,6 @@
 struct hash_entry {
 	struct hlist_node	list;
 	void			*key;
-	unsigned int		key_len;
 };
 
 struct hash_table {
@@ -20,15 +20,23 @@ struct hash_table {
 	void			(*hash_entry_delete)(
 				struct hash_entry *
 				);
+	unsigned int		(*hash_key_generate)(
+				void *,
+				unsigned int
+				);
+	int			(*hash_key_compare)(
+				void *,
+				void *
+				);
 };
 
 void hash_init(struct hash_table *table);
-int hash_add(struct hash_table *table, void *key, int key_len,
+int hash_add(struct hash_table *table, void *key,
 	struct hash_entry *entry_new);
 int hash_delete(struct hash_table *table,
-	void *key, int key_len);
+	void *key);
 void hash_delete_all(struct hash_table *table);
 struct hash_entry *hash_lookup(struct hash_table *table,
-	void *key, int key_len);
+	void *key);
 
 #endif /* _IXMAPFWD_HASH_H */

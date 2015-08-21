@@ -151,7 +151,7 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	eth = (struct ethhdr *)slot_buf;
 	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
 
-	head = fib_lookup(thread->fib, AF_INET, &ip->daddr);
+	head = fib_lookup(thread->fib_inet, &ip->daddr);
 	if(!head)
 		goto packet_drop;
 
@@ -168,13 +168,13 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 		break;
 	case FIB_TYPE_LINK:
 		neigh_entry = neigh_lookup(
-			thread->neigh[fib_entry->port_index],
-			AF_INET, &ip->daddr);
+			thread->neigh_inet[fib_entry->port_index],
+			&ip->daddr);
 		break;
 	case FIB_TYPE_FORWARD:
 		neigh_entry = neigh_lookup(
-			thread->neigh[fib_entry->port_index],
-			AF_INET, fib_entry->nexthop);
+			thread->neigh_inet[fib_entry->port_index],
+			fib_entry->nexthop);
 		break;
 	default:
 		neigh_entry = NULL;
@@ -226,7 +226,7 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	&& (ip6->ip6_dst.s6_addr[1] & 0xc0) == 0x80))
 		goto packet_local;
 
-	head = fib_lookup(thread->fib, AF_INET6, (uint32_t *)&ip6->ip6_dst);
+	head = fib_lookup(thread->fib_inet6, (uint32_t *)&ip6->ip6_dst);
 	if(!head)
 		goto packet_drop;
 
@@ -243,13 +243,13 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 		break;
 	case FIB_TYPE_LINK:
 		neigh_entry = neigh_lookup(
-			thread->neigh[fib_entry->port_index],
-			AF_INET6, &ip6->ip6_dst);
+			thread->neigh_inet6[fib_entry->port_index],
+			&ip6->ip6_dst);
 		break;
 	case FIB_TYPE_FORWARD:
 		neigh_entry = neigh_lookup(
-			thread->neigh[fib_entry->port_index],
-			AF_INET6, fib_entry->nexthop);
+			thread->neigh_inet6[fib_entry->port_index],
+			fib_entry->nexthop);
 		break;
 	default:
 		neigh_entry = NULL;

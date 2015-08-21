@@ -50,6 +50,7 @@ static void netlink_route(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 {
 	struct rtmsg *route_entry;
 	struct rtattr *route_attr;
+	struct fib *fib;
 	int route_attr_len, family;
 	uint8_t prefix[16] = {};
 	uint8_t nexthop[16] = {};
@@ -98,20 +99,33 @@ static void netlink_route(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 		}
 	}
 
+	switch(family){
+	case AF_INET:
+		fib = thread->fib_inet;
+		break;
+	case AF_INET6:
+		fib = thread->fib_inet6;
+		break;
+	default:
+		goto out;
+		break;
+	}
+
 	switch(nlh->nlmsg_type){
 	case RTM_NEWROUTE:
-		fib_route_update(thread->fib, family, type,
+		fib_route_update(fib, family, type,
 			prefix, prefix_len, nexthop, port_index, ifindex,
 			thread->desc);
 		break;
 	case RTM_DELROUTE:
-		fib_route_delete(thread->fib, family,
+		fib_route_delete(fib, family,
 			prefix, prefix_len, ifindex);
 		break;
 	default:
 		break;
 	}
 
+out:
 	return;
 }
 
@@ -119,6 +133,7 @@ static void netlink_neigh(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 {
 	struct ndmsg *neigh_entry;
 	struct rtattr *route_attr;
+	struct neigh_table *neigh;
 	int route_attr_len;
 	int ifindex;
 	int family;
@@ -139,7 +154,7 @@ static void netlink_neigh(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 	}
 
 	if(port_index < 0)
-		goto ign_ifindex;
+		goto out;
 
 	route_attr = (struct rtattr *)RTM_RTA(neigh_entry);
 	route_attr_len = RTM_PAYLOAD(nlh);
@@ -161,20 +176,30 @@ static void netlink_neigh(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh)
 		route_attr = RTA_NEXT(route_attr, route_attr_len);
 	}
 
+	switch(family){
+	case AF_INET:
+		neigh = thread->neigh_inet[port_index];
+		break;
+	case AF_INET6:
+		neigh = thread->neigh_inet6[port_index];
+		break;
+	default:
+		goto out;
+		break;
+	}
+
 	switch(nlh->nlmsg_type){
 	case RTM_NEWNEIGH:
-		neigh_add(thread->neigh[port_index],
-			family, dst_addr, dst_mac,
+		neigh_add(neigh, family, dst_addr, dst_mac,
 			thread->desc);
 		break;
 	case RTM_DELNEIGH:
-		neigh_delete(thread->neigh[port_index],
-			family, dst_addr);
+		neigh_delete(neigh, family, dst_addr);
 		break;
 	default:
 		break;
 	}
 
-ign_ifindex:
+out:
 	return;
 }

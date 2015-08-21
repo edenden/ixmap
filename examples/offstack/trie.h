@@ -13,6 +13,7 @@ struct trie_node {
 
 struct trie_tree {
 	struct trie_node	node;
+	unsigned int		max_depth;
 	int			(*trie_entry_insert)(
 				struct list_head *,
 				unsigned int,
@@ -30,16 +31,15 @@ struct trie_tree {
 				);
 };
 
-void trie_init(struct trie_tree *tree);
+void trie_init(struct trie_tree *tree, unsigned int max_depth);
 int trie_traverse(struct trie_tree *tree, unsigned int family_len,
 	void *prefix, unsigned int prefix_len);
 void trie_delete_all(struct trie_tree *tree);
-struct list_head *trie_lookup(struct trie_tree *tree, unsigned int family_len,
-	void *destination);
-int trie_add(struct trie_tree *tree, unsigned int family_len,
-	void *prefix, unsigned int prefix_len, unsigned int id,
+struct list_head *trie_lookup(struct trie_tree *tree, void *destination);
+int trie_add(struct trie_tree *tree, void *prefix,
+	unsigned int prefix_len, unsigned int id,
 	struct list_head *list, struct ixmap_desc *desc);
-int trie_delete(struct trie_tree *tree, unsigned int family_len,
-	void *prefix, unsigned int prefix_len, unsigned int id);
+int trie_delete(struct trie_tree *tree, void *prefix,
+	unsigned int prefix_len, unsigned int id);
 
 #endif /* _IXMAPFWD_TRIE_H */

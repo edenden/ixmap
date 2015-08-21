@@ -35,6 +35,7 @@ static void thread_print_result(struct ixmapfwd_thread *thread);
 void *thread_process_interrupt(void *data)
 {
 	struct ixmapfwd_thread	*thread = data;
+	struct ixmap_marea	*area;
 	struct list_head	ep_desc_head;
 	uint8_t			*read_buf;
 	int			read_size, fd_ep, i, ret;
@@ -45,19 +46,39 @@ void *thread_process_interrupt(void *data)
 	INIT_LIST_HEAD(&ep_desc_head);
 
 	/* Prepare fib */
-	thread->fib = fib_alloc(thread->desc);
-	if(!thread->fib)
-		goto err_fib_alloc;
+	thread->fib_inet = fib_alloc(thread->desc, AF_INET);
+	if(!thread->fib_inet)
+		goto err_fib_inet_alloc;
 
-	thread->neigh = malloc(sizeof(struct neigh *) * thread->num_ports);
-	if(!thread->neigh){
-		goto err_neigh_table;
-	}
+	thread->fib_inet6 = fib_alloc(thread->desc, AF_INET6);
+	if(!thread->fib_inet6)
+		goto err_fib_inet6_alloc;
+
+	/* Prepare Neighbor table */
+	area = ixmap_mem_alloc(thread->desc,
+		sizeof(struct neigh *) * thread->num_ports);
+	if(!area)
+		goto err_neigh_table_inet;
+	
+	thread->neigh_inet = area->ptr;
+	thread->neigh_inet_area = area;
+
+	area = ixmap_mem_alloc(thread->desc,
+		sizeof(struct neigh *) * thread->num_ports);
+	if(!area)
+		goto err_neigh_table_inet6;
+
+	thread->neigh_inet6 = area->ptr;
+	thread->neigh_inet6_area = area;
 
 	for(i = 0; i < thread->num_ports; i++, ports_assigned++){
-		thread->neigh[i] = neigh_alloc(thread->desc);
-		if(!thread->neigh[i])
-			goto err_neigh_alloc;
+		thread->neigh_inet[i] = neigh_alloc(thread->desc, AF_INET);
+		if(!thread->neigh_inet[i])
+			goto err_neigh_inet_alloc;
+
+		thread->neigh_inet6[i] = neigh_alloc(thread->desc, AF_INET6);
+		if(!thread->neigh_inet6[i])
+			goto err_neigh_inet6_alloc;
 
 		/* calclulate maximum buf_size we should prepare */
 		if(thread->tun_plane->ports[i].mtu_frame > read_size)
@@ -65,7 +86,9 @@ void *thread_process_interrupt(void *data)
 
 		continue;
 
-err_neigh_alloc:
+err_neigh_inet6_alloc:
+		neigh_release(thread->neigh_inet[i]);
+err_neigh_inet_alloc:
 		goto err_assign_ports;
 	}
 
@@ -97,12 +120,17 @@ err_ixgbe_epoll_prepare:
 err_alloc_read_buf:
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
-		neigh_release(thread->neigh[i]);
+		neigh_release(thread->neigh_inet6[i]);
+		neigh_release(thread->neigh_inet[i]);
 	}
-	free(thread->neigh);
-err_neigh_table:
-	fib_release(thread->fib);
-err_fib_alloc:
+	ixmap_mem_free(thread->neigh_inet6_area);
+err_neigh_table_inet6:
+	ixmap_mem_free(thread->neigh_inet_area);
+err_neigh_table_inet:
+	fib_release(thread->fib_inet6);
+err_fib_inet6_alloc:
+	fib_release(thread->fib_inet);
+err_fib_inet_alloc:
 	thread_print_result(thread);
 	pthread_kill(thread->ptid, SIGINT);
 	return NULL;
