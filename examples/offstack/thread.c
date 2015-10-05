@@ -46,11 +46,11 @@ void *thread_process_interrupt(void *data)
 	INIT_LIST_HEAD(&ep_desc_head);
 
 	/* Prepare fib */
-	thread->fib_inet = fib_alloc(thread->desc, AF_INET);
+	thread->fib_inet = fib_alloc(thread->desc);
 	if(!thread->fib_inet)
 		goto err_fib_inet_alloc;
 
-	thread->fib_inet6 = fib_alloc(thread->desc, AF_INET6);
+	thread->fib_inet6 = fib_alloc(thread->desc);
 	if(!thread->fib_inet6)
 		goto err_fib_inet6_alloc;
 

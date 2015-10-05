@@ -3,7 +3,7 @@
 
 #include "linux/list.h"
 
-#define TABLE_SIZE_24 (1 << 24)
+#define TABLE_SIZE_16 (1 << 16)
 #define TABLE_SIZE_8 (1 << 8)
 
 struct lpm_entry {
@@ -19,8 +19,7 @@ struct lpm_node {
 };
 
 struct lpm_table {
-	struct lpm_node		node[TABLE_SIZE_24];
-	unsigned int		max_len;
+	struct lpm_node		node[TABLE_SIZE_16];
 	void			(*entry_dump)(
 				struct list_head *
 				);
@@ -41,7 +40,7 @@ struct lpm_table {
 				);
 };
 
-void lpm_init(struct lpm_table *table, unsigned int max_len);
+void lpm_init(struct lpm_table *table);
 struct lpm_entry *lpm_lookup(struct lpm_table *table,
 	void *dst);
 int lpm_add(struct lpm_table *table, void *prefix,

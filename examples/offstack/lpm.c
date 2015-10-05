@@ -31,13 +31,12 @@ static int lpm_entry_delete(struct lpm_table *table, struct list_head *head,
 	unsigned int id, unsigned int prefix_len);
 static void lpm_entry_delete_all(struct lpm_table *table, struct list_head *head);
 
-void lpm_init(struct lpm_table *table, unsigned int max_len)
+void lpm_init(struct lpm_table *table)
 {
 	struct lpm_node *node;
 	int i;
 
-	table->max_len = max_len;
-	for(i = 0; i < TABLE_SIZE_24; i++){
+	for(i = 0; i < TABLE_SIZE_16; i++){
 		node = &table->node[i];
 		lpm_init_node(node);
 	}
@@ -74,11 +73,11 @@ struct lpm_entry *lpm_lookup(struct lpm_table *table,
 	struct list_head *head;
 	struct lpm_entry *entry;
 
-	index = lpm_index(dst, 0, 24);
+	index = lpm_index(dst, 0, 16);
 	node = &table->node[index];
 
 	if(node->next_table){
-		head = _lpm_lookup(dst, node, 24);
+		head = _lpm_lookup(dst, node, 16);
 	}else{
 		head = &node->head;
 	}
@@ -117,16 +116,16 @@ int lpm_add(struct lpm_table *table, void *prefix,
 	struct ixmap_marea *area;
 	int i, ret, entry_allocated = 0;
 
-	index = lpm_index(prefix, 0, 24);
+	index = lpm_index(prefix, 0, 16);
 
-	if(prefix_len > 24){
+	if(prefix_len > 16){
 		node = &table->node[index];
 		ret = _lpm_add(table, prefix, prefix_len, id,
-			ptr, desc, node, 24);
+			ptr, desc, node, 16);
 		if(ret < 0)
 			goto err_lpm_add;
 	}else{
-		range = 1 << (24 - prefix_len);
+		range = 1 << (16 - prefix_len);
 		mask = ~(range - 1);
 		index &= mask;
 
@@ -255,15 +254,15 @@ int lpm_delete(struct lpm_table *table, void *prefix,
 	unsigned int range, mask;
 	int i, ret;
 
-	index = lpm_index(prefix, 0, 24);
+	index = lpm_index(prefix, 0, 16);
 
-	if(prefix_len > 24){
+	if(prefix_len > 16){
 		node = &table->node[index];
-		ret = _lpm_delete(table, prefix, prefix_len, id, node, 24);
+		ret = _lpm_delete(table, prefix, prefix_len, id, node, 16);
 		if(ret < 0)
 			goto err_delete;
 	}else{
-		range = 1 << (24 - prefix_len);
+		range = 1 << (16 - prefix_len);
 		mask = ~(range - 1);
 		index &= mask;
 
@@ -295,7 +294,7 @@ static int _lpm_delete(struct lpm_table *table, void *prefix,
 
 	index = lpm_index(prefix, offset, 8);
 
-	if(table->max_len - offset > 8){
+	if(prefix_len - offset > 8){
 		node = &parent->next_table[index];
 		ret = _lpm_delete(table, prefix, prefix_len, id, node, offset + 8);
 		if(ret < 0)
@@ -334,7 +333,7 @@ void lpm_delete_all(struct lpm_table *table)
 	struct lpm_node *node;
 	int i;
 
-	for(i = 0; i < TABLE_SIZE_24; i++){
+	for(i = 0; i < TABLE_SIZE_16; i++){
 		node = &table->node[i];
 		_lpm_delete_all(table, node);
 		if(!list_empty(&node->head)){
@@ -377,13 +376,13 @@ int lpm_traverse(struct lpm_table *table, void *prefix,
 	unsigned int range, mask;
 	int i;
 
-	index = lpm_index(prefix, 0, 24);
+	index = lpm_index(prefix, 0, 16);
 
-	if(prefix_len > 24){
+	if(prefix_len > 16){
 		node = &table->node[index];
-		_lpm_traverse(table, prefix, prefix_len, node, 24);
+		_lpm_traverse(table, prefix, prefix_len, node, 16);
 	}else{
-		range = 1 << (24 - prefix_len);
+		range = 1 << (16 - prefix_len);
 		mask = ~((1 << range) - 1);
 		index &= mask;
 
@@ -412,7 +411,7 @@ static int _lpm_traverse(struct lpm_table *table, void *prefix,
 
 	index = lpm_index(prefix, offset, 8);
 
-	if(table->max_len - offset > 8){
+	if(prefix_len - offset > 8){
 		node = &parent->next_table[index];
 		_lpm_traverse(table, prefix, prefix_len, node, offset + 8);
 	}else{

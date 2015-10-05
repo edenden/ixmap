@@ -27,7 +27,7 @@ struct fib {
 	struct ixmap_marea	*area;
 };
 
-struct fib *fib_alloc(struct ixmap_desc *desc, int family);
+struct fib *fib_alloc(struct ixmap_desc *desc);
 void fib_release(struct fib *fib);
 int fib_route_update(struct fib *fib, int family, enum fib_type type,
 	void *prefix, unsigned int prefix_len, void *nexthop,

@@ -107,7 +107,7 @@ static void fib_delete_print(int family, void *prefix,
 }
 #endif
 
-struct fib *fib_alloc(struct ixmap_desc *desc, int family)
+struct fib *fib_alloc(struct ixmap_desc *desc)
 {
         struct fib *fib;
 	struct ixmap_marea *area;
@@ -119,17 +119,7 @@ struct fib *fib_alloc(struct ixmap_desc *desc, int family)
 	fib = area->ptr;
 	fib->area = area;
 
-	switch(family){
-	case AF_INET:
-		lpm_init(&fib->table, 32);
-		break;
-	case AF_INET6:
-		lpm_init(&fib->table, 128);
-		break;
-	default:
-		goto err_invalid_family;
-		break;
-	}
+	lpm_init(&fib->table);
 
 	fib->table.entry_identify	= fib_entry_identify;
 	fib->table.entry_compare	= fib_entry_compare;
@@ -138,8 +128,6 @@ struct fib *fib_alloc(struct ixmap_desc *desc, int family)
 
 	return fib;
 
-err_invalid_family:
-	ixmap_mem_free(fib->area);
 err_fib_alloc:
 	return NULL;
 }
