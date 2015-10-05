@@ -141,7 +141,6 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 {
 	struct ethhdr		*eth;
 	struct iphdr		*ip;
-	struct list_head	*head;
 	struct fib_entry	*fib_entry;
 	struct neigh_entry	*neigh_entry;
 	uint8_t			*dst_mac, *src_mac;
@@ -151,11 +150,7 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	eth = (struct ethhdr *)slot_buf;
 	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
 
-	head = fib_lookup(thread->fib_inet, &ip->daddr);
-	if(!head)
-		goto packet_drop;
-
-	fib_entry = list_first_entry_or_null(head, struct fib_entry, list);
+	fib_entry = fib_lookup(thread->fib_inet, &ip->daddr);
 	if(!fib_entry)
 		goto packet_drop;
 
@@ -213,7 +208,6 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 {
 	struct ethhdr		*eth;
 	struct ip6_hdr		*ip6;
-	struct list_head	*head;
 	struct fib_entry	*fib_entry;
 	struct neigh_entry	*neigh_entry;
 	uint8_t			*dst_mac, *src_mac;
@@ -226,11 +220,7 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	&& (ip6->ip6_dst.s6_addr[1] & 0xc0) == 0x80))
 		goto packet_local;
 
-	head = fib_lookup(thread->fib_inet6, (uint32_t *)&ip6->ip6_dst);
-	if(!head)
-		goto packet_drop;
-
-	fib_entry = list_first_entry_or_null(head, struct fib_entry, list);
+	fib_entry = fib_lookup(thread->fib_inet6, (uint32_t *)&ip6->ip6_dst);
 	if(!fib_entry)
 		goto packet_drop;
 

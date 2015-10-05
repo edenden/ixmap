@@ -11,10 +11,11 @@
 #include "main.h"
 #include "fib.h"
 
-static int fib_entry_insert(struct list_head *head, unsigned int id,
-	struct list_head *list);
-static int fib_entry_delete(struct list_head *head, unsigned int id);
-static void fib_entry_delete_all(struct list_head *head);
+static int fib_entry_identify(void *ptr, unsigned int id,
+	unsigned int prefix_len);
+static int fib_entry_compare(void *ptr, unsigned int prefix_len);
+static void fib_entry_pull(void *ptr);
+static void fib_entry_put(void *ptr);
 
 #ifdef DEBUG
 static void fib_update_print(int family, enum fib_type type,
@@ -120,19 +121,20 @@ struct fib *fib_alloc(struct ixmap_desc *desc, int family)
 
 	switch(family){
 	case AF_INET:
-		trie_init(&fib->tree, 32);
+		lpm_init(&fib->table, 32);
 		break;
 	case AF_INET6:
-		trie_init(&fib->tree, 128);
+		lpm_init(&fib->table, 128);
 		break;
 	default:
 		goto err_invalid_family;
 		break;
 	}
 
-	fib->tree.trie_entry_delete = fib_entry_delete;
-	fib->tree.trie_entry_insert = fib_entry_insert;
-	fib->tree.trie_entry_delete_all = fib_entry_delete_all;
+	fib->table.entry_identify	= fib_entry_identify;
+	fib->table.entry_compare	= fib_entry_compare;
+	fib->table.entry_pull		= fib_entry_pull;
+	fib->table.entry_put		= fib_entry_put;
 
 	return fib;
 
@@ -144,53 +146,8 @@ err_fib_alloc:
 
 void fib_release(struct fib *fib)
 {
-	trie_delete_all(&fib->tree);
+	lpm_delete_all(&fib->table);
 	ixmap_mem_free(fib->area);
-	return;
-}
-
-static int fib_entry_insert(struct list_head *head, unsigned int id,
-	struct list_head *list)
-{
-	struct fib_entry *entry;
-
-	list_for_each_entry(entry, head, list){
-		if(entry->id == id){
-			goto err_entry_exist;
-		}
-	}
-
-	list_add(list, head);
-	return 0;
-
-err_entry_exist:
-	return -1;
-}
-
-static int fib_entry_delete(struct list_head *head, unsigned int id)
-{
-	struct fib_entry *entry, *entry_n;
-
-	list_for_each_entry_safe(entry, entry_n, head, list){
-		if(entry->id == id){
-			list_del(&entry->list);
-			ixmap_mem_free(entry->area);
-			return 0;
-		}
-	}
-
-	return -1;
-}
-
-static void fib_entry_delete_all(struct list_head *head)
-{
-	struct fib_entry *entry, *entry_n;
-
-	list_for_each_entry_safe(entry, entry_n, head, list){
-		list_del(&entry->list);
-		ixmap_mem_free(entry->area);
-	}
-
 	return;
 }
 
@@ -227,20 +184,21 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 	entry->port_index	= port_index;
 	entry->type		= type;
 	entry->id		= id;
+	entry->refcount		= 0;
 
 #ifdef DEBUG
 	fib_update_print(family, type, prefix, prefix_len,
 		nexthop, port_index, id);
 #endif
 
-	ret = trie_add(&fib->tree, prefix, prefix_len,
-		id, &entry->list, desc);
+	ret = lpm_add(&fib->table, prefix, prefix_len,
+		id, entry, desc);
 	if(ret < 0)
-		goto err_trie_add;
+		goto err_lpm_add;
 
 	return 0;
 
-err_trie_add:
+err_lpm_add:
 err_invalid_family:
 	ixmap_mem_free(entry->area);
 err_alloc_entry:
@@ -257,27 +215,73 @@ int fib_route_delete(struct fib *fib, int family,
 	fib_delete_print(family, prefix, prefix_len, id);
 #endif
 
-	ret = trie_delete(&fib->tree, prefix, prefix_len, id);
+	ret = lpm_delete(&fib->table, prefix, prefix_len, id);
 	if(ret < 0)
-		goto err_trie_delete;
+		goto err_lpm_delete;
 
 	return 0;
 
-err_trie_delete:
+err_lpm_delete:
 	return -1;
 }
 
-struct list_head *fib_lookup(struct fib *fib,
-	void *destination)
+struct fib_entry *fib_lookup(struct fib *fib, void *destination)
 {
-	struct list_head *head;
+	struct lpm_entry *entry;
 
-	head = trie_lookup(&fib->tree, destination);
-	if(!head)
-		goto err_trie_lookup;
+	entry = lpm_lookup(&fib->table, destination);
+	if(!entry)
+		goto err_lpm_lookup;
 
-	return head;
+	return entry->ptr;
 
-err_trie_lookup:
+err_lpm_lookup:
 	return NULL;
+}
+
+static int fib_entry_identify(void *ptr, unsigned int id,
+	unsigned int prefix_len)
+{
+	struct fib_entry *entry;
+
+	entry = ptr;
+
+	if(entry->id == id
+	&& entry->prefix_len == prefix_len){
+		return 0;
+	}else{
+		return 1;
+	}
+}
+
+static int fib_entry_compare(void *ptr, unsigned int prefix_len)
+{
+	struct fib_entry *entry;
+
+	entry = ptr;
+
+	return entry->prefix_len > prefix_len ?
+		1 : 0;
+}
+
+static void fib_entry_pull(void *ptr)
+{
+	struct fib_entry *entry;
+
+	entry = ptr;
+	entry->refcount++;
+
+	return;
+}
+
+static void fib_entry_put(void *ptr)
+{
+	struct fib_entry *entry;
+
+	entry = ptr;
+	entry->refcount--;
+
+	if(!entry->refcount){
+		ixmap_mem_free(entry->area);
+	}
 }
