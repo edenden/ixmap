@@ -78,6 +78,9 @@ struct lpm_entry *lpm_lookup(struct lpm_table *table,
 
 	if(node->next_table){
 		head = _lpm_lookup(dst, node, 16);
+		if(!head){
+			head = &node->head;
+		}
 	}else{
 		head = &node->head;
 	}
@@ -98,8 +101,14 @@ static struct list_head *_lpm_lookup(void *dst,
 
 	if(node->next_table){
 		head = _lpm_lookup(dst, node, offset + 8);
+		if(!head && !list_empty(&node->head)){
+			head = &node->head;
+		}
 	}else{
-		head = &node->head;
+		head = NULL;
+		if(!list_empty(&node->head)){
+			head = &node->head;
+		}
 	}
 
 	return head;
