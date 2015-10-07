@@ -267,6 +267,8 @@ void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 		/* retrieve a buffer address from the ring */
 		slot_index = ixmap_slot_detach(rx_ring, rx_ring->next_to_clean);
 		slot_size = le16toh(rx_desc->wb.upper.length);
+		slot_buf = ixmap_slot_addr_virt(buf, slot_index);
+		prefetchw(slot_buf);
 		process(slot_index, slot_size, port_index, opaque);
 
 		ixmap_print("Rx: packet received size = %d\n", slot_size);
@@ -274,10 +276,6 @@ void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 		next_to_clean = rx_ring->next_to_clean + 1;
 		rx_ring->next_to_clean = 
 			(next_to_clean < port->num_rx_desc) ? next_to_clean : 0;
-
-		slot_index = ixmap_slot_detach(rx_ring, rx_ring->next_to_clean);
-		slot_buf = ixmap_slot_addr_virt(buf, slot_index);
-		prefetchw(slot_buf);
 
 		total_rx_packets++;
 	}
