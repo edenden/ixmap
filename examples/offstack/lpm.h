@@ -13,8 +13,8 @@ struct lpm_entry {
 };
 
 struct lpm_node {
-	struct lpm_node		*next_table;
 	struct list_head	head;
+	struct lpm_node		*next_table;
 	struct ixmap_marea	*area;
 };
 
