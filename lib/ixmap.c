@@ -324,7 +324,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	buf->free_index = free_index;
 
 	for(i = 0; i < buf->count; i++){
-		buf->free_index[i] = i;
+		buf->free_index[i] = (count - 1) - i;
 		buf->free_count++;
 	}
 
