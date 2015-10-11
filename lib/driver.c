@@ -335,24 +335,31 @@ inline int ixmap_slot_assign(struct ixmap_buf *buf,
 	struct ixmap_plane *plane, unsigned int port_index)
 {
 	struct ixmap_port *port;
-	int slot_index;
+	int slot_next, slot_index, i;
 
 	port = &plane->ports[port_index];
-	slot_index = port->rx_slot_offset + port->rx_slot_next;
+	slot_next = port->rx_slot_next;
 
-	if(buf->slots[slot_index] & IXMAP_SLOT_INFLIGHT)
-		goto err_slot_inuse;
+	for(i = 0; i < buf->count; i++){
+		slot_index = port->rx_slot_offset + slot_next;
+		if(!(buf->slots[slot_index] & IXMAP_SLOT_INFLIGHT)){
+			goto out;
+		}
 
-	buf->slots[slot_index] |= IXMAP_SLOT_INFLIGHT;
+		slot_next++;
+		if(slot_next == buf->count)
+			slot_next = 0;
+	}
 
-	port->rx_slot_next++;
+	return -1;
+
+out:
+	port->rx_slot_next = slot_next + 1;
 	if(port->rx_slot_next == buf->count)
 		port->rx_slot_next = 0;
 
+	buf->slots[slot_index] |= IXMAP_SLOT_INFLIGHT;
 	return slot_index;
-
-err_slot_inuse:
-	return -1;
 }
 
 static inline void ixmap_slot_attach(struct ixmap_ring *ring,
