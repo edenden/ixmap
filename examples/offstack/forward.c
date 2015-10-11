@@ -93,7 +93,8 @@ void forward_process_tun(struct ixmapfwd_thread *thread, unsigned int port_index
 	unsigned int slot_size;
 	void *slot_buf;
 
-	slot_index = ixmap_slot_assign(thread->buf);
+	slot_index = ixmap_slot_assign(thread->buf,
+		thread->plane, port_index);
 	if(slot_index < 0){
 		goto err_slot_assign;
 	}

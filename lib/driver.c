@@ -20,7 +20,8 @@ static inline uint16_t ixmap_desc_unused(struct ixmap_ring *ring,
 static inline uint32_t ixmap_test_staterr(union ixmap_adv_rx_desc *rx_desc,
 	const uint32_t stat_err_bits);
 static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value);
-inline int ixmap_slot_assign(struct ixmap_buf *buf);
+inline int ixmap_slot_assign(struct ixmap_buf *buf,
+	struct ixmap_plane *plane, unsigned int port_index);
 static inline void ixmap_slot_attach(struct ixmap_ring *ring,
 	uint16_t desc_index, int slot_index);
 static inline int ixmap_slot_detach(struct ixmap_ring *ring,
@@ -103,7 +104,7 @@ void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
 		uint64_t addr_dma;
 		int slot_index;
 
-		slot_index = ixmap_slot_assign(buf);
+		slot_index = ixmap_slot_assign(buf, plane, port_index);
 		if(slot_index < 0){
 			port->count_rx_alloc_failed +=
 				(max_allocation - total_allocated);
@@ -330,18 +331,28 @@ uint8_t *ixmap_macaddr(struct ixmap_plane *plane,
 	return plane->ports[port_index].mac_addr;
 }
 
-inline int ixmap_slot_assign(struct ixmap_buf *buf)
+inline int ixmap_slot_assign(struct ixmap_buf *buf,
+	struct ixmap_plane *plane, unsigned int port_index)
 {
-	int slot_index = -1;
+	struct ixmap_port *port;
+	int slot_index;
 
-	if(!buf->free_count)
-		goto out;
+	port = &plane->ports[port_index];
+	slot_index = port->rx_slot_offset + port->rx_slot_next;
 
-	slot_index = buf->free_index[buf->free_count - 1];
-	buf->free_count--;
-	
-out:
+	if(buf->slots[slot_index] & IXMAP_SLOT_INFLIGHT)
+		goto err_slot_inuse;
+
+	buf->slots[slot_index] |= IXMAP_SLOT_INFLIGHT;
+
+	port->rx_slot_next++;
+	if(port->rx_slot_next == buf->count)
+		port->rx_slot_next = 0;
+
 	return slot_index;
+
+err_slot_inuse:
+	return -1;
 }
 
 static inline void ixmap_slot_attach(struct ixmap_ring *ring,
@@ -360,9 +371,7 @@ static inline int ixmap_slot_detach(struct ixmap_ring *ring,
 inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index)
 {
-	buf->free_index[buf->free_count] = slot_index;
-	buf->free_count++;
-
+	buf->slots[slot_index] = 0;
 	return;
 }
 

@@ -72,14 +72,14 @@ struct ixmap_desc {
 	struct ixmap_mnode	*node;
 };
 
+#define IXMAP_SLOT_INFLIGHT 0x1
+
 struct ixmap_buf {
 	void			*addr_virt;
 	unsigned long		*addr_dma;
 	uint32_t		buf_size;
 	uint32_t		count;
-
-	uint32_t		free_count;
-	int32_t			*free_index;
+	int32_t			*slots;
 };
 
 struct ixmap_handle {
@@ -116,6 +116,8 @@ struct ixmap_port {
 	void			*irqreg[2];
 	struct ixmap_ring	*rx_ring;
 	struct ixmap_ring	*tx_ring;
+	uint32_t		rx_slot_next;
+	uint32_t		rx_slot_offset;
 	uint32_t		tx_suspended;
 	uint32_t		mtu_frame;
 	uint32_t		num_tx_desc;

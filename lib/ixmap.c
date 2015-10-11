@@ -84,7 +84,7 @@ static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask)
 }
 
 struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
-	int ih_num, int queue_index)
+	struct ixmap_buf *buf, int ih_num, int queue_index)
 {
 	struct ixmap_plane *plane;
 	int i;
@@ -105,6 +105,8 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 		plane->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
 		plane->ports[i].rx_ring = &(ih_list[i]->rx_ring[queue_index]);
 		plane->ports[i].tx_ring = &(ih_list[i]->tx_ring[queue_index]);
+		plane->ports[i].rx_slot_next = 0;
+		plane->ports[i].rx_slot_offset = i * buf->count;
 		plane->ports[i].tx_suspended = 0;
 		plane->ports[i].num_rx_desc = ih_list[i]->num_rx_desc;
 		plane->ports[i].num_tx_desc = ih_list[i]->num_tx_desc;
@@ -279,7 +281,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	struct ixmap_buf *buf;
 	void	*addr_virt;
 	unsigned long addr_dma, size;
-	int *free_index;
+	int *slots;
 	int ret, i, mapped_ports = 0;
 
 	buf = malloc(sizeof(struct ixmap_buf));
@@ -294,7 +296,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	 * XXX: Should we add buffer padding for memory interleaving?
 	 * DPDK does so in rte_mempool.c/optimize_object_size().
 	 */
-	size = buf_size * count;
+	size = buf_size * (ih_num * count);
 
 	/*
 	 * XXX: We don't support NUMA-aware memory allocation in userspace.
@@ -313,24 +315,22 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 		buf->addr_dma[i] = addr_dma;
 	}
 
-	free_index = malloc(sizeof(int32_t) * count);
-	if(!free_index)
-		goto err_alloc_free_index;
+	slots = malloc(sizeof(int32_t) * (count * ih_num));
+	if(!slots)
+		goto err_alloc_slots;
 
 	buf->addr_virt = addr_virt;
 	buf->buf_size = buf_size;
 	buf->count = count;
-	buf->free_count = 0;
-	buf->free_index = free_index;
+	buf->slots = slots;
 
-	for(i = 0; i < buf->count; i++){
-		buf->free_index[i] = (count - 1) - i;
-		buf->free_count++;
+	for(i = 0; i < buf->count * ih_num; i++){
+		buf->slots[i] = 0;
 	}
 
 	return buf;
 
-err_alloc_free_index:
+err_alloc_slots:
 err_ixmap_dma_map:
 	for(i = 0; i < mapped_ports; i++){
 		ixmap_dma_unmap(ih_list[i], buf->addr_dma[i]);
@@ -350,7 +350,7 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 	int i, ret;
 	unsigned long size;
 
-	free(buf->free_index);
+	free(buf->slots);
 
 	for(i = 0; i < ih_num; i++){
 		ret = ixmap_dma_unmap(ih_list[i], buf->addr_dma[i]);

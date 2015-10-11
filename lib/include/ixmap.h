@@ -39,7 +39,7 @@ enum ixmap_irq_direction {
 
 void ixmap_irq_enable(struct ixmap_handle *ih);
 struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
-	int ih_num, int queue_index);
+	struct ixmap_buf *buf, int ih_num, int queue_index);
 void ixmap_plane_release(struct ixmap_plane *plane);
 struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 	int queue_index);
@@ -86,7 +86,8 @@ uint8_t *ixmap_macaddr(struct ixmap_plane *plane,
 
 inline void *ixmap_slot_addr_virt(struct ixmap_buf *buf,
 	uint16_t slot_index);
-inline int ixmap_slot_assign(struct ixmap_buf *buf);
+inline int ixmap_slot_assign(struct ixmap_buf *buf,
+	struct ixmap_plane *plane, unsigned int port_index);
 inline void ixmap_slot_release(struct ixmap_buf *buf,
 	int slot_index);
 inline unsigned int ixmap_slot_size(struct ixmap_buf *buf);

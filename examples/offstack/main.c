@@ -23,7 +23,7 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread);
 static int ixmapfwd_set_signal(sigset_t *sigset);
 
-static int buf_count = 65536;
+static int buf_count = 32768; // per port number of slots
 static char *ixmap_interface_array[2];
 
 int main(int argc, char **argv)
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
 		}
 
 		threads[i].plane = ixmap_plane_alloc(ixmapfwd.ih_array,
-			ixmapfwd.num_ports, i);
+			threads[i].buf, ixmapfwd.num_ports, i);
 		if(!threads[i].plane){
 			printf("failed to ixmap_plane_alloc, idx = %d\n", i);
 			goto err_plane_alloc;
