@@ -24,6 +24,8 @@
 
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
+#define prefetch(x)	__builtin_prefetch(x, 0)
+#define prefetchw(x)	__builtin_prefetch(x, 1)
 
 #ifdef DEBUG
 #define ixgbe_print(args...) printf("ixgbe: " args)
@@ -31,14 +33,15 @@
 #define ixgbe_print(args...)
 #endif
 
+#define IXMAP_RX_BUDGET 1024
+#define IXMAP_TX_BUDGET 4096
+
 struct ixmapfwd {
 	struct ixmap_handle	**ih_array;
 	struct tun_handle	**tunh_array;
 	unsigned int		buf_size;
 	unsigned int		num_cores;
 	unsigned int		num_ports;
-	unsigned int		rx_budget;
-	unsigned int		tx_budget;
 	unsigned int		promisc;
 	unsigned int		mtu_frame;
 	unsigned short		intr_rate;

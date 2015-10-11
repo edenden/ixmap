@@ -14,18 +14,18 @@
 #include "thread.h"
 
 static int forward_arp_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf, unsigned int slot_size);
+	unsigned int port_index, struct ixmap_packet *packet);
 static int forward_ip_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf, unsigned int slot_size);
+	unsigned int port_index, struct ixmap_packet *packet);
 static int forward_ip6_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf, unsigned int slot_size);
+	unsigned int port_index, struct ixmap_packet *packet);
 
 #ifdef DEBUG
-void forward_dump(void *slot_buf, unsigned int slot_size)
+void forward_dump(struct ixmap_packet *packet)
 {
 	struct ethhdr *eth;
 
-	eth = (struct ethhdr *)slot_buf;
+	eth = (struct ethhdr *)packet->slot_buf;
 
 	printf("packet dump:\n");
 	printf("\tsrc %02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -35,38 +35,30 @@ void forward_dump(void *slot_buf, unsigned int slot_size)
 		eth->h_dest[0], eth->h_dest[1], eth->h_dest[2],
 		eth->h_dest[3], eth->h_dest[4], eth->h_dest[5]);
 	printf("\ttype 0x%x\n", eth->h_proto);
-	printf("\tsize %d bytes\n", slot_size);
+	printf("\tsize %d bytes\n", packet->slot_size);
 }
 #endif
 
-void forward_process(int slot_index, unsigned int slot_size,
-	unsigned int port_index, void *opaque)
+void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
+	struct ixmap_packet *packet)
 {
-	struct ixmapfwd_thread *thread;
-	void *slot_buf;
 	struct ethhdr *eth;
 	int ret;
 
-	thread = (struct ixmapfwd_thread *)opaque;
-	slot_buf = ixmap_slot_addr_virt(thread->buf, slot_index);
-
 #ifdef DEBUG
-	forward_dump(slot_buf, slot_size);
+	forward_dump(packet);
 #endif
 
-	eth = (struct ethhdr *)slot_buf;
+	eth = (struct ethhdr *)packet->slot_buf;
 	switch(ntohs(eth->h_proto)){
 	case ETH_P_ARP:
-		ret = forward_arp_process(thread, port_index, slot_buf,
-			slot_size);
+		ret = forward_arp_process(thread, port_index, packet);
 		break;
 	case ETH_P_IP:
-		ret = forward_ip_process(thread, port_index, slot_buf,
-			slot_size);
+		ret = forward_ip_process(thread, port_index, packet);
 		break;
 	case ETH_P_IPV6:
-		ret = forward_ip6_process(thread, port_index, slot_buf,
-			slot_size);
+		ret = forward_ip6_process(thread, port_index, packet);
 		break;
 	default:
 		ret = -1;
@@ -77,57 +69,51 @@ void forward_process(int slot_index, unsigned int slot_size,
 		goto packet_drop;
 	}
 
-	ixmap_tx_assign(thread->plane, ret, thread->buf,
-		slot_index, slot_size);
+	ixmap_tx_assign(thread->plane, ret, thread->buf, packet);
 	return;
 
 packet_drop:
-	ixmap_slot_release(thread->buf, slot_index);
+	ixmap_slot_release(thread->buf, packet->slot_index);
 	return;
 }
 
 void forward_process_tun(struct ixmapfwd_thread *thread, unsigned int port_index,
 	uint8_t *read_buf, unsigned int read_size)
 {
-	int slot_index;
-	unsigned int slot_size;
-	void *slot_buf;
+	struct ixmap_packet packet;
 
-	slot_index = ixmap_slot_assign(thread->buf,
+	if(read_size > ixmap_slot_size(thread->buf))
+		goto err_slot_size;
+
+	packet.slot_index = ixmap_slot_assign(thread->buf,
 		thread->plane, port_index);
-	if(slot_index < 0){
+	if(packet.slot_index < 0){
 		goto err_slot_assign;
 	}
 
-	slot_buf = ixmap_slot_addr_virt(thread->buf, slot_index);
-	slot_size = ixmap_slot_size(thread->buf);
-
-	if(read_size > slot_size)
-		goto err_slot_size;
-
-	memcpy(slot_buf, read_buf, read_size);
+	packet.slot_buf = ixmap_slot_addr_virt(thread->buf, packet.slot_index);
+	memcpy(packet.slot_buf, read_buf, read_size);
+	packet.slot_size = read_size;
 
 #ifdef DEBUG
-	forward_dump(slot_buf, read_size);
+	forward_dump(&packet);
 #endif
 
-	ixmap_tx_assign(thread->plane, port_index, thread->buf,
-		slot_index, read_size);
+	ixmap_tx_assign(thread->plane, port_index, thread->buf, &packet);
 	return;
 
-err_slot_size:
-	ixmap_slot_release(thread->buf, slot_index);
 err_slot_assign:
+err_slot_size:
 	return;
 }
 
 static int forward_arp_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf, unsigned int slot_size)
+	unsigned int port_index, struct ixmap_packet *packet)
 {
 	int fd, ret;
 
 	fd = thread->tun_plane->ports[port_index].fd;
-	ret = write(fd, slot_buf, slot_size);
+	ret = write(fd, packet->slot_buf, packet->slot_size);
 	if(ret < 0)
 		goto err_write_tun;
 
@@ -138,7 +124,7 @@ err_write_tun:
 }
 
 static int forward_ip_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf, unsigned int slot_size)
+	unsigned int port_index, struct ixmap_packet *packet)
 {
 	struct ethhdr		*eth;
 	struct iphdr		*ip;
@@ -148,8 +134,8 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 	uint32_t		check;
 	int			fd, ret;
 
-	eth = (struct ethhdr *)slot_buf;
-	ip = (struct iphdr *)(slot_buf + sizeof(struct ethhdr));
+	eth = (struct ethhdr *)packet->slot_buf;
+	ip = (struct iphdr *)(packet->slot_buf + sizeof(struct ethhdr));
 
 	fib_entry = fib_lookup(thread->fib_inet, &ip->daddr);
 	if(!fib_entry)
@@ -199,13 +185,13 @@ static int forward_ip_process(struct ixmapfwd_thread *thread,
 
 packet_local:
 	fd = thread->tun_plane->ports[port_index].fd;
-	write(fd, slot_buf, slot_size);
+	write(fd, packet->slot_buf, packet->slot_size);
 packet_drop:
 	return -1;
 }
 
 static int forward_ip6_process(struct ixmapfwd_thread *thread,
-	unsigned int port_index, void *slot_buf, unsigned int slot_size)
+	unsigned int port_index, struct ixmap_packet *packet)
 {
 	struct ethhdr		*eth;
 	struct ip6_hdr		*ip6;
@@ -214,8 +200,8 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	uint8_t			*dst_mac, *src_mac;
 	int			fd, ret;
 
-	eth = (struct ethhdr *)slot_buf;
-	ip6 = (struct ip6_hdr *)(slot_buf + sizeof(struct ethhdr));
+	eth = (struct ethhdr *)packet->slot_buf;
+	ip6 = (struct ip6_hdr *)(packet->slot_buf + sizeof(struct ethhdr));
 
 	if(unlikely(ip6->ip6_dst.s6_addr[0] == 0xfe
 	&& (ip6->ip6_dst.s6_addr[1] & 0xc0) == 0x80))
@@ -265,7 +251,7 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 
 packet_local:
 	fd = thread->tun_plane->ports[port_index].fd;
-	write(fd, slot_buf, slot_size);
+	write(fd, packet->slot_buf, packet->slot_size);
 packet_drop:
 	return -1;
 }

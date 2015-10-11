@@ -43,8 +43,6 @@ int main(int argc, char **argv)
 	ixmapfwd.buf_size = 0;
 	ixmapfwd.num_cores = 4;
 	ixmapfwd.num_ports = 2;
-	ixmapfwd.rx_budget = 1024;
-	ixmapfwd.tx_budget = 4096;
 	ixmapfwd.promisc = 1;
 	ixmapfwd.mtu_frame = 0; /* MTU=1522 is used by default. */
 	ixmapfwd.intr_rate = IXGBE_20K_ITR;
@@ -70,7 +68,7 @@ int main(int argc, char **argv)
 	for(i = 0; i < ixmapfwd.num_ports; i++, ports_assigned++){
 		ixmapfwd.ih_array[i] = ixmap_open(ixmap_interface_array[i],
 			ixmapfwd.num_cores, ixmapfwd.intr_rate,
-			ixmapfwd.rx_budget, ixmapfwd.tx_budget,
+			IXMAP_RX_BUDGET, IXMAP_TX_BUDGET,
 			ixmapfwd.mtu_frame, ixmapfwd.promisc,
 			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
 		if(!ixmapfwd.ih_array[i]){

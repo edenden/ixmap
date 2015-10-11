@@ -142,6 +142,7 @@ static int thread_wait(struct ixmapfwd_thread *thread,
         struct epoll_desc *ep_desc;
         struct ixmap_irqdev_handle *irqh;
         struct epoll_event events[EPOLL_MAXEVENTS];
+	struct ixmap_packet packet[IXMAP_RX_BUDGET];
         int i, ret, num_fd;
         unsigned int port_index;
 
@@ -160,8 +161,14 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				port_index = ixmap_port_index(irqh);
 
 				/* Rx descripter cleaning */
-				ixmap_rx_clean(thread->plane, port_index,
-					thread->buf, thread, forward_process);
+				ret = ixmap_rx_clean(thread->plane, port_index,
+					thread->buf, packet);
+
+				for(i = 0; i < ret; i++){
+					prefetchw(packet[i].slot_buf);
+					forward_process(thread, port_index, &packet[i]);
+				}
+
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(thread->plane, i);
 				}

@@ -137,6 +137,12 @@ struct ixmap_plane {
 	struct ixmap_port 	*ports;
 };
 
+struct ixmap_packet {
+	void			*slot_buf;
+	unsigned int		slot_size;
+	int			slot_index;
+};
+
 enum {
 	IXGBE_DMA_CACHE_DEFAULT = 0,
 	IXGBE_DMA_CACHE_DISABLE,

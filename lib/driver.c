@@ -141,7 +141,7 @@ void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
 }
 
 void ixmap_tx_assign(struct ixmap_plane *plane, unsigned int port_index,
-	struct ixmap_buf *buf, int slot_index, unsigned int slot_size)
+	struct ixmap_buf *buf, struct ixmap_packet *packet)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *tx_ring;
@@ -159,27 +159,27 @@ void ixmap_tx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	unused_count = ixmap_desc_unused(tx_ring, port->num_tx_desc);
 	if(!unused_count){
 		port->count_tx_xmit_failed++;
-		ixmap_slot_release(buf, slot_index);
+		ixmap_slot_release(buf, packet->slot_index);
 		return;
 	}
 
-	if(unlikely(slot_size > IXGBE_MAX_DATA_PER_TXD)){
+	if(unlikely(packet->slot_size > IXGBE_MAX_DATA_PER_TXD)){
 		port->count_tx_xmit_failed++;
-		ixmap_slot_release(buf, slot_index);
+		ixmap_slot_release(buf, packet->slot_index);
 		return;
 	}
 
-	ixmap_slot_attach(tx_ring, tx_ring->next_to_use, slot_index);
-	addr_dma = (uint64_t)ixmap_slot_addr_dma(buf, slot_index, port_index);
+	ixmap_slot_attach(tx_ring, tx_ring->next_to_use, packet->slot_index);
+	addr_dma = (uint64_t)ixmap_slot_addr_dma(buf, packet->slot_index, port_index);
 	ixmap_print("Tx: packet sending DMAaddr = %p size = %d\n",
-		(void *)addr_dma, size);
+		(void *)addr_dma, packet->slot_size);
 
 	/* set type for advanced descriptor with frame checksum insertion */
 	tx_desc = IXGBE_TX_DESC(tx_ring, tx_ring->next_to_use);
 	tx_flags = IXGBE_ADVTXD_DTYP_DATA | IXGBE_ADVTXD_DCMD_DEXT
 		| IXGBE_ADVTXD_DCMD_IFCS;
-	cmd_type = slot_size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS | tx_flags;
-	olinfo_status = slot_size << IXGBE_ADVTXD_PAYLEN_SHIFT;
+	cmd_type = packet->slot_size | IXGBE_TXD_CMD_EOP | IXGBE_TXD_CMD_RS | tx_flags;
+	olinfo_status = packet->slot_size << IXGBE_ADVTXD_PAYLEN_SHIFT;
 
 	tx_desc->read.buffer_addr = htole64(addr_dma);
 	tx_desc->read.cmd_type_len = htole32(cmd_type);
@@ -218,9 +218,8 @@ void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index)
 	return;
 }
 
-void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
-	struct ixmap_buf *buf, void *opaque,
-	void (*process)(int, unsigned int, unsigned int, void *))
+unsigned int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
+	struct ixmap_buf *buf, struct ixmap_packet *packet)
 {
 	struct ixmap_port *port;
 	struct ixmap_ring *rx_ring;
@@ -269,10 +268,11 @@ void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 		slot_index = ixmap_slot_detach(rx_ring, rx_ring->next_to_clean);
 		slot_size = le16toh(rx_desc->wb.upper.length);
 		slot_buf = ixmap_slot_addr_virt(buf, slot_index);
-		prefetchw(slot_buf);
-		process(slot_index, slot_size, port_index, opaque);
-
 		ixmap_print("Rx: packet received size = %d\n", slot_size);
+
+		packet[total_rx_packets].slot_index = slot_index;
+		packet[total_rx_packets].slot_size = slot_size;
+		packet[total_rx_packets].slot_buf = slot_buf;
 
 		next_to_clean = rx_ring->next_to_clean + 1;
 		rx_ring->next_to_clean = 
@@ -282,7 +282,7 @@ void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	}
 
 	port->count_rx_clean_total += total_rx_packets;
-	return;
+	return total_rx_packets;
 }
 
 void ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,

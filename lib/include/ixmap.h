@@ -29,7 +29,13 @@ struct ixmap_buf;
 struct ixmap_plane;
 
 struct ixmap_marea {
-	void	*ptr;
+	void			*ptr;
+};
+
+struct ixmap_packet {
+	void			*slot_buf;
+	unsigned int		slot_size;
+	int			slot_index;
 };
 
 enum ixmap_irq_direction {
@@ -73,11 +79,10 @@ inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh);
 void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);
 void ixmap_tx_assign(struct ixmap_plane *plane, unsigned int port_index,
-	struct ixmap_buf *buf, int slot_index, unsigned int slot_size);
+	struct ixmap_buf *buf, struct ixmap_packet *packet);
 void ixmap_tx_xmit(struct ixmap_plane *plane, unsigned int port_index);
-void ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
-	struct ixmap_buf *buf, void *opaque,
-	void (*process)(int, unsigned int, unsigned int, void *));
+unsigned int ixmap_rx_clean(struct ixmap_plane *plane, unsigned int port_index,
+	struct ixmap_buf *buf, struct ixmap_packet *packet);
 void ixmap_tx_clean(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);
 
