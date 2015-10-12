@@ -166,6 +166,9 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 
 				for(i = 0; i < ret; i++){
 					prefetchw(packet[i].slot_buf);
+				}
+
+				for(i = 0; i < ret; i++){
 					forward_process(thread, port_index, &packet[i]);
 				}
 
