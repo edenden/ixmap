@@ -22,7 +22,7 @@ It has following entities:
 	* Interrupt affinity configuration
 
 **IXMAP kmod** is kernel backend module that provides a set of system call
-to access what only kernel can access, such as device configuration register,
+to export what only kernel can access, such as device configuration register,
 interrupt handling and conversion between virtual memory address and physical one.
 
 **IXMAP lib** provides API to initialize device register with typical configuration,
