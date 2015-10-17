@@ -4,7 +4,7 @@ Wire-speed routing stack for Intel 10GbE NIC in user-space
 ## 1. Overview
 IXMAP is a routing stack for Intel 82599 10GbE NIC in user-space.  
 It supports Layer2/Layer3 processing at wire-speed(14.88Mpps).  
-It has following modules:
+It has following entities:
 
 * **IXMAP kernel module**
 	* interrupt notification by read()
