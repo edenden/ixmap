@@ -27,7 +27,7 @@ conversion between virtual memory address and physical one.
 
 **IXMAP lib** provides API to initialize device register with typical configuration,
 manipulation of descripter rings and buffer allocation/deallocation in hugepages.
-It uses character devices exported by IXMAP kernel module, such as \ /dev/ixmap0 \ .
+It uses character devices exported by IXMAP kernel module, such as `/dev/ixmap0`.
 
 **IXMAP stack** processes IP/IPv6 lookup for each packet at wire-speed(14.88Mpps/core).
 It also supports ARP/ND protocols injecting the packets into kernel network stack
