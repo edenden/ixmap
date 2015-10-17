@@ -36,9 +36,9 @@ synchronized with the kernel via NETLINK socket. Moreover, it also injects packe
 destined to localhost so that you can use any existing network application on it.
 
 ## 2. Build and Install
-    cd ixmap
-    ./autogen.sh
-    ./configure && make && make install
+    % cd ixmap
+    % ./autogen.sh
+    % ./configure && make && make install
 
 ## 3. Configuration
 Enable hugepages and Disable IOMMU at /etc/default/grub:
@@ -52,9 +52,10 @@ Enable kernel IPv4/IPv6 routing at /etc/sysctl.conf:
 
 Add udev rule so that ixmap kernel module will be loaded automatically:
 
-    cp ./extra/99-ixmap.rules /etc/udev/rules.d/
-    vi /etc/udev/rules.d/99-ixmap.rules
+    % cp ./extra/99-ixmap.rules /etc/udev/rules.d/
+    % vi /etc/udev/rules.d/99-ixmap.rules
     (the parameter is depending on your environment)
 
 Reboot:
-    reboot
+
+    % reboot
