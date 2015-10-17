@@ -42,13 +42,16 @@ destined to localhost so that you can use any existing network application on it
 
 ## 3. Configuration
 Enable hugepages and Disable IOMMU at /etc/default/grub:
+
     GRUB_CMDLINE_LINUX="default_hugepagesz=1G hugepagesz=1G hugepages=8 intel_iommu=off"
 
 Enable kernel IPv4/IPv6 routing at /etc/sysctl.conf:
+
     net.ipv4.ip_forward=1
     net.ipv6.conf.all.forwarding=1
 
 Add udev rule so that ixmap kernel module will be loaded automatically:
+
     cp ./extra/99-ixmap.rules /etc/udev/rules.d/
     vi /etc/udev/rules.d/99-ixmap.rules
     (the parameter is depending on your environment)
