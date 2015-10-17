@@ -16,8 +16,8 @@ It has following entities:
 	* descripter ring driver for packet batching
 	* buffer management with hugepages
 * **IXMAP stack**
-	* IP/IPv6 lookup
-	* Route/Neighbor entry synchronization with kernel
+	* IP/IPv6 forwarding
+	* Route/Neighbor lookup synchronized with kernel
 	* Packet injection via TAP interfaces
 	* Interrupt affinity configuration
 
