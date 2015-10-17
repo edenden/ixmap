@@ -1,0 +1,14 @@
+Makefile.in
+/Makefile
+/m4/libtool.m4
+/m4/lt*.m4
+autom4te.cache
+aclocal.m4
+configure
+depcomp
+install-sh
+missing
+stamp-h?
+config.*
+ltmain.sh
+libtool
