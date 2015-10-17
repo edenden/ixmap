@@ -36,11 +36,15 @@ synchronized with the kernel via NETLINK socket. Moreover, it also injects packe
 destined to localhost so that you can use any existing network application on it.
 
 ## 2. Build and Install
+
     % cd ixmap
     % ./autogen.sh
     % ./configure && make && make install
 
 ## 3. Configuration
+
+In advance, disable Hyper-Threading and VT-d in the BIOS.
+
 Enable hugepages and Disable IOMMU at /etc/default/grub:
 
     GRUB_CMDLINE_LINUX="default_hugepagesz=1G hugepagesz=1G hugepages=8 intel_iommu=off"
