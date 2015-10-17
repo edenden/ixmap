@@ -54,7 +54,8 @@ Enable kernel IPv4/IPv6 routing at /etc/sysctl.conf:
     net.ipv4.ip_forward=1
     net.ipv6.conf.all.forwarding=1
 
-Add udev rule so that ixmap kernel module will be loaded automatically:
+Add udev rule so that ixmap kernel module will be loaded automatically  
+(the parameter is depending on your environment):
 
     % cp ./extra/99-ixmap.rules /etc/udev/rules.d/
     % vi /etc/udev/rules.d/99-ixmap.rules
