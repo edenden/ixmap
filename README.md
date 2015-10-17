@@ -6,7 +6,7 @@ IXMAP is a routing stack for Intel 82599 10GbE NIC in user-space.
 It supports Layer2/Layer3 processing at wire-speed(14.88Mpps).  
 It has following entities:
 
-* **IXMAP kernel module**
+* **IXMAP kmod**
 	* interrupt notification by read()
 	* device register mapping by mmap()
 	* DMA mapping of user space memory by ioctl()
@@ -21,9 +21,9 @@ It has following entities:
 	* Packet injection via TAP interfaces
 	* Interrupt affinity configuration
 
-**IXMAP kernel module** provides a set of system call to access what only kernel
-can access, such as device configuration register, interrupt handling and
-conversion between virtual memory address and physical one.
+**IXMAP kmod** is kernel backend module that provides a set of system call
+to access what only kernel can access, such as device configuration register,
+interrupt handling and conversion between virtual memory address and physical one.
 
 **IXMAP lib** provides API to initialize device register with typical configuration,
 manipulation of descripter rings and buffer allocation/deallocation in hugepages.
