@@ -63,7 +63,7 @@ Add udev rule so that ixmap kernel module will be loaded automatically
     % cp ./extra/99-ixmap.rules /etc/udev/rules.d/
     edit /etc/udev/rules.d/99-ixmap.rules
 
-Reboot:
+After setting all of the above:
 
     % reboot
 
