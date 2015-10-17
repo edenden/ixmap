@@ -1,0 +1,10 @@
+##
+## Bind pci device 0000:81:00.0 to the 'uio-ixgbe' module
+##
+#KERNEL=="0000:81:00.0", WAIT_FOR_SYSFS="driver/unbind", PROGRAM="modprobe uio-ixgbe", \
+#	ATTR{driver/unbind}="$kernel", ATTR{subsystem/drivers/uio-ixgbe/bind}="$kernel"
+
+##
+## Bind pci device 0000:81:00.0 to the 'ixgbe' module
+## 
+#KERNEL=="0000:81:00.0", ATTR{driver/unbind}="$kernel", ATTR{subsystem/drivers/ixgbe/bind}="$kernel"
