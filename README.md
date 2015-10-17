@@ -41,7 +41,7 @@ destined to localhost so that you can use any existing network application on it
     % ./autogen.sh
     % ./configure && make && make install
 
-## 3. Configuration
+## 3. Setup
 
 In advance, disable Hyper-Threading, VT-d and  
 Power management(or select high performance mode) in the BIOS.
