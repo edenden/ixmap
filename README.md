@@ -1,4 +1,5 @@
-# IXMAP - Wire-speed routing stack for Intel 10GbE NIC in user-space
+# IXMAP
+Wire-speed routing stack for Intel 10GbE NIC in user-space
 
 ## 1. Overview
 IXMAP is a routing stack for Intel 82599 10GbE NIC in user-space.
