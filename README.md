@@ -49,6 +49,7 @@ Power management(or select high performance mode) in the BIOS.
 Edit /etc/default/grub:
 
     GRUB_CMDLINE_LINUX="default_hugepagesz=1G hugepagesz=1G hugepages=8 intel_iommu=off"
+    % update-grub
 
 Edit /etc/sysctl.conf:
 
