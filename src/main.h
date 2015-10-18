@@ -3,8 +3,7 @@
 
 #include <pthread.h>
 #include <ixmap.h>
-
-#define DEBUG
+#include <config.h>
 
 #define min(x, y) ({				\
 	typeof(x) _min1 = (x);			\
