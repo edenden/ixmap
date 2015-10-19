@@ -35,6 +35,7 @@ static void usage()
 	printf("  -m [n] : MTU length (default=1522)\n");
 	printf("  -c [n] : Number of packet buffer per port\n");
 	printf("  -p : Promiscuous mode (default=disabled)\n");
+	printf("  -d : Run as a daemon (default=disabled)\n");
 	printf("  -h : Show this help\n");
 	printf("\n");
 	return;
@@ -59,8 +60,9 @@ int main(int argc, char **argv)
 	ixmapfwd.mtu_frame	= 0; /* MTU=1522 is used by default. */
 	ixmapfwd.intr_rate	= IXGBE_20K_ITR;
 	ixmapfwd.buf_count	= 8192; /* number of per port packet buffer */
+	ixmapfwd.daemonize	= 0;
 
-	while ((opt = getopt(argc, argv, "t:n:m:c:ph")) != -1) {
+	while ((opt = getopt(argc, argv, "t:n:m:c:pdh")) != -1) {
 		switch(opt){
 		case 't':
 			if(sscanf(optarg, "%u", &ixmapfwd.num_cores) < 1){
@@ -93,6 +95,9 @@ int main(int argc, char **argv)
 		case 'p':
 			ixmapfwd.promisc = 1;
 			break;
+		case 'd':
+			ixmapfwd.daemonize = 1;
+			break;
 		case 'h':
 			usage();
 			ret = 0;
@@ -110,6 +115,13 @@ int main(int argc, char **argv)
 		printf("Try -h to show help.\n");
 		ret = -1;
 		goto err_arg;
+	}
+
+	if(ixmapfwd.daemonize){
+		ret = daemon(0, 1);
+		if(ret < 0){
+			goto err_daemonize;
+		}
 	}
 
 	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * ixmapfwd.num_ports);
@@ -250,6 +262,7 @@ err_alloc_threads:
 err_tunh_array:
 	free(ixmapfwd.ih_array);
 err_ih_array:
+err_daemonize:
 err_arg:
 	return ret;
 }
