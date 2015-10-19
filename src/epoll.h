@@ -5,7 +5,7 @@
 #include <signal.h>
 #include <ixmap.h>
 #include "linux/list.h"
-#include "tun.h"
+#include "iftap.h"
 
 #define EPOLL_MAXEVENTS 16
 

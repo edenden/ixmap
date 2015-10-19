@@ -11,41 +11,106 @@
 #include <sys/signalfd.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
-#include <pthread.h>
+#include <stdarg.h>
 #include <ixmap.h>
 
 #include "linux/list.h"
 #include "main.h"
 #include "thread.h"
 
+static void usage();
 static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 	struct ixmapfwd_thread *thread, int thread_index);
 static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread);
 static int ixmapfwd_set_signal(sigset_t *sigset);
 
-static int buf_count = 32768; // per port number of slots
-static char *ixmap_interface_array[2];
+char *optarg;
+
+static void usage()
+{
+	printf("\n");
+	printf("Usage:\n");
+	printf("  -t [n] : Number of cores\n");
+	printf("  -n [n] : Number of ports\n");
+	printf("  -m [n] : MTU length (default=1522)\n");
+	printf("  -c [n] : Number of packet buffer per port\n");
+	printf("  -p : Promiscuous mode (default=disabled)\n");
+	printf("  -h : Show this help\n");
+	printf("\n");
+	return;
+}
 
 int main(int argc, char **argv)
 {
 	struct ixmapfwd		ixmapfwd;
 	struct ixmapfwd_thread	*threads;
-	int			ret, i, signal;
+	int			ret, i, signal, opt;
 	int			cores_assigned = 0,
 				ports_assigned = 0,
 				tun_assigned = 0,
 				desc_assigned = 0;
 	sigset_t		sigset;
 
-	ixmap_interface_array[0] = "ixgbe0";
-	ixmap_interface_array[1] = "ixgbe1";
+	/* set default values */
+	ixmapfwd.num_cores	= 1;
+	ixmapfwd.buf_size	= 0;
+	ixmapfwd.num_ports	= 0;
+	ixmapfwd.promisc	= 0;
+	ixmapfwd.mtu_frame	= 0; /* MTU=1522 is used by default. */
+	ixmapfwd.intr_rate	= IXGBE_20K_ITR;
+	ixmapfwd.buf_count	= 8192; /* number of per port packet buffer */
 
-	ixmapfwd.buf_size = 0;
-	ixmapfwd.num_cores = 4;
-	ixmapfwd.num_ports = 2;
-	ixmapfwd.promisc = 1;
-	ixmapfwd.mtu_frame = 0; /* MTU=1522 is used by default. */
-	ixmapfwd.intr_rate = IXGBE_20K_ITR;
+	while ((opt = getopt(argc, argv, "t:n:m:c:ph")) != -1) {
+		switch(opt){
+		case 't':
+			if(sscanf(optarg, "%u", &ixmapfwd.num_cores) < 1){
+				printf("Invalid number of cores\n");
+				ret = -1;
+				goto err_arg;
+			}
+			break;
+		case 'n':
+			if(sscanf(optarg, "%u", &ixmapfwd.num_ports) < 1){
+				printf("Invalid number of ports\n");
+				ret = -1;
+				goto err_arg;
+			}
+			break;
+		case 'm':
+			if(sscanf(optarg, "%u", &ixmapfwd.mtu_frame) < 1){
+				printf("Invalid MTU length\n");
+				ret = -1;
+				goto err_arg;
+			}
+			break;
+		case 'c':
+			if(sscanf(optarg, "%u", &ixmapfwd.buf_count) < 1){
+				printf("Invalid number of packet buffer\n");
+				ret = -1;
+				goto err_arg;
+			}
+			break;
+		case 'p':
+			ixmapfwd.promisc = 1;
+			break;
+		case 'h':
+			usage();
+			ret = 0;
+			goto err_arg;
+			break;
+		default:
+			usage();
+			ret = -1;
+			goto err_arg;
+		}
+	}
+
+	if(!ixmapfwd.num_ports){
+		printf("You must specify number of ports.\n");
+		printf("Try -h to show help.\n");
+		ret = -1;
+		goto err_arg;
+	}
 
 	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * ixmapfwd.num_ports);
 	if(!ixmapfwd.ih_array){
@@ -66,10 +131,8 @@ int main(int argc, char **argv)
 	}
 
 	for(i = 0; i < ixmapfwd.num_ports; i++, ports_assigned++){
-		ixmapfwd.ih_array[i] = ixmap_open(ixmap_interface_array[i],
-			ixmapfwd.num_cores, ixmapfwd.intr_rate,
-			IXMAP_RX_BUDGET, IXMAP_TX_BUDGET,
-			ixmapfwd.mtu_frame, ixmapfwd.promisc,
+		ixmapfwd.ih_array[i] = ixmap_open(i, ixmapfwd.num_cores, ixmapfwd.intr_rate,
+			IXMAP_RX_BUDGET, IXMAP_TX_BUDGET, ixmapfwd.mtu_frame, ixmapfwd.promisc,
 			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
 		if(!ixmapfwd.ih_array[i]){
 			printf("failed to ixmap_open, idx = %d\n", i);
@@ -100,7 +163,7 @@ int main(int argc, char **argv)
 	}
 
 	for(i = 0; i < ixmapfwd.num_ports; i++, tun_assigned++){
-		ixmapfwd.tunh_array[i] = tun_open(&ixmapfwd, ixmap_interface_array[i], i);
+		ixmapfwd.tunh_array[i] = tun_open(&ixmapfwd, i);
 		if(!ixmapfwd.tunh_array[i]){
 			printf("failed to tun_open\n");
 			ret = -1;
@@ -115,7 +178,7 @@ int main(int argc, char **argv)
 
 	for(i = 0; i < ixmapfwd.num_cores; i++, cores_assigned++){
 		threads[i].buf = ixmap_buf_alloc(ixmapfwd.ih_array,
-			ixmapfwd.num_ports, buf_count, ixmapfwd.buf_size);
+			ixmapfwd.num_ports, ixmapfwd.buf_count, ixmapfwd.buf_size);
 		if(!threads[i].buf){
 			printf("failed to ixmap_alloc_buf, idx = %d\n", i);
 			printf("please decrease buffer or enable iommu\n");
@@ -187,6 +250,7 @@ err_alloc_threads:
 err_tunh_array:
 	free(ixmapfwd.ih_array);
 err_ih_array:
+err_arg:
 	return ret;
 }
 

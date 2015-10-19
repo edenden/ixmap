@@ -13,7 +13,7 @@
 #include "netlink.h"
 #include "fib.h"
 #include "neigh.h"
-#include "tun.h"
+#include "iftap.h"
 
 static void netlink_route(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh);
 static void netlink_neigh(struct ixmapfwd_thread *thread, struct nlmsghdr *nlh);

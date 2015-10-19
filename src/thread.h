@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <ixmap.h>
 
-#include "tun.h"
+#include "iftap.h"
 #include "neigh.h"
 #include "fib.h"
 

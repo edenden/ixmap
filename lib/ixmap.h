@@ -2,11 +2,13 @@
 #define _IXMAP_H
 
 #include <config.h>
+#include <net/if.h>
 
 #define ALIGN(x,a)		__ALIGN_MASK(x,(typeof(x))(a)-1)
 #define __ALIGN_MASK(x,mask)	(((x)+(mask))&~(mask))
 
 #define FILENAME_SIZE 256
+#define IXMAP_IFNAME "ixgbe"
 #define SIZE_1GB (1ul << 30)
 
 #define min(x, y) ({				\
@@ -87,7 +89,6 @@ struct ixmap_handle {
 	void			*bar;
 	unsigned long		bar_size;
 
-	char			*interface_name;
 	struct ixmap_ring	*tx_ring;
 	struct ixmap_ring	*rx_ring;
 	struct ixmap_buf	*buf;
@@ -103,6 +104,7 @@ struct ixmap_handle {
 	uint32_t		mtu_frame;
 	uint32_t		buf_size;
 	uint8_t			mac_addr[ETH_ALEN];
+	char			interface_name[IFNAMSIZ];
 };
 
 struct ixmap_irqdev_handle {
@@ -112,7 +114,6 @@ struct ixmap_irqdev_handle {
 };
 
 struct ixmap_port {
-	char			*interface_name;
 	void			*irqreg[2];
 	struct ixmap_ring	*rx_ring;
 	struct ixmap_ring	*tx_ring;
@@ -126,6 +127,7 @@ struct ixmap_port {
 	uint32_t		rx_budget;
 	uint32_t		tx_budget;
 	uint8_t			mac_addr[ETH_ALEN];
+	const char		*interface_name;
 
 	unsigned long		count_rx_alloc_failed;
 	unsigned long		count_rx_clean_total;

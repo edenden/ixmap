@@ -21,8 +21,8 @@
 	const typeof( ((type *)0)->member ) *__mptr = (ptr);	\
 	(type *)( (char *)__mptr - offsetof(type,member) );})
 
-#define likely(x)       __builtin_expect(!!(x), 1)
-#define unlikely(x)     __builtin_expect(!!(x), 0)
+#define likely(x)	__builtin_expect(!!(x), 1)
+#define unlikely(x)	__builtin_expect(!!(x), 0)
 #define prefetch(x)	__builtin_prefetch(x, 0)
 #define prefetchw(x)	__builtin_prefetch(x, 1)
 
@@ -43,7 +43,10 @@ struct ixmapfwd {
 	unsigned int		num_ports;
 	unsigned int		promisc;
 	unsigned int		mtu_frame;
+	unsigned int		buf_count;
 	unsigned short		intr_rate;
 };
+
+extern char *optarg;
 
 #endif /* _IXMAPFWD_MAIN_H */

@@ -395,7 +395,7 @@ static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma)
 	return 0;
 }
 
-struct ixmap_handle *ixmap_open(char *interface_name,
+struct ixmap_handle *ixmap_open(unsigned int port_index,
 	unsigned int num_queues_req, unsigned short intr_rate,
 	unsigned int rx_budget, unsigned int tx_budget,
 	unsigned int mtu_frame, unsigned int promisc,
@@ -411,7 +411,8 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 		goto err_alloc_ih;
 	memset(ih, 0, sizeof(struct ixmap_handle));
 
-	snprintf(filename, sizeof(filename), "/dev/%s", interface_name);
+	snprintf(filename, sizeof(filename), "/dev/%s%d",
+		IXMAP_IFNAME, port_index);
 	ih->fd = open(filename, O_RDWR);
 	if (ih->fd < 0)
 		goto err_open;
@@ -453,13 +454,14 @@ struct ixmap_handle *ixmap_open(char *interface_name,
 
 	ih->bar_size = req_info.mmio_size;
 	ih->promisc = !!promisc;
-	ih->interface_name = interface_name;
 	ih->rx_budget = rx_budget;
 	ih->tx_budget = tx_budget;
 	ih->mtu_frame = mtu_frame;
 	ih->num_rx_desc = num_rx_desc;
 	ih->num_tx_desc = num_tx_desc;
 	memcpy(ih->mac_addr, req_info.mac_addr, ETH_ALEN);
+	snprintf(ih->interface_name, sizeof(ih->interface_name), "%s%d",
+		IXMAP_IFNAME, port_index);
 
 	return ih;
 
