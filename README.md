@@ -59,11 +59,12 @@ Edit /etc/sysctl.conf:
 Add udev rule so that ixmap kernel module will be loaded automatically  
 (the content of the file is depending on your environment):
 
-    % cp ./extra/99-ixmap.rules /etc/udev/rules.d/
+    % cp ./extra/udev/99-ixmap.rules /etc/udev/rules.d/
 
-Copy init script to be launched at boot sequence:
+Copy systemd unit file to be launched automatically:
 
-    TBD 
+    % cp ./extra/systemd/ixmap.service /etc/systemd/system/
+    % systemctl enable ixmap
 
 After setting all of the above:
 

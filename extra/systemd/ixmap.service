@@ -1,0 +1,10 @@
+[Unit]
+Description=Wire-speed routing stack
+After=syslog.target
+Before=network.target
+
+[Service]
+ExecStart=/usr/local/bin/ixmap -n 2
+
+[Install]
+WantedBy=multi-user.target
