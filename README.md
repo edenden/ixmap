@@ -63,6 +63,7 @@ Add udev rule so that ixmap kernel module will be loaded automatically
 
 Copy systemd unit file to be launched automatically:
 
+    % cp ./extra/systemd/ixmap-auto /usr/local/bin/
     % cp ./extra/systemd/ixmap.service /etc/systemd/system/
     % systemctl enable ixmap
 
