@@ -12,6 +12,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <stdarg.h>
+#include <syslog.h>
 #include <ixmap.h>
 
 #include "linux/list.h"
@@ -124,6 +125,8 @@ int main(int argc, char **argv)
 		}
 	}
 
+	openlog(PROCESS_NAME, LOG_CONS | LOG_PID, SYSLOG_FACILITY);
+
 	ixmapfwd.ih_array = malloc(sizeof(struct ixmap_handle *) * ixmapfwd.num_ports);
 	if(!ixmapfwd.ih_array){
 		ret = -1;
@@ -147,7 +150,7 @@ int main(int argc, char **argv)
 			IXMAP_RX_BUDGET, IXMAP_TX_BUDGET, ixmapfwd.mtu_frame, ixmapfwd.promisc,
 			IXGBE_MAX_RXD, IXGBE_MAX_TXD);
 		if(!ixmapfwd.ih_array[i]){
-			printf("failed to ixmap_open, idx = %d\n", i);
+			ixmapfwd_log(LOG_ERR, "failed to ixmap_open, idx = %d", i);
 			ret = -1;
 			goto err_open;
 		}
@@ -157,8 +160,8 @@ int main(int argc, char **argv)
 		threads[i].desc = ixmap_desc_alloc(ixmapfwd.ih_array,
 			ixmapfwd.num_ports, i);
 		if(!threads[i].desc){
-			printf("failed to ixmap_alloc_descring, idx = %d\n", i);
-			printf("please decrease descripter or enable iommu\n");
+			ixmapfwd_log(LOG_ERR, "failed to ixmap_alloc_descring, idx = %d", i);
+			ixmapfwd_log(LOG_ERR, "please decrease descripter or enable iommu");
 			ret = -1;
 			goto err_desc_alloc;
 		}
@@ -177,7 +180,7 @@ int main(int argc, char **argv)
 	for(i = 0; i < ixmapfwd.num_ports; i++, tun_assigned++){
 		ixmapfwd.tunh_array[i] = tun_open(&ixmapfwd, i);
 		if(!ixmapfwd.tunh_array[i]){
-			printf("failed to tun_open\n");
+			ixmapfwd_log(LOG_ERR, "failed to tun_open");
 			ret = -1;
 			goto err_tun_open;
 		}
@@ -192,15 +195,15 @@ int main(int argc, char **argv)
 		threads[i].buf = ixmap_buf_alloc(ixmapfwd.ih_array,
 			ixmapfwd.num_ports, ixmapfwd.buf_count, ixmapfwd.buf_size);
 		if(!threads[i].buf){
-			printf("failed to ixmap_alloc_buf, idx = %d\n", i);
-			printf("please decrease buffer or enable iommu\n");
+			ixmapfwd_log(LOG_ERR, "failed to ixmap_alloc_buf, idx = %d", i);
+			ixmapfwd_log(LOG_ERR, "please decrease buffer or enable iommu");
 			goto err_buf_alloc;
 		}
 
 		threads[i].plane = ixmap_plane_alloc(ixmapfwd.ih_array,
 			threads[i].buf, ixmapfwd.num_ports, i);
 		if(!threads[i].plane){
-			printf("failed to ixmap_plane_alloc, idx = %d\n", i);
+			ixmapfwd_log(LOG_ERR, "failed to ixmap_plane_alloc, idx = %d", i);
 			goto err_plane_alloc;
 		}
 
@@ -262,6 +265,7 @@ err_alloc_threads:
 err_tunh_array:
 	free(ixmapfwd.ih_array);
 err_ih_array:
+	closelog();
 err_daemonize:
 err_arg:
 	return ret;
@@ -279,7 +283,7 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 
 	ret = pthread_create(&thread->tid, NULL, thread_process_interrupt, thread);
 	if(ret < 0){
-		perror("failed to create thread");
+		ixmapfwd_log(LOG_ERR, "failed to create thread");
 		goto err_pthread_create;
 	}
 
@@ -287,7 +291,7 @@ static int ixmapfwd_thread_create(struct ixmapfwd *ixmapfwd,
 	CPU_SET(thread->index, &cpuset);
 	ret = pthread_setaffinity_np(thread->tid, sizeof(cpu_set_t), &cpuset);
 	if(ret < 0){
-		perror("failed to set affinity");
+		ixmapfwd_log(LOG_ERR, "failed to set affinity");
 		goto err_set_affinity;
 	}
 
@@ -299,17 +303,26 @@ err_pthread_create:
 	return -1;
 }
 
+void ixmapfwd_log(int level, char *fmt, ...){
+	va_list args;
+	va_start(args, fmt);
+
+	vsyslog(level, fmt, args);
+
+	va_end(args);
+}
+
 static void ixmapfwd_thread_kill(struct ixmapfwd_thread *thread)
 {
 	int ret;
 
 	ret = pthread_kill(thread->tid, SIGUSR1);
 	if(ret != 0)
-		perror("failed to kill thread");
+		ixmapfwd_log(LOG_ERR, "failed to kill thread");
 
 	ret = pthread_join(thread->tid, NULL);
 	if(ret != 0)
-		perror("failed to join thread");
+		ixmapfwd_log(LOG_ERR, "failed to join thread");
 
 	return;
 }

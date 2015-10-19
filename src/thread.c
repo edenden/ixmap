@@ -15,6 +15,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <stddef.h>
+#include <syslog.h>
 #include <ixmap.h>
 
 #include "main.h"
@@ -41,7 +42,7 @@ void *thread_process_interrupt(void *data)
 	int			read_size, fd_ep, i, ret;
 	int			ports_assigned = 0;
 
-	ixgbe_print("thread %d started\n", thread->index);
+	ixmapfwd_log(LOG_INFO, "thread %d started", thread->index);
 	read_size = getpagesize();
 	INIT_LIST_HEAD(&ep_desc_head);
 
@@ -100,7 +101,7 @@ err_neigh_inet_alloc:
 	/* Prepare each fd in epoll */
 	fd_ep = thread_fd_prepare(&ep_desc_head, thread);
 	if(fd_ep < 0){
-		printf("failed to epoll prepare\n");
+		ixmapfwd_log(LOG_ERR, "failed to epoll prepare");
 		goto err_ixgbe_epoll_prepare;
 	}
 
@@ -384,7 +385,7 @@ static int thread_irq_setmask(struct ixmap_irqdev_handle *irqh, int core_id)
 
 	ret = ixmap_irqdev_setaffinity(irqh, core_id);
 	if(ret < 0){
-		printf("failed to set affinity\n");
+		ixmapfwd_log(LOG_ERR, "failed to set affinity");
 		goto err_set_affinity;
 	}
 
@@ -399,14 +400,14 @@ static void thread_print_result(struct ixmapfwd_thread *thread)
 	int i;
 
 	for(i = 0; i < thread->num_ports; i++){
-		printf("thread %d port %d statictis:\n", thread->index, i);
-		printf("\tRx allocation failed = %lu\n",
+		ixmapfwd_log(LOG_INFO, "thread %d port %d statictis:", thread->index, i);
+		ixmapfwd_log(LOG_INFO, "  Rx allocation failed = %lu",
 			ixmap_count_rx_alloc_failed(thread->plane, i));
-		printf("\tRx packetes received = %lu\n",
+		ixmapfwd_log(LOG_INFO, "  Rx packetes received = %lu",
 			ixmap_count_rx_clean_total(thread->plane, i));
-		printf("\tTx xmit failed = %lu\n",
+		ixmapfwd_log(LOG_INFO, "  Tx xmit failed = %lu",
 			ixmap_count_tx_xmit_failed(thread->plane, i));
-		printf("\tTx packetes transmitted = %lu\n",
+		ixmapfwd_log(LOG_INFO, "  Tx packetes transmitted = %lu",
 			ixmap_count_tx_clean_total(thread->plane, i));
 	}
 	return;

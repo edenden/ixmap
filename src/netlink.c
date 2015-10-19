@@ -6,6 +6,7 @@
 #include <linux/rtnetlink.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <syslog.h>
 #include <linux/if_ether.h>
 
 #include "main.h"
@@ -36,7 +37,7 @@ void netlink_process(struct ixmapfwd_thread *thread,
 			netlink_neigh(thread, nlh);
 			break;
 		default:
-			printf("unknown type\n");
+			ixmapfwd_log(LOG_ERR, "unknown type netlink message");
 			break;
 		}
 

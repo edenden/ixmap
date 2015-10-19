@@ -26,12 +26,8 @@
 #define prefetch(x)	__builtin_prefetch(x, 0)
 #define prefetchw(x)	__builtin_prefetch(x, 1)
 
-#ifdef DEBUG
-#define ixgbe_print(args...) printf("ixgbe: " args)
-#else
-#define ixgbe_print(args...)
-#endif
-
+#define PROCESS_NAME "ixmap"
+#define SYSLOG_FACILITY LOG_DAEMON
 #define IXMAP_RX_BUDGET 1024
 #define IXMAP_TX_BUDGET 4096
 
@@ -48,6 +44,7 @@ struct ixmapfwd {
 	unsigned short		intr_rate;
 };
 
+void ixmapfwd_log(int level, char *fmt, ...);
 extern char *optarg;
 
 #endif /* _IXMAPFWD_MAIN_H */
