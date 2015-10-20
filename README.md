@@ -65,7 +65,6 @@ Copy systemd unit file to be launched automatically:
 
     % cp ./extra/systemd/ixmap-exec.sh /usr/local/bin/
     % cp ./extra/systemd/ixmap.service /etc/systemd/system/
-    % systemctl enable ixmap
 
 After setting all of the above:
 

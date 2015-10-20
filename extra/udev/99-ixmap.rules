@@ -2,7 +2,8 @@
 ## Bind pci device 0000:81:00.0 to the 'ixmap' module
 ##
 #KERNEL=="0000:81:00.0", WAIT_FOR_SYSFS="driver/unbind", PROGRAM="modprobe ixmap", \
-#	ATTR{driver/unbind}="$kernel", ATTR{subsystem/drivers/ixmap/bind}="$kernel"
+#	ATTR{driver/unbind}="$kernel", ATTR{subsystem/drivers/ixmap/bind}="$kernel", \
+#	TAG+="systemd", ENV{SYSTEMD_WANTS}+="ixmap.service"
 
 ##
 ## Bind pci device 0000:81:00.0 to the 'ixgbe' module
