@@ -392,7 +392,7 @@ int lpm_traverse(struct lpm_table *table, void *prefix,
 		_lpm_traverse(table, prefix, prefix_len, node, 16);
 	}else{
 		range = 1 << (16 - prefix_len);
-		mask = ~((1 << range) - 1);
+		mask = ~(range - 1);
 		index &= mask;
 
 		for(i = 0; i < range; i++){
@@ -425,7 +425,7 @@ static int _lpm_traverse(struct lpm_table *table, void *prefix,
 		_lpm_traverse(table, prefix, prefix_len, node, offset + 8);
 	}else{
 		range = 1 << (8 - (prefix_len - offset));
-		mask = ~((1 << range) - 1);
+		mask = ~(range - 1);
 		index &= mask;
 
 		for(i = 0; i < range; i++){
