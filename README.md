@@ -46,9 +46,10 @@ destined to localhost so that you can use any existing network application on it
 In advance, disable Hyper-Threading, VT-d and Power management  
 (or select high performance mode) in the BIOS.
 
-Edit /etc/default/grub:
+Edit /etc/default/grub:  
+(Needed hugepages = (Number of cores) * 2)
 
-    GRUB_CMDLINE_LINUX="default_hugepagesz=1G hugepagesz=1G hugepages=8 intel_iommu=off"
+    GRUB_CMDLINE_LINUX="default_hugepagesz=1G hugepagesz=1G hugepages=X intel_iommu=off"
     % update-grub
 
 Edit /etc/sysctl.conf:
@@ -56,15 +57,12 @@ Edit /etc/sysctl.conf:
     net.ipv4.ip_forward=1
     net.ipv6.conf.all.forwarding=1
 
-Add udev rule so that ixmap kernel module will be loaded automatically  
-(the content of the file is depending on your environment):
+Optional: Add udev rules and sytemd unit to load ixmap at boot time  
+(the udev rule is depending on your environment):
 
     % cp ./extra/udev/99-ixmap.rules /etc/udev/rules.d/
-
-Copy systemd unit file to be launched automatically:
-
-    % cp ./extra/systemd/ixmap-exec.sh /usr/local/bin/
     % cp ./extra/systemd/ixmap.service /etc/systemd/system/
+    % cp ./extra/systemd/ixmap-exec.sh /usr/local/bin/
 
 After setting all of the above:
 
