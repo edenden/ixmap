@@ -43,8 +43,8 @@ destined to localhost so that you can use any existing network application on it
 
 ## 3. Setup
 
-In advance, disable Hyper-Threading, VT-d and  
-Power management(or select high performance mode) in the BIOS.
+In advance, disable Hyper-Threading, VT-d and Power management  
+(or select high performance mode) in the BIOS.
 
 Edit /etc/default/grub:
 
@@ -63,7 +63,7 @@ Add udev rule so that ixmap kernel module will be loaded automatically
 
 Copy systemd unit file to be launched automatically:
 
-    % cp ./extra/systemd/ixmap-auto /usr/local/bin/
+    % cp ./extra/systemd/ixmap-exec.sh /usr/local/bin/
     % cp ./extra/systemd/ixmap.service /etc/systemd/system/
     % systemctl enable ixmap
 

@@ -4,7 +4,7 @@ After=syslog.target
 Before=network.target
 
 [Service]
-ExecStart=/usr/local/bin/ixmap-auto
+ExecStart=/usr/local/bin/ixmap-exec.sh
 
 [Install]
 WantedBy=multi-user.target
