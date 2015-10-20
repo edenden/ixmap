@@ -47,7 +47,7 @@ In advance, disable Hyper-Threading, VT-d and Power management
 (or select high performance mode) in the BIOS.
 
 Edit /etc/default/grub:  
-(Needed hugepages = (Number of cores) * 2)
+(Needed hugepages X = (Number of cores) * 2)
 
     GRUB_CMDLINE_LINUX="default_hugepagesz=1G hugepagesz=1G hugepages=X intel_iommu=off"
     % update-grub
