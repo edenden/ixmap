@@ -7,6 +7,11 @@ all-local:
 
 install-exec-local:
 	cd ./kmod; make install
+# depmod.sh in kernel build system doesn't invoke
+# /sbin/depmod if System.map is not found in build directory.
+# So we call /sbin/depmod explicitly as a work-around.
+# Ref: /usr/lib/linux-kbuild-X.XX/scripts/depmod.sh
+	/sbin/depmod -a
 
 clean-local:
 	cd ./kmod; make clean
