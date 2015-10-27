@@ -203,8 +203,7 @@ static int forward_ip6_process(struct ixmapfwd_thread *thread,
 	eth = (struct ethhdr *)packet->slot_buf;
 	ip6 = (struct ip6_hdr *)(packet->slot_buf + sizeof(struct ethhdr));
 
-	if(unlikely(ip6->ip6_dst.s6_addr[0] == 0xfe
-	&& (ip6->ip6_dst.s6_addr[1] & 0xc0) == 0x80))
+	if(unlikely(IN6_IS_ADDR_LINKLOCAL(&ip6->ip6_dst)))
 		goto packet_local;
 
 	fib_entry = fib_lookup(thread->fib_inet6, (uint32_t *)&ip6->ip6_dst);
