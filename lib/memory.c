@@ -4,24 +4,25 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <net/ethernet.h>
+#include <numa.h>
 
 #include "ixmap.h"
 #include "memory.h"
 
 static struct ixmap_mnode *ixmap_mnode_alloc(struct ixmap_mnode *parent,
-	void *ptr, unsigned int size, unsigned int index);
+	void *ptr, unsigned int size, unsigned int index, int core_id);
 static void ixmap_mnode_release(struct ixmap_mnode *node);
 static void _ixmap_mem_destroy(struct ixmap_mnode *node);
 static struct ixmap_marea *_ixmap_mem_alloc(struct ixmap_mnode *node,
-	unsigned int size);
+	unsigned int size, int core_id);
 static void _ixmap_mem_free(struct ixmap_mnode *node);
 
 static struct ixmap_mnode *ixmap_mnode_alloc(struct ixmap_mnode *parent,
-	void *ptr, unsigned int size, unsigned int index)
+	void *ptr, unsigned int size, unsigned int index, int core_id)
 {
 	struct ixmap_mnode *node;
 
-	node = malloc(sizeof(struct ixmap_mnode));
+	node = numa_alloc_onnode(sizeof(struct ixmap_mnode), core_id);
 	if(!node)
 		goto err_alloc_node;
 
@@ -47,15 +48,15 @@ static void ixmap_mnode_release(struct ixmap_mnode *node)
 	if(parent)
 		parent->child[node->index] = NULL;
 
-	free(node);
+	numa_free(node, sizeof(struct ixmap_mnode));
 	return;
 }
 
-struct ixmap_mnode *ixmap_mem_init(void *ptr, unsigned int size)
+struct ixmap_mnode *ixmap_mem_init(void *ptr, unsigned int size, int core_id)
 {
 	struct ixmap_mnode *root;
 
-	root = ixmap_mnode_alloc(NULL, ptr, size, 0);
+	root = ixmap_mnode_alloc(NULL, ptr, size, 0, core_id);
 	if(!root)
 		goto err_alloc_root;
 
@@ -88,11 +89,12 @@ static void _ixmap_mem_destroy(struct ixmap_mnode *node)
 struct ixmap_marea *ixmap_mem_alloc(struct ixmap_desc *desc,
 	unsigned int size)
 {
-	return _ixmap_mem_alloc(desc->node, ALIGN(size, L1_CACHE_BYTES));
+	return _ixmap_mem_alloc(desc->node, ALIGN(size, L1_CACHE_BYTES),
+		desc->core_id);
 }
 
 static struct ixmap_marea *_ixmap_mem_alloc(struct ixmap_mnode *node,
-	unsigned int size)
+	unsigned int size, int core_id)
 {
 	void *ptr_new;
 	unsigned int size_new;
@@ -116,14 +118,15 @@ static struct ixmap_marea *_ixmap_mem_alloc(struct ixmap_mnode *node,
 				ptr_new = node->area.ptr + (size_new * i);
 
 				node->child[i] =
-					ixmap_mnode_alloc(node, ptr_new, size_new, i);
+					ixmap_mnode_alloc(node, ptr_new, size_new, i,
+						core_id);
 				if(!node->child[i])
 					goto err_alloc_child;
 			}
 		}
 
 		for(i = 0; i < 2; i++){
-			ret = _ixmap_mem_alloc(node->child[i], size);
+			ret = _ixmap_mem_alloc(node->child[i], size, core_id);
 			if(ret)
 				break;
 		}

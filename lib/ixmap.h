@@ -72,6 +72,7 @@ struct ixmap_ring {
 struct ixmap_desc {
 	void			*addr_virt;
 	struct ixmap_mnode	*node;
+	int			core_id;
 };
 
 #define IXMAP_SLOT_INFLIGHT 0x1

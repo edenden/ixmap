@@ -27,15 +27,17 @@ struct epoll_desc {
 int epoll_add(int fd_ep, void *ptr, int fd);
 int epoll_del(int fd_ep, int fd);
 struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
-	unsigned int port_index, unsigned int queue_index,
+	unsigned int port_index, unsigned int core_id,
 	enum ixmap_irq_direction direction);
 void epoll_desc_release_irqdev(struct epoll_desc *ep_desc);
-struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset);
+struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset,
+	unsigned int core_id);
 void epoll_desc_release_signalfd(struct epoll_desc *ep_desc);
 struct epoll_desc *epoll_desc_alloc_tun(struct tun_plane *tun_plane,
-	unsigned int port_index);
+	unsigned int port_index, unsigned int core_id);
 void epoll_desc_release_tun(struct epoll_desc *ep_desc);
-struct epoll_desc *epoll_desc_alloc_netlink(struct sockaddr_nl *addr);
+struct epoll_desc *epoll_desc_alloc_netlink(struct sockaddr_nl *addr,
+	unsigned int core_id);
 void epoll_desc_release_netlink(struct epoll_desc *ep_desc);
 
 #endif /* _IXMAPFWD_EPOLL_H */

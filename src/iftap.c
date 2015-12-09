@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <linux/if_tun.h>
 #include <linux/if_arp.h>
+#include <numa.h>
 
 #include "main.h"
 #include "iftap.h"
@@ -224,7 +225,7 @@ err_tun_ioctl:
 }
 
 struct tun_plane *tun_plane_alloc(struct ixmapfwd *ixmapfwd,
-	int queue_index)
+	int core_id)
 {
 	struct tun_handle **tunh_array;
 	struct tun_plane *plane;
@@ -232,16 +233,17 @@ struct tun_plane *tun_plane_alloc(struct ixmapfwd *ixmapfwd,
 
 	tunh_array = ixmapfwd->tunh_array;
 
-	plane = malloc(sizeof(struct tun_plane));
+	plane = numa_alloc_onnode(sizeof(struct tun_plane), core_id);
 	if(!plane)
 		goto err_alloc_plane;
 
-	plane->ports = malloc(sizeof(struct tun_port) * ixmapfwd->num_ports);
+	plane->ports = numa_alloc_onnode(sizeof(struct tun_port) * ixmapfwd->num_ports,
+		core_id);
 	if(!plane->ports)
 		goto err_alloc_ports;
 
 	for(i = 0; i < ixmapfwd->num_ports; i++){
-		plane->ports[i].fd = tunh_array[i]->queues[queue_index];
+		plane->ports[i].fd = tunh_array[i]->queues[core_id];
 		plane->ports[i].ifindex = tunh_array[i]->ifindex;
 		plane->ports[i].mtu_frame = tunh_array[i]->mtu_frame;
 	}
@@ -249,13 +251,13 @@ struct tun_plane *tun_plane_alloc(struct ixmapfwd *ixmapfwd,
 	return plane;
 
 err_alloc_ports:
-	free(plane);
+	numa_free(plane, sizeof(struct tun_plane));
 err_alloc_plane:
 	return NULL;
 }
 
-void tun_plane_release(struct tun_plane *plane)
+void tun_plane_release(struct tun_plane *plane, int num_ports)
 {
-	free(plane->ports);
-	free(plane);
+	numa_free(plane->ports, sizeof(struct tun_port) * num_ports);
+	numa_free(plane, sizeof(struct tun_plane));
 }

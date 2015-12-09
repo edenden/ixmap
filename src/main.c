@@ -207,9 +207,11 @@ int main(int argc, char **argv)
 		continue;
 
 err_thread_create:
-		tun_plane_release(threads[i].tun_plane);
+		tun_plane_release(threads[i].tun_plane,
+			ixmapfwd.num_ports);
 err_tun_plane_alloc:
-		ixmap_plane_release(threads[i].plane);
+		ixmap_plane_release(threads[i].plane,
+			ixmapfwd.num_ports);
 err_plane_alloc:
 		ixmap_buf_release(threads[i].buf,
 			ixmapfwd.ih_array, ixmapfwd.num_ports);
@@ -228,8 +230,10 @@ err_buf_alloc:
 err_assign_cores:
 	for(i = 0; i < cores_assigned; i++){
 		ixmapfwd_thread_kill(&threads[i]);
-		tun_plane_release(threads[i].tun_plane);
-		ixmap_plane_release(threads[i].plane);
+		tun_plane_release(threads[i].tun_plane,
+			ixmapfwd.num_ports);
+		ixmap_plane_release(threads[i].plane,
+			ixmapfwd.num_ports);
 		ixmap_buf_release(threads[i].buf,
 			ixmapfwd.ih_array, ixmapfwd.num_ports);
 	}

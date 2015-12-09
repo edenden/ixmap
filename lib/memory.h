@@ -18,7 +18,7 @@ struct ixmap_mnode {
 	struct ixmap_marea	area;
 };
 
-struct ixmap_mnode *ixmap_mem_init(void *ptr, unsigned int size);
+struct ixmap_mnode *ixmap_mem_init(void *ptr, unsigned int size, int core_id);
 void ixmap_mem_destroy(struct ixmap_mnode *node);
 
 #endif /* _IXMAP_MEMORY_H */

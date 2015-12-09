@@ -45,12 +45,12 @@ enum ixmap_irq_direction {
 
 void ixmap_irq_enable(struct ixmap_handle *ih);
 struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
-	struct ixmap_buf *buf, int ih_num, int queue_index);
-void ixmap_plane_release(struct ixmap_plane *plane);
+	struct ixmap_buf *buf, int ih_num, int core_id);
+void ixmap_plane_release(struct ixmap_plane *plane, int ih_num);
 struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
-	int queue_index);
+	int core_id);
 void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
-        int queue_index, struct ixmap_desc *desc);
+        int core_id, struct ixmap_desc *desc);
 struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	int ih_num, uint32_t count, uint32_t buf_size, int core_id);
 void ixmap_buf_release(struct ixmap_buf *buf,
@@ -65,7 +65,7 @@ unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);
 uint8_t *ixmap_macaddr_default(struct ixmap_handle *ih);
 unsigned int ixmap_mtu_get(struct ixmap_handle *ih);
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
-	unsigned int port_index, unsigned int queue_index,
+	unsigned int port_index, unsigned int core_id,
 	enum ixmap_irq_direction direction);
 void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh);
 int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,

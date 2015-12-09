@@ -16,6 +16,7 @@
 #include <linux/rtnetlink.h>
 #include <stddef.h>
 #include <syslog.h>
+#include <numa.h>
 #include <ixmap.h>
 
 #include "main.h"
@@ -94,7 +95,7 @@ err_neigh_inet_alloc:
 	}
 
 	/* Prepare read buffer */
-	read_buf = malloc(read_size);
+	read_buf = numa_alloc_onnode(read_size, thread->index);
 	if(!read_buf)
 		goto err_alloc_read_buf;
 
@@ -117,7 +118,7 @@ err_neigh_inet_alloc:
 err_wait:
 	thread_fd_destroy(&ep_desc_head, fd_ep);
 err_ixgbe_epoll_prepare:
-	free(read_buf);
+	numa_free(read_buf, read_size);
 err_alloc_read_buf:
 err_assign_ports:
 	for(i = 0; i < ports_assigned; i++){
@@ -293,7 +294,8 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 		}
 
 		/* Register Virtual Interface fd */
-		ep_desc = epoll_desc_alloc_tun(thread->tun_plane, i);
+		ep_desc = epoll_desc_alloc_tun(thread->tun_plane, i,
+			thread->index);
 		if(!ep_desc)
 			goto err_assign_port;
 
@@ -309,7 +311,7 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 	/* signalfd preparing */
 	sigemptyset(&sigset);
 	sigaddset(&sigset, SIGUSR1);
-	ep_desc = epoll_desc_alloc_signalfd(&sigset);
+	ep_desc = epoll_desc_alloc_signalfd(&sigset, thread->index);
 	if(!ep_desc)
 		goto err_epoll_desc_signalfd;
 
@@ -326,7 +328,7 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 	addr.nl_family = AF_NETLINK;
 	addr.nl_groups = RTMGRP_NEIGH | RTMGRP_IPV4_ROUTE | RTMGRP_IPV6_ROUTE;
 
-	ep_desc = epoll_desc_alloc_netlink(&addr);
+	ep_desc = epoll_desc_alloc_netlink(&addr, thread->index);
 	if(!ep_desc)
 		goto err_epoll_desc_netlink;
 

@@ -25,7 +25,7 @@ struct tun_handle *tun_open(struct ixmapfwd *ixmapfwd,
 	unsigned int port_index);
 void tun_close(struct ixmapfwd *ixmapfwd, unsigned int port_index);
 struct tun_plane *tun_plane_alloc(struct ixmapfwd *ixmapfwd,
-	int queue_index);
-void tun_plane_release(struct tun_plane *plane);
+	int core_id);
+void tun_plane_release(struct tun_plane *plane, int num_ports);
 
 #endif /* _IXMAPFWD_TUN_H */

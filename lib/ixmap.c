@@ -85,16 +85,18 @@ static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask)
 }
 
 struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
-	struct ixmap_buf *buf, int ih_num, int queue_index)
+	struct ixmap_buf *buf, int ih_num, int core_id)
 {
 	struct ixmap_plane *plane;
 	int i;
 
-	plane = malloc(sizeof(struct ixmap_plane));
+	plane = numa_alloc_onnode(sizeof(struct ixmap_plane),
+		core_id);
 	if(!plane)
 		goto err_plane_alloc;
 
-	plane->ports = malloc(sizeof(struct ixmap_port) * ih_num);
+	plane->ports = numa_alloc_onnode(sizeof(struct ixmap_port) * ih_num,
+		core_id);
 	if(!plane->ports){
 		printf("failed to allocate port for each plane\n");
 		goto err_alloc_ports;
@@ -104,8 +106,8 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 		plane->ports[i].interface_name = ih_list[i]->interface_name;
 		plane->ports[i].irqreg[0] = ih_list[i]->bar + IXGBE_EIMS_EX(0);
 		plane->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
-		plane->ports[i].rx_ring = &(ih_list[i]->rx_ring[queue_index]);
-		plane->ports[i].tx_ring = &(ih_list[i]->tx_ring[queue_index]);
+		plane->ports[i].rx_ring = &(ih_list[i]->rx_ring[core_id]);
+		plane->ports[i].tx_ring = &(ih_list[i]->tx_ring[core_id]);
 		plane->ports[i].rx_slot_next = 0;
 		plane->ports[i].rx_slot_offset = i * buf->count;
 		plane->ports[i].tx_suspended = 0;
@@ -126,21 +128,21 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 	return plane;
 
 err_alloc_ports:
-	free(plane);
+	numa_free(plane, sizeof(struct ixmap_plane));
 err_plane_alloc:
 	return NULL;
 }
 
-void ixmap_plane_release(struct ixmap_plane *plane)
+void ixmap_plane_release(struct ixmap_plane *plane, int ih_num)
 {
-	free(plane->ports);
-	free(plane);
+	numa_free(plane->ports, sizeof(struct ixmap_port) * ih_num);
+	numa_free(plane, sizeof(struct ixmap_plane));
 
 	return;
 }
 
 struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
-	int queue_index)
+	int core_id)
 {
 	struct ixmap_desc *desc;
 	unsigned long size, size_tx_desc, size_rx_desc, size_mem;
@@ -148,7 +150,7 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 	int i, ret, node;
 	int desc_assigned = 0;
 
-	desc = malloc(sizeof(struct ixmap_desc));
+	desc = numa_alloc_onnode(sizeof(struct ixmap_desc), core_id);
 	if(!desc)
 		goto err_alloc_desc;
 
@@ -164,7 +166,7 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 		goto err_mmap;
 	}
 
-	node = numa_node_of_cpu(queue_index);
+	node = numa_node_of_cpu(core_id);
 	numa_tonode_memory(addr_virt, size, node);
 
 	desc->addr_virt = addr_virt;
@@ -187,17 +189,18 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 			goto err_rx_dma_map;
 		}
 
-		ih->rx_ring[queue_index].addr_dma = addr_dma;
-		ih->rx_ring[queue_index].addr_virt = addr_virt;
+		ih->rx_ring[core_id].addr_dma = addr_dma;
+		ih->rx_ring[core_id].addr_virt = addr_virt;
 
-		slot_index = malloc(sizeof(int32_t) * ih->num_rx_desc);
+		slot_index = numa_alloc_onnode(sizeof(int32_t) * ih->num_rx_desc,
+			core_id);
 		if(!slot_index){
 			goto err_rx_assign;
 		}
 
-		ih->rx_ring[queue_index].next_to_use = 0;
-		ih->rx_ring[queue_index].next_to_clean = 0;
-		ih->rx_ring[queue_index].slot_index = slot_index;
+		ih->rx_ring[core_id].next_to_use = 0;
+		ih->rx_ring[core_id].next_to_clean = 0;
+		ih->rx_ring[core_id].slot_index = slot_index;
 
 		addr_virt += size_rx_desc;
 
@@ -207,35 +210,38 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 			goto err_tx_dma_map;
 		}
 
-		ih->tx_ring[queue_index].addr_dma = addr_dma;
-		ih->tx_ring[queue_index].addr_virt = addr_virt;
+		ih->tx_ring[core_id].addr_dma = addr_dma;
+		ih->tx_ring[core_id].addr_virt = addr_virt;
 
-		slot_index = malloc(sizeof(int32_t) * ih->num_tx_desc);
+		slot_index = numa_alloc_onnode(sizeof(int32_t) * ih->num_tx_desc,
+			core_id);
 		if(!slot_index){
 			goto err_tx_assign;
 		}
 
-		ih->tx_ring[queue_index].next_to_use = 0;
-		ih->tx_ring[queue_index].next_to_clean = 0;
-		ih->tx_ring[queue_index].slot_index = slot_index;
+		ih->tx_ring[core_id].next_to_use = 0;
+		ih->tx_ring[core_id].next_to_clean = 0;
+		ih->tx_ring[core_id].slot_index = slot_index;
 
 		addr_virt += size_rx_desc;
 
 		continue;
 
 err_tx_assign:
-		ixmap_dma_unmap(ih, ih->tx_ring[queue_index].addr_dma);
+		ixmap_dma_unmap(ih, ih->tx_ring[core_id].addr_dma);
 err_tx_dma_map:
-		free(ih->rx_ring[queue_index].slot_index);
+		numa_free(ih->rx_ring[core_id].slot_index,
+			sizeof(int32_t) * ih->num_rx_desc);
 err_rx_assign:
-		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
+		ixmap_dma_unmap(ih, ih->rx_ring[core_id].addr_dma);
 err_rx_dma_map:
 		goto err_desc_assign;
 	}
 
-	addr_mem = (void *)ALIGN((unsigned long)addr_virt, L1_CACHE_BYTES);
-	size_mem = size - (addr_mem - desc->addr_virt);
-	desc->node = ixmap_mem_init(addr_mem, size_mem);
+	addr_mem	= (void *)ALIGN((unsigned long)addr_virt, L1_CACHE_BYTES);
+	size_mem	= size - (addr_mem - desc->addr_virt);
+	desc->core_id	= core_id;
+	desc->node	= ixmap_mem_init(addr_mem, size_mem, core_id);
 	if(!desc->node)
 		goto err_mem_init;
 
@@ -247,20 +253,22 @@ err_desc_assign:
 		struct ixmap_handle *ih;
 
 		ih = ih_list[i];
-		free(ih->tx_ring[queue_index].slot_index);
-		ixmap_dma_unmap(ih, ih->tx_ring[queue_index].addr_dma);
-		free(ih->rx_ring[queue_index].slot_index);
-		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
+		numa_free(ih->tx_ring[core_id].slot_index,
+			sizeof(int32_t) * ih->num_tx_desc);
+		ixmap_dma_unmap(ih, ih->tx_ring[core_id].addr_dma);
+		numa_free(ih->rx_ring[core_id].slot_index,
+			sizeof(int32_t) * ih->num_rx_desc);
+		ixmap_dma_unmap(ih, ih->rx_ring[core_id].addr_dma);
 	}
 	munmap(desc->addr_virt, size);
 err_mmap:
-	free(desc);
+	numa_free(desc, sizeof(struct ixmap_desc));
 err_alloc_desc:
 	return NULL;
 }
 
 void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
-	int queue_index, struct ixmap_desc *desc)
+	int core_id, struct ixmap_desc *desc)
 {
 	int i;
 
@@ -270,14 +278,16 @@ void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
 		struct ixmap_handle *ih;
 
 		ih = ih_list[i];
-		free(ih->tx_ring[queue_index].slot_index);
-		ixmap_dma_unmap(ih, ih->tx_ring[queue_index].addr_dma);
-		free(ih->rx_ring[queue_index].slot_index);
-		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
+		numa_free(ih->tx_ring[core_id].slot_index,
+			sizeof(int32_t) * ih->num_tx_desc);
+		ixmap_dma_unmap(ih, ih->tx_ring[core_id].addr_dma);
+		numa_free(ih->rx_ring[core_id].slot_index,
+			sizeof(int32_t) * ih->num_rx_desc);
+		ixmap_dma_unmap(ih, ih->rx_ring[core_id].addr_dma);
 	}
 
 	munmap(desc->addr_virt, SIZE_1GB);
-	free(desc);
+	numa_free(desc, sizeof(struct ixmap_desc));
 	return;
 }
 
@@ -290,11 +300,13 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	int *slots;
 	int ret, i, node, mapped_ports = 0;
 
-	buf = malloc(sizeof(struct ixmap_buf));
+	buf = numa_alloc_onnode(sizeof(struct ixmap_buf),
+		core_id);
 	if(!buf)
 		goto err_alloc_buf;
 
-	buf->addr_dma = malloc(sizeof(unsigned long) * ih_num);
+	buf->addr_dma = numa_alloc_onnode(sizeof(unsigned long) * ih_num,
+		core_id);
 	if(!buf->addr_dma)
 		goto err_alloc_buf_addr_dma;
 
@@ -324,7 +336,8 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 		buf->addr_dma[i] = addr_dma;
 	}
 
-	slots = malloc(sizeof(int32_t) * (count * ih_num));
+	slots = numa_alloc_onnode(sizeof(int32_t) * (count * ih_num),
+		core_id);
 	if(!slots)
 		goto err_alloc_slots;
 
@@ -346,9 +359,11 @@ err_ixmap_dma_map:
 	}
 	munmap(addr_virt, size);
 err_mmap:
-	free(buf->addr_dma);
+	numa_free(buf->addr_dma,
+		sizeof(unsigned long) * ih_num);
 err_alloc_buf_addr_dma:
-	free(buf);
+	numa_free(buf,
+		sizeof(struct ixmap_buf));
 err_alloc_buf:
 	return NULL;
 }
@@ -359,7 +374,8 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 	int i, ret;
 	unsigned long size;
 
-	free(buf->slots);
+	numa_free(buf->slots,
+		sizeof(int32_t) * (buf->count * ih_num));
 
 	for(i = 0; i < ih_num; i++){
 		ret = ixmap_dma_unmap(ih_list[i], buf->addr_dma[i]);
@@ -369,8 +385,10 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 
 	size = buf->buf_size * (ih_num * buf->count);
 	munmap(buf->addr_virt, size);
-	free(buf->addr_dma);
-	free(buf);
+	numa_free(buf->addr_dma,
+		sizeof(unsigned long) * ih_num);
+	numa_free(buf,
+		sizeof(struct ixmap_buf));
 
 	return;
 }
@@ -515,7 +533,7 @@ unsigned int ixmap_mtu_get(struct ixmap_handle *ih)
 }
 
 struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
-	unsigned int port_index, unsigned int queue_index,
+	unsigned int port_index, unsigned int core_id,
 	enum ixmap_irq_direction direction)
 {
 	struct ixmap_port *port;
@@ -525,27 +543,28 @@ struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
 
 	port = &plane->ports[port_index];
 
-	if(queue_index >= port->num_queues){
-		goto err_invalid_queue_index;
+	if(core_id >= port->num_queues){
+		goto err_invalid_core_id;
 	}
 
 	switch(direction){
 	case IXMAP_IRQ_RX:
 		snprintf(filename, sizeof(filename), "/dev/%s-irqrx%d",
-			port->interface_name, queue_index);
-		qmask = 1 << queue_index;
+			port->interface_name, core_id);
+		qmask = 1 << core_id;
 		break;
 	case IXMAP_IRQ_TX:
 		snprintf(filename, sizeof(filename), "/dev/%s-irqtx%d",
-			port->interface_name, queue_index);
-		qmask = 1 << (queue_index + port->num_queues);
+			port->interface_name, core_id);
+		qmask = 1 << (core_id + port->num_queues);
 		break;
 	default:
 		goto err_invalid_direction;
 		break;
 	}
 
-	irqh = malloc(sizeof(struct ixmap_irqdev_handle));
+	irqh = numa_alloc_onnode(sizeof(struct ixmap_irqdev_handle),
+		core_id);
 	if(!irqh)
 		goto err_alloc_handle;
 
@@ -559,17 +578,17 @@ struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
 	return irqh;
 
 err_open:
-	free(irqh);
+	numa_free(irqh, sizeof(struct ixmap_irqdev_handle));
 err_alloc_handle:
 err_invalid_direction:
-err_invalid_queue_index:
+err_invalid_core_id:
 	return NULL;
 }
 
 void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh)
 {
 	close(irqh->fd);
-	free(irqh);
+	numa_free(irqh, sizeof(struct ixmap_irqdev_handle));
 
 	return;
 }
