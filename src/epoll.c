@@ -45,7 +45,8 @@ struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
 	struct ixmap_irqdev_handle *irqh;
 	int type;
 
-	ep_desc = numa_alloc_onnode(sizeof(struct epoll_desc), core_id);
+	ep_desc = numa_alloc_onnode(sizeof(struct epoll_desc),
+		numa_node_of_cpu(core_id));
 	if(!ep_desc)
 		goto err_alloc_ep_desc;
 
@@ -95,7 +96,7 @@ struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset,
 	int fd;
 
 	ep_desc = numa_alloc_onnode(sizeof(struct epoll_desc),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!ep_desc)
 		goto err_alloc_ep_desc;
 
@@ -131,12 +132,12 @@ struct epoll_desc *epoll_desc_alloc_tun(struct tun_plane *tun_plane,
 	unsigned int *data;
 
 	ep_desc = numa_alloc_onnode(sizeof(struct epoll_desc),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!ep_desc)
 		goto err_alloc_ep_desc;
 
 	data = (unsigned int *)numa_alloc_onnode(sizeof(unsigned int),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!data)
 		goto err_alloc_data;
 	*data = port_index;
@@ -167,7 +168,7 @@ struct epoll_desc *epoll_desc_alloc_netlink(struct sockaddr_nl *addr,
 	int fd, ret;
 	
 	ep_desc = numa_alloc_onnode(sizeof(struct epoll_desc),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!ep_desc)
 		goto err_alloc_ep_desc;
 

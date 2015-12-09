@@ -91,12 +91,12 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 	int i;
 
 	plane = numa_alloc_onnode(sizeof(struct ixmap_plane),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!plane)
 		goto err_plane_alloc;
 
 	plane->ports = numa_alloc_onnode(sizeof(struct ixmap_port) * ih_num,
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!plane->ports){
 		printf("failed to allocate port for each plane\n");
 		goto err_alloc_ports;
@@ -150,7 +150,8 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 	int i, ret, node;
 	int desc_assigned = 0;
 
-	desc = numa_alloc_onnode(sizeof(struct ixmap_desc), core_id);
+	desc = numa_alloc_onnode(sizeof(struct ixmap_desc),
+		numa_node_of_cpu(core_id));
 	if(!desc)
 		goto err_alloc_desc;
 
@@ -193,7 +194,7 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 		ih->rx_ring[core_id].addr_virt = addr_virt;
 
 		slot_index = numa_alloc_onnode(sizeof(int32_t) * ih->num_rx_desc,
-			core_id);
+			numa_node_of_cpu(core_id));
 		if(!slot_index){
 			goto err_rx_assign;
 		}
@@ -214,7 +215,7 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 		ih->tx_ring[core_id].addr_virt = addr_virt;
 
 		slot_index = numa_alloc_onnode(sizeof(int32_t) * ih->num_tx_desc,
-			core_id);
+			numa_node_of_cpu(core_id));
 		if(!slot_index){
 			goto err_tx_assign;
 		}
@@ -301,12 +302,12 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	int ret, i, node, mapped_ports = 0;
 
 	buf = numa_alloc_onnode(sizeof(struct ixmap_buf),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!buf)
 		goto err_alloc_buf;
 
 	buf->addr_dma = numa_alloc_onnode(sizeof(unsigned long) * ih_num,
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!buf->addr_dma)
 		goto err_alloc_buf_addr_dma;
 
@@ -337,7 +338,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	}
 
 	slots = numa_alloc_onnode(sizeof(int32_t) * (count * ih_num),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!slots)
 		goto err_alloc_slots;
 
@@ -564,7 +565,7 @@ struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
 	}
 
 	irqh = numa_alloc_onnode(sizeof(struct ixmap_irqdev_handle),
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!irqh)
 		goto err_alloc_handle;
 

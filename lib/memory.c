@@ -22,7 +22,8 @@ static struct ixmap_mnode *ixmap_mnode_alloc(struct ixmap_mnode *parent,
 {
 	struct ixmap_mnode *node;
 
-	node = numa_alloc_onnode(sizeof(struct ixmap_mnode), core_id);
+	node = numa_alloc_onnode(sizeof(struct ixmap_mnode),
+		numa_node_of_cpu(core_id));
 	if(!node)
 		goto err_alloc_node;
 

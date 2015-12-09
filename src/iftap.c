@@ -233,12 +233,13 @@ struct tun_plane *tun_plane_alloc(struct ixmapfwd *ixmapfwd,
 
 	tunh_array = ixmapfwd->tunh_array;
 
-	plane = numa_alloc_onnode(sizeof(struct tun_plane), core_id);
+	plane = numa_alloc_onnode(sizeof(struct tun_plane),
+		numa_node_of_cpu(core_id));
 	if(!plane)
 		goto err_alloc_plane;
 
 	plane->ports = numa_alloc_onnode(sizeof(struct tun_port) * ixmapfwd->num_ports,
-		core_id);
+		numa_node_of_cpu(core_id));
 	if(!plane->ports)
 		goto err_alloc_ports;
 

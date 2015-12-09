@@ -95,7 +95,8 @@ err_neigh_inet_alloc:
 	}
 
 	/* Prepare read buffer */
-	read_buf = numa_alloc_onnode(read_size, thread->index);
+	read_buf = numa_alloc_onnode(read_size,
+		numa_node_of_cpu(thread->index));
 	if(!read_buf)
 		goto err_alloc_read_buf;
 
