@@ -147,7 +147,7 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 	struct ixmap_desc *desc;
 	unsigned long size, size_tx_desc, size_rx_desc, size_mem;
 	void *addr_virt, *addr_mem;
-	int i, ret, node;
+	int i, ret;
 	int desc_assigned = 0;
 
 	desc = numa_alloc_onnode(sizeof(struct ixmap_desc),
@@ -167,8 +167,8 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 		goto err_mmap;
 	}
 
-	node = numa_node_of_cpu(core_id);
-	numa_tonode_memory(addr_virt, size, node);
+	numa_tonode_memory(addr_virt, size,
+		numa_node_of_cpu(core_id));
 
 	desc->addr_virt = addr_virt;
 
@@ -299,7 +299,7 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	void	*addr_virt;
 	unsigned long addr_dma, size;
 	int *slots;
-	int ret, i, node, mapped_ports = 0;
+	int ret, i, mapped_ports = 0;
 
 	buf = numa_alloc_onnode(sizeof(struct ixmap_buf),
 		numa_node_of_cpu(core_id));
@@ -326,8 +326,8 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	if(addr_virt == MAP_FAILED)
 		goto err_mmap;
 
-	node = numa_node_of_cpu(core_id);
-	numa_tonode_memory(addr_virt, size, node);
+	numa_tonode_memory(addr_virt, size,
+		numa_node_of_cpu(core_id));
 
 	for(i = 0; i < ih_num; i++, mapped_ports++){
 		ret = ixmap_dma_map(ih_list[i], addr_virt, &addr_dma, size);
