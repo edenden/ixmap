@@ -12,6 +12,7 @@
 #include <net/ethernet.h>
 #include <signal.h>
 #include <pthread.h>
+#include <numa.h>
 
 #include "ixmap.h"
 #include "memory.h"
@@ -142,26 +143,31 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 	int queue_index)
 {
 	struct ixmap_desc *desc;
-	unsigned long size_tx_desc, size_rx_desc, size_mem;
+	unsigned long size, size_tx_desc, size_rx_desc, size_mem;
 	void *addr_virt, *addr_mem;
-	int i, ret;
+	int i, ret, node;
 	int desc_assigned = 0;
 
 	desc = malloc(sizeof(struct ixmap_desc));
 	if(!desc)
 		goto err_alloc_desc;
 
+	size = SIZE_1GB;
+
 	/*
 	 * XXX: We don't support NUMA-aware memory allocation in userspace.
 	 * To support, mbind() or set_mempolicy() will be useful.
 	 */
-	desc->addr_virt = mmap(NULL, SIZE_1GB, PROT_READ | PROT_WRITE,
+	addr_virt = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
-	if(desc->addr_virt == MAP_FAILED){
+	if(addr_virt == MAP_FAILED){
 		goto err_mmap;
 	}
 
-	addr_virt = desc->addr_virt;
+	node = numa_node_of_cpu(queue_index);
+	numa_tonode_memory(addr_virt, size, node);
+
+	desc->addr_virt = addr_virt;
 
 	for(i = 0; i < ih_num; i++, desc_assigned++){
 		int *slot_index;
@@ -228,7 +234,7 @@ err_rx_dma_map:
 	}
 
 	addr_mem = (void *)ALIGN((unsigned long)addr_virt, L1_CACHE_BYTES);
-	size_mem = SIZE_1GB - (addr_mem - desc->addr_virt);
+	size_mem = size - (addr_mem - desc->addr_virt);
 	desc->node = ixmap_mem_init(addr_mem, size_mem);
 	if(!desc->node)
 		goto err_mem_init;
@@ -246,7 +252,7 @@ err_desc_assign:
 		free(ih->rx_ring[queue_index].slot_index);
 		ixmap_dma_unmap(ih, ih->rx_ring[queue_index].addr_dma);
 	}
-	munmap(desc->addr_virt, SIZE_1GB);
+	munmap(desc->addr_virt, size);
 err_mmap:
 	free(desc);
 err_alloc_desc:
@@ -276,13 +282,13 @@ void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
 }
 
 struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
-	int ih_num, uint32_t count, uint32_t buf_size)
+	int ih_num, uint32_t count, uint32_t buf_size, int core_id)
 {
 	struct ixmap_buf *buf;
 	void	*addr_virt;
 	unsigned long addr_dma, size;
 	int *slots;
-	int ret, i, mapped_ports = 0;
+	int ret, i, node, mapped_ports = 0;
 
 	buf = malloc(sizeof(struct ixmap_buf));
 	if(!buf)
@@ -306,6 +312,9 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 	if(addr_virt == MAP_FAILED)
 		goto err_mmap;
+
+	node = numa_node_of_cpu(core_id);
+	numa_tonode_memory(addr_virt, size, node);
 
 	for(i = 0; i < ih_num; i++, mapped_ports++){
 		ret = ixmap_dma_map(ih_list[i], addr_virt, &addr_dma, size);
@@ -358,7 +367,7 @@ void ixmap_buf_release(struct ixmap_buf *buf,
 			perror("failed to unmap buf");
 	}
 
-	size = buf->buf_size * buf->count;
+	size = buf->buf_size * (ih_num * buf->count);
 	munmap(buf->addr_virt, size);
 	free(buf->addr_dma);
 	free(buf);

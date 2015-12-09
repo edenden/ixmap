@@ -52,7 +52,7 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 void ixmap_desc_release(struct ixmap_handle **ih_list, int ih_num,
         int queue_index, struct ixmap_desc *desc);
 struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
-	int ih_num, uint32_t count, uint32_t buf_size);
+	int ih_num, uint32_t count, uint32_t buf_size, int core_id);
 void ixmap_buf_release(struct ixmap_buf *buf,
 	struct ixmap_handle **ih_list, int ih_num);
 struct ixmap_handle *ixmap_open(unsigned int port_index,

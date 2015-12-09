@@ -181,7 +181,7 @@ int main(int argc, char **argv)
 
 	for(i = 0; i < ixmapfwd.num_cores; i++, cores_assigned++){
 		threads[i].buf = ixmap_buf_alloc(ixmapfwd.ih_array,
-			ixmapfwd.num_ports, ixmapfwd.buf_count, ixmapfwd.buf_size);
+			ixmapfwd.num_ports, ixmapfwd.buf_count, ixmapfwd.buf_size, i);
 		if(!threads[i].buf){
 			ixmapfwd_log(LOG_ERR, "failed to ixmap_alloc_buf, idx = %d", i);
 			ixmapfwd_log(LOG_ERR, "please decrease buffer or enable iommu");
