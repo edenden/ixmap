@@ -157,17 +157,14 @@ struct ixmap_desc *ixmap_desc_alloc(struct ixmap_handle **ih_list, int ih_num,
 
 	size = SIZE_1GB;
 
-	/*
-	 * XXX: We don't support NUMA-aware memory allocation in userspace.
-	 * To support, mbind() or set_mempolicy() will be useful.
-	 */
 	addr_virt = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 	if(addr_virt == MAP_FAILED){
 		goto err_mmap;
 	}
 
-	numa_tonode_memory(addr_virt, size,
+	/* size of numa_tonode_memory must be actual page size */
+	numa_tonode_memory(addr_virt, SIZE_1GB,
 		numa_node_of_cpu(core_id));
 
 	desc->addr_virt = addr_virt;
@@ -317,16 +314,13 @@ struct ixmap_buf *ixmap_buf_alloc(struct ixmap_handle **ih_list,
 	 */
 	size = buf_size * (ih_num * count);
 
-	/*
-	 * XXX: We don't support NUMA-aware memory allocation in userspace.
-	 * To support, mbind() or set_mempolicy() will be useful.
-	 */
 	addr_virt = mmap(NULL, size, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
 	if(addr_virt == MAP_FAILED)
 		goto err_mmap;
 
-	numa_tonode_memory(addr_virt, size,
+	/* size of numa_tonode_memory must be actual page size */
+	numa_tonode_memory(addr_virt, SIZE_1GB,
 		numa_node_of_cpu(core_id));
 
 	for(i = 0; i < ih_num; i++, mapped_ports++){
