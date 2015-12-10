@@ -37,7 +37,6 @@ static void thread_print_result(struct ixmapfwd_thread *thread);
 void *thread_process_interrupt(void *data)
 {
 	struct ixmapfwd_thread	*thread = data;
-	struct ixmap_marea	*area;
 	struct list_head	ep_desc_head;
 	uint8_t			*read_buf;
 	int			read_size, fd_ep, i, ret;
@@ -57,21 +56,15 @@ void *thread_process_interrupt(void *data)
 		goto err_fib_inet6_alloc;
 
 	/* Prepare Neighbor table */
-	area = ixmap_mem_alloc(thread->desc,
+	thread->neigh_inet = ixmap_mem_alloc(thread->desc,
 		sizeof(struct neigh *) * thread->num_ports);
-	if(!area)
+	if(!thread->neigh_inet)
 		goto err_neigh_table_inet;
 	
-	thread->neigh_inet = area->ptr;
-	thread->neigh_inet_area = area;
-
-	area = ixmap_mem_alloc(thread->desc,
+	thread->neigh_inet6 = ixmap_mem_alloc(thread->desc,
 		sizeof(struct neigh *) * thread->num_ports);
-	if(!area)
+	if(!thread->neigh_inet6)
 		goto err_neigh_table_inet6;
-
-	thread->neigh_inet6 = area->ptr;
-	thread->neigh_inet6_area = area;
 
 	for(i = 0; i < thread->num_ports; i++, ports_assigned++){
 		thread->neigh_inet[i] = neigh_alloc(thread->desc, AF_INET);
@@ -126,9 +119,9 @@ err_assign_ports:
 		neigh_release(thread->neigh_inet6[i]);
 		neigh_release(thread->neigh_inet[i]);
 	}
-	ixmap_mem_free(thread->neigh_inet6_area);
+	ixmap_mem_free(thread->neigh_inet6);
 err_neigh_table_inet6:
-	ixmap_mem_free(thread->neigh_inet_area);
+	ixmap_mem_free(thread->neigh_inet);
 err_neigh_table_inet:
 	fib_release(thread->fib_inet6);
 err_fib_inet6_alloc:

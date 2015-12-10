@@ -110,14 +110,10 @@ static void fib_delete_print(int family, void *prefix,
 struct fib *fib_alloc(struct ixmap_desc *desc)
 {
         struct fib *fib;
-	struct ixmap_marea *area;
 
-	area = ixmap_mem_alloc(desc, sizeof(struct fib));
-	if(!area)
+	fib = ixmap_mem_alloc(desc, sizeof(struct fib));
+	if(!fib)
 		goto err_fib_alloc;
-
-	fib = area->ptr;
-	fib->area = area;
 
 	lpm_init(&fib->table);
 
@@ -135,7 +131,7 @@ err_fib_alloc:
 void fib_release(struct fib *fib)
 {
 	lpm_delete_all(&fib->table);
-	ixmap_mem_free(fib->area);
+	ixmap_mem_free(fib);
 	return;
 }
 
@@ -144,15 +140,11 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 	int port_index, int id, struct ixmap_desc *desc)
 {
 	struct fib_entry *entry;
-	struct ixmap_marea *area;
 	int ret;
 
-	area = ixmap_mem_alloc(desc, sizeof(struct fib_entry));
-	if(!area)
+	entry = ixmap_mem_alloc(desc, sizeof(struct fib_entry));
+	if(!entry)
 		goto err_alloc_entry;
-
-	entry = area->ptr;
-	entry->area = area;
 
 	switch(family){
 	case AF_INET:
@@ -188,7 +180,7 @@ int fib_route_update(struct fib *fib, int family, enum fib_type type,
 
 err_lpm_add:
 err_invalid_family:
-	ixmap_mem_free(entry->area);
+	ixmap_mem_free(entry);
 err_alloc_entry:
 	return -1;
 }
@@ -270,6 +262,6 @@ static void fib_entry_put(void *ptr)
 	entry->refcount--;
 
 	if(!entry->refcount){
-		ixmap_mem_free(entry->area);
+		ixmap_mem_free(entry);
 	}
 }

@@ -10,14 +10,12 @@
 
 struct neigh_table {
 	struct hash_table	table;
-	struct ixmap_marea	*area;
 };
 
 struct neigh_entry {
 	struct hash_entry	hash;
 	uint8_t			dst_mac[ETH_ALEN];
 	uint32_t		dst_addr[4];
-	struct ixmap_marea	*area;
 };
 
 struct neigh_table *neigh_alloc(struct ixmap_desc *desc, int family);

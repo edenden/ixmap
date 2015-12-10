@@ -13,7 +13,7 @@ static struct ixmap_mnode *ixmap_mnode_alloc(struct ixmap_mnode *parent,
 	void *ptr, unsigned int size, unsigned int index, int core_id);
 static void ixmap_mnode_release(struct ixmap_mnode *node);
 static void _ixmap_mem_destroy(struct ixmap_mnode *node);
-static struct ixmap_marea *_ixmap_mem_alloc(struct ixmap_mnode *node,
+static void *_ixmap_mem_alloc(struct ixmap_mnode *node,
 	unsigned int size, int core_id);
 static void _ixmap_mem_free(struct ixmap_mnode *node);
 
@@ -33,7 +33,7 @@ static struct ixmap_mnode *ixmap_mnode_alloc(struct ixmap_mnode *parent,
 	node->allocated	= 0;
 	node->index	= index;
 	node->size	= size;
-	node->area.ptr	= ptr;
+	node->ptr	= ptr;
 
 	return node;
 
@@ -87,20 +87,33 @@ static void _ixmap_mem_destroy(struct ixmap_mnode *node)
 	return;
 }
 
-struct ixmap_marea *ixmap_mem_alloc(struct ixmap_desc *desc,
+void *ixmap_mem_alloc(struct ixmap_desc *desc,
 	unsigned int size)
 {
-	return _ixmap_mem_alloc(desc->node, ALIGN(size, L1_CACHE_BYTES),
+	struct ixmap_mnode *node;
+	unsigned long *header;
+
+	node = _ixmap_mem_alloc(desc->node,
+		ALIGN(size + sizeof(unsigned long), L1_CACHE_BYTES),
 		desc->core_id);
+
+	if(!node)
+		goto err_alloc;
+
+	header = node->ptr;
+	*header = (unsigned long)node;
+	return node->ptr + sizeof(unsigned long);
+
+err_alloc:
+	return NULL;
 }
 
-static struct ixmap_marea *_ixmap_mem_alloc(struct ixmap_mnode *node,
+static void *_ixmap_mem_alloc(struct ixmap_mnode *node,
 	unsigned int size, int core_id)
 {
-	void *ptr_new;
+	void *ptr_new, *ret;
 	unsigned int size_new;
 	int i, buddy_allocated;
-	struct ixmap_marea *ret;
 
 	ret = NULL;
 
@@ -110,17 +123,16 @@ static struct ixmap_marea *_ixmap_mem_alloc(struct ixmap_mnode *node,
 	if((node->size >> 1) < size){
 		if(!node->allocated
 		&& node->size >= size){
-			ret = &node->area;
+			ret = node->ptr;
 		}
 	}else{
 		if(!node->allocated){
 			size_new = node->size >> 1;
 			for(i = 0, buddy_allocated = 0; i < 2; i++, buddy_allocated++){
-				ptr_new = node->area.ptr + (size_new * i);
+				ptr_new = node->ptr + (size_new * i);
 
-				node->child[i] =
-					ixmap_mnode_alloc(node, ptr_new, size_new, i,
-						core_id);
+				node->child[i] = ixmap_mnode_alloc(node, ptr_new, size_new,
+					i, core_id);
 				if(!node->child[i])
 					goto err_alloc_child;
 			}
@@ -145,11 +157,13 @@ err_alloc_child:
 	return NULL;
 }
 
-void ixmap_mem_free(struct ixmap_marea *area)
+void ixmap_mem_free(void *addr_free)
 {
 	struct ixmap_mnode *node;
+	unsigned long *header;
 
-	node = container_of(area, struct ixmap_mnode, area);
+	header = addr_free - sizeof(unsigned long);
+	node = (struct ixmap_mnode *)*header;
 	_ixmap_mem_free(node);
 }
 

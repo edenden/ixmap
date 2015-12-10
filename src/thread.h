@@ -21,8 +21,6 @@ struct ixmapfwd_thread {
 	pthread_t		tid;
 	pthread_t		ptid;
 	unsigned int		num_ports;
-	struct ixmap_marea	*neigh_inet_area;
-	struct ixmap_marea	*neigh_inet6_area;
 };
 
 void *thread_process_interrupt(void *data);

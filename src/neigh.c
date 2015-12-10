@@ -89,14 +89,10 @@ static void neigh_delete_print(int family,
 struct neigh_table *neigh_alloc(struct ixmap_desc *desc, int family)
 {
 	struct neigh_table *neigh;
-	struct ixmap_marea *area;
 
-	area = ixmap_mem_alloc(desc, sizeof(struct neigh_table));
-	if(!area)
+	neigh = ixmap_mem_alloc(desc, sizeof(struct neigh_table));
+	if(!neigh)
 		goto err_neigh_alloc;
-
-	neigh = area->ptr;
-	neigh->area = area;
 
 	hash_init(&neigh->table);
 	neigh->table.hash_entry_delete = neigh_entry_delete;
@@ -122,7 +118,7 @@ struct neigh_table *neigh_alloc(struct ixmap_desc *desc, int family)
 	return neigh;
 
 err_invalid_family:
-	ixmap_mem_free(neigh->area);
+	ixmap_mem_free(neigh);
 err_neigh_alloc:
 	return NULL;
 }
@@ -130,7 +126,7 @@ err_neigh_alloc:
 void neigh_release(struct neigh_table *neigh)
 {
 	hash_delete_all(&neigh->table);
-	ixmap_mem_free(neigh->area);
+	ixmap_mem_free(neigh);
 	return;
 }
 
@@ -139,7 +135,7 @@ static void neigh_entry_delete(struct hash_entry *entry)
 	struct neigh_entry *neigh_entry;
 
 	neigh_entry = hash_entry(entry, struct neigh_entry, hash);
-	ixmap_mem_free(neigh_entry->area);
+	ixmap_mem_free(neigh_entry);
 	return;
 }
 
@@ -177,15 +173,11 @@ int neigh_add(struct neigh_table *neigh, int family,
 	void *dst_addr, void *mac_addr, struct ixmap_desc *desc) 
 {
 	struct neigh_entry *neigh_entry;
-	struct ixmap_marea *area;
 	int ret;
 
-	area = ixmap_mem_alloc(desc, sizeof(struct neigh_entry));
-	if(!area)
+	neigh_entry = ixmap_mem_alloc(desc, sizeof(struct neigh_entry));
+	if(!neigh_entry)
 		goto err_alloc_entry;
-
-	neigh_entry = area->ptr;
-	neigh_entry->area = area;
 
 	memcpy(neigh_entry->dst_mac, mac_addr, ETH_ALEN);
 	switch(family){
@@ -212,7 +204,7 @@ int neigh_add(struct neigh_table *neigh, int family,
 
 err_hash_add:
 err_invalid_family:
-	ixmap_mem_free(neigh_entry->area);
+	ixmap_mem_free(neigh_entry);
 err_alloc_entry:
 	return -1;
 }

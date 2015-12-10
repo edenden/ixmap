@@ -18,13 +18,11 @@ struct fib_entry {
 	int			port_index; /* -1 means not ixmap interface */
 	enum fib_type		type;
 	int			id;
-	struct ixmap_marea	*area;
 	unsigned int		refcount;
 };
 
 struct fib {
 	struct lpm_table	table;
-	struct ixmap_marea	*area;
 };
 
 struct fib *fib_alloc(struct ixmap_desc *desc);

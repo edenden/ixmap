@@ -28,10 +28,6 @@ struct ixmap_desc;
 struct ixmap_buf;
 struct ixmap_plane;
 
-struct ixmap_marea {
-	void			*ptr;
-};
-
 struct ixmap_packet {
 	void			*slot_buf;
 	unsigned int		slot_size;
@@ -106,9 +102,9 @@ inline unsigned long ixmap_count_tx_xmit_failed(struct ixmap_plane *plane,
 inline unsigned long ixmap_count_tx_clean_total(struct ixmap_plane *plane,
 	unsigned int port_index);
 
-struct ixmap_marea *ixmap_mem_alloc(struct ixmap_desc *desc,
+void *ixmap_mem_alloc(struct ixmap_desc *desc,
 	unsigned int size);
-void ixmap_mem_free(struct ixmap_marea *area);
+void ixmap_mem_free(void *addr_free);
 
 void ixmap_configure_rx(struct ixmap_handle *ih);
 void ixmap_configure_tx(struct ixmap_handle *ih);

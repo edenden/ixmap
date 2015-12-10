@@ -9,13 +9,11 @@
 struct lpm_entry {
 	struct list_head	list;
 	void			*ptr;
-	struct ixmap_marea	*area;
 };
 
 struct lpm_node {
 	struct list_head	head;
 	struct lpm_node		*next_table;
-	struct ixmap_marea	*area;
 };
 
 struct lpm_table {
