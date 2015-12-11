@@ -7,19 +7,19 @@
 #define TABLE_SIZE_8 (1 << 8)
 
 struct lpm_entry {
-	struct list_head	list;
+	struct list_node	list;
 	void			*ptr;
 };
 
 struct lpm_node {
-	struct list_head	head;
+	struct hlist_head	head;
 	struct lpm_node		*next_table;
 };
 
 struct lpm_table {
 	struct lpm_node		node[TABLE_SIZE_16];
 	void			(*entry_dump)(
-				struct list_head *
+				struct hlist_head *
 				);
 	int			(*entry_identify)(
 				void *,
