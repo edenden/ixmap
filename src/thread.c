@@ -160,13 +160,7 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				ret = ixmap_rx_clean(thread->plane, port_index,
 					thread->buf, packet);
 
-				for(i = 0; i < ret; i++){
-					prefetchw(packet[i].slot_buf);
-				}
-
-				for(i = 0; i < ret; i++){
-					forward_process(thread, port_index, &packet[i]);
-				}
+				forward_process(thread, port_index, packet, ret);
 
 				for(i = 0; i < thread->num_ports; i++){
 					ixmap_tx_xmit(thread->plane, i);

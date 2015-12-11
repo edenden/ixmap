@@ -30,6 +30,7 @@
 #define SYSLOG_FACILITY LOG_DAEMON
 #define IXMAP_RX_BUDGET 1024
 #define IXMAP_TX_BUDGET 4096
+#define IXMAP_RX_PFETCH 128
 
 struct ixmapfwd {
 	struct ixmap_handle	**ih_array;
