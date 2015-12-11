@@ -43,46 +43,44 @@ void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
 	struct ixmap_packet *packet, int num_packet)
 {
 	struct ethhdr *eth;
-	int i, ret, offset;
+	int i, ret;
 
-	for(offset = 0; offset < num_packet; offset += IXMAP_RX_PFETCH){
-		for(i = 0; (i < IXMAP_RX_PFETCH) && (offset + i < num_packet); i++){
-			prefetchw(packet[i].slot_buf);
-		}
+	for(i = 0; i < num_packet; i++){
+		prefetchw(packet[i].slot_buf);
+	}
 
-		for(i = 0; (i < IXMAP_RX_PFETCH) && (offset + i < num_packet); i++){
+	for(i = 0; i < num_packet; i++){
 #ifdef DEBUG
-			forward_dump(&packet[i]);
+		forward_dump(&packet[i]);
 #endif
 
-			eth = (struct ethhdr *)packet[i].slot_buf;
-			switch(ntohs(eth->h_proto)){
-			case ETH_P_ARP:
-				ret = forward_arp_process(thread,
-					port_index, &packet[i]);
-				break;
-			case ETH_P_IP:
-				ret = forward_ip_process(thread,
-					port_index, &packet[i]);
-				break;
-			case ETH_P_IPV6:
-				ret = forward_ip6_process(thread,
-					port_index, &packet[i]);
-				break;
-			default:
-				ret = -1;
-				break;
-			}
+		eth = (struct ethhdr *)packet[i].slot_buf;
+		switch(ntohs(eth->h_proto)){
+		case ETH_P_ARP:
+			ret = forward_arp_process(thread,
+				port_index, &packet[i]);
+			break;
+		case ETH_P_IP:
+			ret = forward_ip_process(thread,
+				port_index, &packet[i]);
+			break;
+		case ETH_P_IPV6:
+			ret = forward_ip6_process(thread,
+				port_index, &packet[i]);
+			break;
+		default:
+			ret = -1;
+			break;
+		}
 
-			if(ret < 0)
-				goto packet_drop;
+		if(ret < 0)
+			goto packet_drop;
 
-			ixmap_tx_assign(thread->plane, ret, thread->buf,
-				&packet[i]);
+		ixmap_tx_assign(thread->plane, ret, thread->buf,
+			&packet[i]);
 
 packet_drop:
-			ixmap_slot_release(thread->buf, packet[i].slot_index);
-		}
+		ixmap_slot_release(thread->buf, packet[i].slot_index);
 	}
 
 	return;
