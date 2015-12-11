@@ -385,6 +385,12 @@ static inline void hlist_move_list(struct hlist_head *old,
 
 #define hlist_entry(ptr, type, member) container_of(ptr,type,member)
 
+#define hlist_first_entry(head, type, member) \
+	hlist_entry((head)->first, type, member)
+
+#define hlist_first_entry_or_null(head, type, member) \
+	(!hlist_empty(head) ? hlist_first_entry(head, type, member) : NULL)
+
 #define hlist_for_each(pos, head) \
 	for (pos = (head)->first; pos ; pos = pos->next)
 

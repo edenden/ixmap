@@ -26,7 +26,7 @@ static int _lpm_traverse(struct lpm_table *table, void *prefix,
 	unsigned int prefix_len, struct lpm_node *parent,
 	unsigned int offset);
 static int lpm_entry_insert(struct lpm_table *table, struct hlist_head *head,
-	unsigned int id, unsigned int prefix_len, struct hlist_head *list);
+	unsigned int id, unsigned int prefix_len, struct hlist_node *list);
 static int lpm_entry_delete(struct lpm_table *table, struct hlist_head *head,
 	unsigned int id, unsigned int prefix_len);
 static void lpm_entry_delete_all(struct lpm_table *table, struct hlist_head *head);
@@ -464,9 +464,10 @@ err_entry_exist:
 static int lpm_entry_delete(struct lpm_table *table, struct hlist_head *head,
 	unsigned int id, unsigned int prefix_len)
 {
-	struct lpm_entry *entry_lpm, *entry_n;
+	struct lpm_entry *entry_lpm;
+	struct hlist_node *list_n;
 
-	hlist_for_each_entry_safe(entry_lpm, entry_n, head, list){
+	hlist_for_each_entry_safe(entry_lpm, list_n, head, list){
 		if(!table->entry_identify(entry_lpm->ptr, id, prefix_len)){
 			hlist_del(&entry_lpm->list);
 			table->entry_put(entry_lpm->ptr);
@@ -481,9 +482,10 @@ static int lpm_entry_delete(struct lpm_table *table, struct hlist_head *head,
 
 static void lpm_entry_delete_all(struct lpm_table *table, struct hlist_head *head)
 {
-	struct lpm_entry *entry_lpm, *entry_n;
+	struct lpm_entry *entry_lpm;
+	struct hlist_node *list_n;
 
-	hlist_for_each_entry_safe(entry_lpm, entry_n, head, list){
+	hlist_for_each_entry_safe(entry_lpm, list_n, head, list){
 		hlist_del(&entry_lpm->list);
 		table->entry_put(entry_lpm->ptr);
 		ixmap_mem_free(entry_lpm);
