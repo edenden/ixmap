@@ -7,7 +7,7 @@
 #define TABLE_SIZE_8 (1 << 8)
 
 struct lpm_entry {
-	struct list_node	list;
+	struct hlist_node	list;
 	void			*ptr;
 };
 
