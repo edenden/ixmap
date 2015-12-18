@@ -64,6 +64,7 @@ struct epoll_desc *epoll_desc_alloc_irq(struct ixmap_plane *plane,
 	ep_desc->fd		= ixmap_irq_fd(plane, port_index, type);
 	ep_desc->type		= ep_type;
 	ep_desc->port_index	= port_index;
+	ep_desc->data		= ixmap_irq_handle(plane, port_index, type);
 
 	return ep_desc;
 

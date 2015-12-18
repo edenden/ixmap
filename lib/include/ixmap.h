@@ -62,9 +62,11 @@ uint8_t *ixmap_macaddr_default(struct ixmap_handle *ih);
 unsigned int ixmap_mtu_get(struct ixmap_handle *ih);
 
 inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
-	unsigned int port_idnex, enum ixmap_irq_type type);
+	unsigned int port_index, struct ixmap_irq_handle *irqh);
 int ixmap_irq_fd(struct ixmap_plane *plane, unsigned int port_index,
 	enum ixmap_irq_type type);
+struct ixmap_irq_handle *ixmap_irq_handle(struct ixmap_plane *plane,
+	unsigned int port_index, enum ixmap_irq_type type);
 
 void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);

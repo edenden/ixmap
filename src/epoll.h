@@ -21,6 +21,7 @@ struct epoll_desc {
 	int			fd;
 	int			type;
 	unsigned int		port_index;
+	void			*data;
 	struct list_head	list;
 };
 

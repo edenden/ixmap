@@ -168,8 +168,8 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				if(ret < 0)
 					goto err_read;
 
-				ixmap_irq_unmask_queues(thread->plane,
-					port_index, IXMAP_IRQ_RX);
+				ixmap_irq_unmask_queues(thread->plane, port_index,
+					(struct ixmap_irq_handle *)ep_desc->data);
 				break;
 			case EPOLL_IRQ_TX:
 				port_index = ep_desc->port_index;
@@ -181,8 +181,8 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				if(ret < 0)
 					goto err_read;
 
-				ixmap_irq_unmask_queues(thread->plane,
-					port_index, IXMAP_IRQ_TX);
+				ixmap_irq_unmask_queues(thread->plane, port_index,
+					(struct ixmap_irq_handle *)ep_desc->data);
 				break;
 			case EPOLL_TUN:
 				port_index = ep_desc->port_index;

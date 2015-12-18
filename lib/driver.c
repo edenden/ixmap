@@ -57,23 +57,12 @@ static inline void ixmap_write_tail(struct ixmap_ring *ring, uint32_t value)
 }
 
 inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
-	unsigned int port_index, enum ixmap_irq_type type)
+	unsigned int port_index, struct ixmap_irq_handle *irqh)
 {
 	struct ixmap_port *port;
-	struct ixmap_irq_handle *irqh;
 	uint32_t mask;
 
 	port = &plane->ports[port_index];
-	switch(type){
-	case IXMAP_IRQ_RX:
-		irqh = port->rx_irq;
-		break;
-	case IXMAP_IRQ_TX:
-		irqh = port->tx_irq;
-		break;
-	default:
-		goto err_undefined_type;
-	}
 
 	mask = (irqh->qmask & 0xFFFFFFFF);
 	if (mask)
@@ -82,7 +71,6 @@ inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
 	if (mask)
 		ixmap_writel(mask, port->irqreg[1]);
 
-err_undefined_type:
 	return;
 }
 

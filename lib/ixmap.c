@@ -565,7 +565,6 @@ static struct ixmap_irq_handle *ixmap_irq_open(struct ixmap_handle *ih,
 	unsigned int core_id, enum ixmap_irq_type type)
 {
 	struct ixmap_irq_handle *irqh;
-	char filename[FILENAME_SIZE];
 	uint64_t qmask;
 	int efd, ret;
 	struct ixmap_irq_req req;
@@ -690,4 +689,29 @@ int ixmap_irq_fd(struct ixmap_plane *plane, unsigned int port_index,
 
 err_undefined_type:
 	return -1;
+}
+
+struct ixmap_irq_handle *ixmap_irq_handle(struct ixmap_plane *plane,
+	unsigned int port_index, enum ixmap_irq_type type)
+{
+	struct ixmap_port *port;
+	struct ixmap_irq_handle *irqh;
+
+	port = &plane->ports[port_index];
+
+	switch(type){
+	case IXMAP_IRQ_RX:
+		irqh = port->rx_irq;
+		break;
+	case IXMAP_IRQ_TX:
+		irqh = port->tx_irq;
+		break;
+	default:
+		goto err_undefined_type;
+	}
+
+	return irqh;
+
+err_undefined_type:
+	return NULL;
 }
