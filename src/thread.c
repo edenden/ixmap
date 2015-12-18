@@ -31,7 +31,6 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 	struct ixmapfwd_thread *thread);
 static void thread_fd_destroy(struct list_head *ep_desc_head,
 	int fd_ep);
-static int thread_irq_setmask(struct ixmap_irqdev_handle *irqh, int core_id);
 static void thread_print_result(struct ixmapfwd_thread *thread);
 
 void *thread_process_interrupt(void *data)
@@ -136,7 +135,6 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 	int fd_ep, uint8_t *read_buf, int read_size)
 {
         struct epoll_desc *ep_desc;
-        struct ixmap_irqdev_handle *irqh;
         struct epoll_event events[EPOLL_MAXEVENTS];
 	struct ixmap_packet packet[IXMAP_RX_BUDGET];
         int i, ret, num_fd;
@@ -153,8 +151,7 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 			
 			switch(ep_desc->type){
 			case EPOLL_IRQ_RX:
-				irqh = (struct ixmap_irqdev_handle *)ep_desc->data;
-				port_index = ixmap_port_index(irqh);
+				port_index = ep_desc->port_index;
 
 				/* Rx descripter cleaning */
 				ret = ixmap_rx_clean(thread->plane, port_index,
@@ -171,11 +168,11 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				if(ret < 0)
 					goto err_read;
 
-				ixmap_irq_unmask_queues(thread->plane, irqh);
+				ixmap_irq_unmask_queues(thread->plane,
+					port_index, IXMAP_IRQ_RX);
 				break;
 			case EPOLL_IRQ_TX:
-				irqh = (struct ixmap_irqdev_handle *)ep_desc->data;
-				port_index = ixmap_port_index(irqh);
+				port_index = ep_desc->port_index;
 
 				/* Tx descripter cleaning */
 				ixmap_tx_clean(thread->plane, port_index, thread->buf);
@@ -184,10 +181,11 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				if(ret < 0)
 					goto err_read;
 
-				ixmap_irq_unmask_queues(thread->plane, irqh);
+				ixmap_irq_unmask_queues(thread->plane,
+					port_index, IXMAP_IRQ_TX);
 				break;
 			case EPOLL_TUN:
-				port_index = *(unsigned int *)ep_desc->data;
+				port_index = ep_desc->port_index;
 
 				ret = read(ep_desc->fd, read_buf, read_size);
 				if(ret < 0)
@@ -242,17 +240,12 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 
 	for(i = 0; i < thread->num_ports; i++){
 		/* Register RX interrupt fd */
-		ep_desc = epoll_desc_alloc_irqdev(
-			thread->plane, i, thread->index, IXMAP_IRQ_RX);
+		ep_desc = epoll_desc_alloc_irq(thread->plane, i,
+			thread->index, IXMAP_IRQ_RX);
 		if(!ep_desc)
 			goto err_assign_port;
 
 		list_add(&ep_desc->list, ep_desc_head);
-
-		ret = thread_irq_setmask((struct ixmap_irqdev_handle *)
-			ep_desc->data, thread->index);
-		if(ret < 0)
-			goto err_assign_port;
 
 		ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 		if(ret < 0){
@@ -261,17 +254,12 @@ static int thread_fd_prepare(struct list_head *ep_desc_head,
 		}
 
 		/* Register TX interrupt fd */
-		ep_desc = epoll_desc_alloc_irqdev(
-			thread->plane, i, thread->index, IXMAP_IRQ_TX);
+		ep_desc = epoll_desc_alloc_irq(thread->plane, i,
+			thread->index, IXMAP_IRQ_TX);
 		if(!ep_desc)
 			goto err_assign_port;
 
 		list_add(&ep_desc->list, ep_desc_head);
-
-		ret = thread_irq_setmask((struct ixmap_irqdev_handle *)
-			ep_desc->data, thread->index);
-		if(ret < 0)
-			goto err_assign_port;
 
 		ret = epoll_add(fd_ep, ep_desc, ep_desc->fd);
 		if(ret < 0){
@@ -350,7 +338,7 @@ static void thread_fd_destroy(struct list_head *ep_desc_head,
 		switch(ep_desc->type){
 		case EPOLL_IRQ_RX:
 		case EPOLL_IRQ_TX:
-			epoll_desc_release_irqdev(ep_desc);
+			epoll_desc_release_irq(ep_desc);
 			break;
 		case EPOLL_SIGNAL:
 			epoll_desc_release_signalfd(ep_desc);
@@ -365,22 +353,6 @@ static void thread_fd_destroy(struct list_head *ep_desc_head,
 
 	close(fd_ep);
 	return;
-}
-
-static int thread_irq_setmask(struct ixmap_irqdev_handle *irqh, int core_id)
-{
-	int ret;
-
-	ret = ixmap_irqdev_setaffinity(irqh, core_id);
-	if(ret < 0){
-		ixmapfwd_log(LOG_ERR, "failed to set affinity");
-		goto err_set_affinity;
-	}
-
-	return 0;
-
-err_set_affinity:
-	return -1;
 }
 
 static void thread_print_result(struct ixmapfwd_thread *thread)

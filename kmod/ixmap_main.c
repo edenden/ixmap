@@ -9,6 +9,7 @@
 #include <linux/pci.h>
 #include <linux/sched.h>
 #include <linux/semaphore.h>
+#include <linux/eventfd.h>
 #include <asm/io.h>
 
 #include "ixmap_main.h"
@@ -22,9 +23,8 @@
 static int ixmap_alloc_enid(void);
 static struct ixmap_adapter *ixmap_adapter_alloc(void);
 static void ixmap_adapter_free(struct ixmap_adapter *adapter);
-static struct ixmap_irqdev *ixmap_irqdev_alloc(struct ixmap_adapter *adapter,
-	struct msix_entry *entry);
-static void ixmap_irqdev_free(struct ixmap_irqdev *irqdev);
+static struct ixmap_irq *ixmap_irq_alloc(struct msix_entry *entry);
+static void ixmap_irq_free(struct ixmap_irq *irq);
 static void ixmap_release_hw_control(struct ixmap_adapter *adapter);
 static void ixmap_take_hw_control(struct ixmap_adapter *adapter);
 static int ixmap_sw_init(struct ixmap_adapter *adapter);
@@ -34,7 +34,7 @@ static pci_ers_result_t ixmap_io_error_detected(struct pci_dev *pdev,
 	pci_channel_state_t state);
 static pci_ers_result_t ixmap_io_slot_reset(struct pci_dev *pdev);
 static void ixmap_io_resume(struct pci_dev *pdev);
-static irqreturn_t ixmap_interrupt(int irq, void *data);
+static irqreturn_t ixmap_interrupt(int irqnum, void *data);
 static void ixmap_write_eitr(struct ixmap_adapter *adapter, int vector);
 static void ixmap_set_ivar(struct ixmap_adapter *adapter,
 	int8_t direction, uint8_t queue, uint8_t msix_vector);
@@ -110,26 +110,6 @@ void ixmap_adapter_put(struct ixmap_adapter *adapter)
 	return;
 }
 
-int ixmap_irqdev_inuse(struct ixmap_irqdev *irqdev)
-{
-	unsigned ref = atomic_read(&irqdev->refcount);
-	if (ref == 1)
-		return 0;
-	return 1;
-}
-
-void ixmap_irqdev_get(struct ixmap_irqdev *irqdev)
-{
-        atomic_inc(&irqdev->refcount);
-	return;
-}
-
-void ixmap_irqdev_put(struct ixmap_irqdev *irqdev)
-{
-        atomic_dec(&irqdev->refcount);
-	return;
-}
-
 static int ixmap_alloc_enid(void)
 {
 	struct ixmap_adapter *adapter;
@@ -179,33 +159,72 @@ static void ixmap_adapter_free(struct ixmap_adapter *adapter)
 	return;
 }
 
-static struct ixmap_irqdev *ixmap_irqdev_alloc(struct ixmap_adapter *adapter,
-	struct msix_entry *entry)
+static struct ixmap_irq *ixmap_irq_alloc(struct msix_entry *entry)
 {
-	struct ixmap_irqdev *irqdev;
+	struct ixmap_irq *irq;
 
 	/* XXX: To support NUMA-aware allocation, use kzalloc_node() */
-	irqdev = kzalloc(sizeof(struct ixmap_irqdev), GFP_KERNEL);
-	if(!irqdev){
+	irq = kzalloc(sizeof(struct ixmap_irq), GFP_KERNEL);
+	if(!irq){
 		return NULL;
 	}
 
-	irqdev->adapter = adapter;
-	irqdev->msix_entry = entry;
-	atomic_set(&irqdev->refcount, 1);
-	atomic_set(&irqdev->count_interrupt, 0);
-	sema_init(&irqdev->sem, 1);
-	init_waitqueue_head(&irqdev->read_wait);
-	list_add(&irqdev->list, &adapter->irqdev_list);
+	irq->msix_entry = entry;
+	irq->efd_ctx = NULL;
 
-	return irqdev;
+	return irq;
 }
 
-static void ixmap_irqdev_free(struct ixmap_irqdev *irqdev)
+static void ixmap_irq_free(struct ixmap_irq *irq)
 {
-	list_del(&irqdev->list);
-	kfree(irqdev);
+	if(irq->efd_ctx){
+		eventfd_ctx_put(irq->efd_ctx);
+	}
+
+	kfree(irq);
 	return;
+}
+
+int ixmap_irq_assign(struct ixmap_adapter *adapter, enum ixmap_irq_type type,
+	uint32_t queue_idx, int event_fd, uint32_t *vector, uint16_t *entry)
+{
+	struct ixmap_irq *irq;
+	struct eventfd_ctx *efd_ctx;
+
+	switch(type){
+	case IXMAP_IRQ_RX:
+		if(queue_idx > adapter->num_rx_queues)
+			goto err_invalid_arg;
+
+		irq = adapter->rx_irq[queue_idx];
+		break;
+	case IXMAP_IRQ_TX:
+		if(queue_idx > adapter->num_tx_queues)
+			goto err_invalid_arg;
+
+		irq = adapter->tx_irq[queue_idx];
+		break;
+	default:
+		goto err_invalid_arg;
+	}
+
+	efd_ctx = eventfd_ctx_fdget(event_fd);
+	if(IS_ERR(efd_ctx)){
+		goto err_get_ctx;
+	}
+
+	if(irq->efd_ctx)
+		eventfd_ctx_put(irq->efd_ctx);
+
+	irq->efd_ctx = efd_ctx;
+	*vector = irq->msix_entry->vector;
+	*entry = irq->msix_entry->entry;
+
+	return 0;
+
+err_get_ctx:
+err_invalid_arg:
+	return -EINVAL;
 }
 
 static void ixmap_release_hw_control(struct ixmap_adapter *adapter)
@@ -323,9 +342,6 @@ static int ixmap_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		err = -EIO;
 		goto err_ioremap;
 	}
-
-	/* setup for userland interrupt notification */
-	INIT_LIST_HEAD(&adapter->irqdev_list);
 
 	/* SOFTWARE INITIALIZATION */
 	err = ixmap_sw_init(adapter);
@@ -475,17 +491,18 @@ static void ixmap_io_resume(struct pci_dev *pdev)
 	return;
 }
 
-static irqreturn_t ixmap_interrupt(int irq, void *data)
+static irqreturn_t ixmap_interrupt(int irqnum, void *data)
 {
-	struct ixmap_irqdev *irqdev = data;
+	struct ixmap_irq *irq = data;
 
 	/* 
 	 * We setup EIAM such that interrupts are auto-masked (disabled).
 	 * User-space will re-enable them.
 	 */
 
-	atomic_inc(&irqdev->count_interrupt);
-	wake_up_interruptible(&irqdev->read_wait);
+	if(irq->efd_ctx)
+		eventfd_signal(irq->efd_ctx, EVENTFD_INCREMENT);
+
 	return IRQ_HANDLED;
 }
 
@@ -519,15 +536,22 @@ static void ixmap_set_ivar(struct ixmap_adapter *adapter,
 
 static void ixmap_free_msix(struct ixmap_adapter *adapter)
 {
-	struct ixmap_irqdev *irqdev, *next;
+	int i;
 
-	list_for_each_entry_safe(irqdev, next, &adapter->irqdev_list, list) {
-		free_irq(irqdev->msix_entry->vector, irqdev);
-		wake_up_interruptible(&irqdev->read_wait);
-		ixmap_irqdev_misc_deregister(irqdev);
-		ixmap_irqdev_free(irqdev);
+	for(i = 0; i < adapter->num_rx_queues; i++){
+		free_irq(adapter->rx_irq[i]->msix_entry->vector,
+			adapter->rx_irq[i]);
+		ixmap_irq_free(adapter->rx_irq[i]);
 	}
 
+	for(i = 0; i < adapter->num_tx_queues; i++){
+		free_irq(adapter->tx_irq[i]->msix_entry->vector,
+			adapter->tx_irq[i]);
+		ixmap_irq_free(adapter->tx_irq[i]);
+	}
+
+	kfree(adapter->tx_irq);
+	kfree(adapter->rx_irq);
 	pci_disable_msix(adapter->pdev);
 	kfree(adapter->msix_entries);
 	adapter->msix_entries = NULL;
@@ -538,10 +562,10 @@ static void ixmap_free_msix(struct ixmap_adapter *adapter)
 
 static int ixmap_configure_msix(struct ixmap_adapter *adapter)
 {
-	int vector = 0, vector_num, queue_idx, err;
+	int vector = 0, vector_num, queue_idx, err, i;
+	int num_rx_requested = 0, num_tx_requested = 0;
 	struct ixmap_hw *hw = adapter->hw;
 	struct msix_entry *entry;
-	struct ixmap_irqdev *irqdev;
 
 	vector_num = adapter->num_rx_queues + adapter->num_tx_queues;
 	if(vector_num > hw->mac.max_msix_vectors){
@@ -549,7 +573,8 @@ static int ixmap_configure_msix(struct ixmap_adapter *adapter)
 	}
 	pr_info("required vector num = %d\n", vector_num);
 
-	adapter->msix_entries = kcalloc(vector_num, sizeof(struct msix_entry), GFP_KERNEL);
+	adapter->msix_entries = kcalloc(vector_num,
+		sizeof(struct msix_entry), GFP_KERNEL);
 	if (!adapter->msix_entries) {
 		goto err_allocate_msix_entries;
 	}
@@ -569,74 +594,93 @@ static int ixmap_configure_msix(struct ixmap_adapter *adapter)
 	       	}
 	}
 	adapter->num_q_vectors = vector_num;
-	
+
+	adapter->rx_irq = kcalloc(adapter->num_rx_queues,
+		sizeof(struct ixmap_irq *), GFP_KERNEL);
+	if(!adapter->rx_irq)
+		goto err_alloc_irq_array_rx;
+
+	adapter->tx_irq = kcalloc(adapter->num_tx_queues,
+		sizeof(struct ixmap_irq *), GFP_KERNEL);
+	if(!adapter->tx_irq)
+		goto err_alloc_irq_array_tx;
+
 	for(queue_idx = 0, vector = 0; queue_idx < adapter->num_rx_queues;
-	queue_idx++, vector++){
+	queue_idx++, vector++, num_rx_requested++){
 		entry = &adapter->msix_entries[vector];
 
-		irqdev = ixmap_irqdev_alloc(adapter, entry);
-		if(!irqdev){
-			goto err_alloc_irqdev;
+		adapter->rx_irq[queue_idx] = ixmap_irq_alloc(entry);
+		if(!adapter->rx_irq[queue_idx]){
+			goto err_alloc_irq_rx;
 		}
 
-		err = ixmap_irqdev_misc_register(irqdev, adapter->id,
-			IRQDEV_RX, queue_idx);
-		if(err < 0){
-			goto err_misc_register;
-		}
-
-		err = request_irq(entry->vector, &ixmap_interrupt,
-				0, pci_name(adapter->pdev), irqdev);
+		err = request_irq(entry->vector, &ixmap_interrupt, 0,
+				pci_name(adapter->pdev), adapter->rx_irq[queue_idx]);
 		if(err){
-			goto err_request_irq;
+			goto err_request_irq_rx;
 		}
 
 		/* set RX queue interrupt */
 		ixmap_set_ivar(adapter, 0, queue_idx, vector);
 		ixmap_write_eitr(adapter, vector);
 
-		pr_info("irq device registered as %s\n", irqdev->miscdev.name);
+		pr_info("RX irq registered: index = %d, vector = %d\n",
+			queue_idx, entry->vector);
+
+		continue;
+
+err_request_irq_rx:
+		kfree(adapter->rx_irq[queue_idx]);
+		goto err_alloc_irq_rx;
 	}
 
 	for(queue_idx = 0; queue_idx < adapter->num_tx_queues;
-	queue_idx++, vector++){
+	queue_idx++, vector++, num_tx_requested++){
 		entry = &adapter->msix_entries[vector];
 
-		irqdev = ixmap_irqdev_alloc(adapter, entry);
-		if(!irqdev){
-			goto err_alloc_irqdev;
+		adapter->tx_irq[queue_idx] = ixmap_irq_alloc(entry);
+		if(!adapter->tx_irq[queue_idx]){
+			goto err_alloc_irq_tx;
 		}
 
-		err = ixmap_irqdev_misc_register(irqdev, adapter->id,
-			IRQDEV_TX, queue_idx);
-		if(err < 0){
-			goto err_misc_register;
-		}
-
-		err = request_irq(entry->vector, &ixmap_interrupt,
-			0, pci_name(adapter->pdev), irqdev);
+		err = request_irq(entry->vector, &ixmap_interrupt, 0,
+			pci_name(adapter->pdev), adapter->tx_irq[queue_idx]);
 		if(err){
-			goto err_request_irq;
+			goto err_request_irq_tx;
 		}
 
 		/* set TX queue interrupt */
 		ixmap_set_ivar(adapter, 1, queue_idx, vector);
 		ixmap_write_eitr(adapter, vector);
 
-		pr_info("irq device registered as %s\n", irqdev->miscdev.name);
+		pr_info("TX irq registered: index = %d, vector = %d\n",
+			queue_idx, entry->vector);
+
+		continue;
+
+err_request_irq_tx:
+		kfree(adapter->tx_irq[queue_idx]);
+		goto err_alloc_irq_tx;
 	}
 
 	return 0;
 
-err_request_irq:
-	wake_up_interruptible(&irqdev->read_wait);
-	ixmap_irqdev_misc_deregister(irqdev);
-err_misc_register:
-	ixmap_irqdev_free(irqdev);
-err_alloc_irqdev:
-	ixmap_free_msix(adapter);
-	return -1;
-
+err_alloc_irq_tx:
+	for(i = 0; i < num_tx_requested; i++){
+		free_irq(adapter->tx_irq[i]->msix_entry->vector,
+			adapter->tx_irq[i]);
+		kfree(adapter->tx_irq[i]);
+	}
+err_alloc_irq_rx:
+	for(i = 0; i < num_rx_requested; i++){
+		free_irq(adapter->rx_irq[i]->msix_entry->vector,
+			adapter->rx_irq[i]);
+		kfree(adapter->rx_irq[i]);
+	}
+	kfree(adapter->tx_irq);
+err_alloc_irq_array_tx:
+	kfree(adapter->rx_irq);
+err_alloc_irq_array_rx:
 err_pci_enable_msix:
 	pci_disable_msix(adapter->pdev);
 	kfree(adapter->msix_entries);

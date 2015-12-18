@@ -20,16 +20,16 @@ enum {
 struct epoll_desc {
 	int			fd;
 	int			type;
-	void			*data;
+	unsigned int		port_index;
 	struct list_head	list;
 };
 
 int epoll_add(int fd_ep, void *ptr, int fd);
 int epoll_del(int fd_ep, int fd);
-struct epoll_desc *epoll_desc_alloc_irqdev(struct ixmap_plane *plane,
+struct epoll_desc *epoll_desc_alloc_irq(struct ixmap_plane *plane,
 	unsigned int port_index, unsigned int core_id,
-	enum ixmap_irq_direction direction);
-void epoll_desc_release_irqdev(struct epoll_desc *ep_desc);
+	enum ixmap_irq_type type);
+void epoll_desc_release_irq(struct epoll_desc *ep_desc);
 struct epoll_desc *epoll_desc_alloc_signalfd(sigset_t *sigset,
 	unsigned int core_id);
 void epoll_desc_release_signalfd(struct epoll_desc *ep_desc);

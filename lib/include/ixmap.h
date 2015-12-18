@@ -23,7 +23,7 @@
 #define IXGBE_MIN_TXD		64
 
 struct ixmap_handle;
-struct ixmap_irqdev_handle;
+struct ixmap_irq_handle;
 struct ixmap_desc;
 struct ixmap_buf;
 struct ixmap_plane;
@@ -34,7 +34,7 @@ struct ixmap_packet {
 	int			slot_index;
 };
 
-enum ixmap_irq_direction {
+enum ixmap_irq_type {
 	IXMAP_IRQ_RX = 0,
 	IXMAP_IRQ_TX,
 };
@@ -60,17 +60,11 @@ void ixmap_close(struct ixmap_handle *ih);
 unsigned int ixmap_bufsize_get(struct ixmap_handle *ih);
 uint8_t *ixmap_macaddr_default(struct ixmap_handle *ih);
 unsigned int ixmap_mtu_get(struct ixmap_handle *ih);
-struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
-	unsigned int port_index, unsigned int core_id,
-	enum ixmap_irq_direction direction);
-void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh);
-int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
-	unsigned int core_id);
-int ixmap_irqdev_fd(struct ixmap_irqdev_handle *irqh);
 
 inline void ixmap_irq_unmask_queues(struct ixmap_plane *plane,
-	struct ixmap_irqdev_handle *irqh);
-inline unsigned int ixmap_port_index(struct ixmap_irqdev_handle *irqh);
+	unsigned int port_idnex, enum ixmap_irq_type type);
+int ixmap_irq_fd(struct ixmap_plane *plane, unsigned int port_index,
+	enum ixmap_irq_type type);
 
 void ixmap_rx_assign(struct ixmap_plane *plane, unsigned int port_index,
 	struct ixmap_buf *buf);

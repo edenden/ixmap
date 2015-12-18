@@ -3,11 +3,6 @@
 
 #define MISCDEV_NAME_SIZE	32
 
-enum {
-	IRQDEV_RX = 0,
-	IRQDEV_TX,
-};
-
 #define IXMAP_INFO		_IOW('E', 201, int)
 /* MAC and PHY info */
 struct ixmap_info_req {
@@ -61,16 +56,17 @@ struct ixmap_unmap_req {
 	unsigned long		addr_dma;
 };
 
-#define IXMAP_IRQDEV_INFO	_IOW('E', 201, int)
-struct ixmap_irqdev_info_req {
+#define IXMAP_IRQ		_IOW('E', 220, int)
+struct ixmap_irq_req {
+	enum ixmap_irq_type	type;
+	uint32_t		queue_idx;
+	int			event_fd;
+
 	uint32_t		vector;
 	uint16_t		entry;
 };
 
 int ixmap_miscdev_register(struct ixmap_adapter *adapter);
 void ixmap_miscdev_deregister(struct ixmap_adapter *adapter);
-int ixmap_irqdev_misc_register(struct ixmap_irqdev *irqdev,
-	unsigned int id, int direction, int queue_idx);
-void ixmap_irqdev_misc_deregister(struct ixmap_irqdev *irqdev);
 
 #endif /* _IXMAP_FOPS_H */

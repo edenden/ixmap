@@ -108,16 +108,18 @@ struct ixmap_handle {
 	char			interface_name[IFNAMSIZ];
 };
 
-struct ixmap_irqdev_handle {
+struct ixmap_irq_handle {
 	int			fd;
-	uint32_t		port_index;
 	uint64_t		qmask;
+	uint32_t		vector;
 };
 
 struct ixmap_port {
 	void			*irqreg[2];
 	struct ixmap_ring	*rx_ring;
 	struct ixmap_ring	*tx_ring;
+	struct ixmap_irq_handle	*rx_irq;
+	struct ixmap_irq_handle *tx_irq;
 	uint32_t		rx_slot_next;
 	uint32_t		rx_slot_offset;
 	uint32_t		tx_suspended;
@@ -152,7 +154,7 @@ enum {
 	IXGBE_DMA_CACHE_WRITECOMBINE
 };
 
-enum ixmap_irq_direction {
+enum ixmap_irq_type {
 	IXMAP_IRQ_RX = 0,
 	IXMAP_IRQ_TX,
 };
@@ -255,8 +257,12 @@ struct ixmap_unmap_req {
 	unsigned long		addr_dma;
 };
 
-#define IXMAP_IRQDEV_INFO	_IOW('E', 201, int)
-struct ixmap_irqdev_info_req {
+#define IXMAP_IRQ		_IOW('E', 220, int)
+struct ixmap_irq_req {
+	enum ixmap_irq_type	type;
+	uint32_t		queue_idx;
+	int			event_fd;
+
 	uint32_t		vector;
 	uint16_t		entry;
 };

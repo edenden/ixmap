@@ -21,6 +21,10 @@ static void ixmap_irq_enable_queues(struct ixmap_handle *ih, uint64_t qmask);
 static int ixmap_dma_map(struct ixmap_handle *ih, void *addr_virt,
 	unsigned long *addr_dma, unsigned long size);
 static int ixmap_dma_unmap(struct ixmap_handle *ih, unsigned long addr_dma);
+static struct ixmap_irq_handle *ixmap_irq_open(struct ixmap_handle *ih,
+	unsigned int core_id, enum ixmap_irq_type type);
+static void ixmap_irq_close(struct ixmap_irq_handle *irqh);
+static int ixmap_irq_setaffinity(unsigned int vector, unsigned int core_id);
 
 inline uint32_t ixmap_readl(const volatile void *addr)
 {
@@ -88,7 +92,7 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 	struct ixmap_buf *buf, int ih_num, int core_id)
 {
 	struct ixmap_plane *plane;
-	int i;
+	int i, ports_assigned = 0;
 
 	plane = numa_alloc_onnode(sizeof(struct ixmap_plane),
 		numa_node_of_cpu(core_id));
@@ -102,7 +106,7 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 		goto err_alloc_ports;
 	}
 
-	for(i = 0; i < ih_num; i++){
+	for(i = 0; i < ih_num; i++, ports_assigned++){
 		plane->ports[i].interface_name = ih_list[i]->interface_name;
 		plane->ports[i].irqreg[0] = ih_list[i]->bar + IXGBE_EIMS_EX(0);
 		plane->ports[i].irqreg[1] = ih_list[i]->bar + IXGBE_EIMS_EX(1);
@@ -123,10 +127,33 @@ struct ixmap_plane *ixmap_plane_alloc(struct ixmap_handle **ih_list,
 		plane->ports[i].count_tx_clean_total = 0;
 
 		memcpy(plane->ports[i].mac_addr, ih_list[i]->mac_addr, ETH_ALEN);
+
+		plane->ports[i].rx_irq = ixmap_irq_open(ih_list[i], core_id,
+						IXMAP_IRQ_RX);
+		if(!plane->ports[i].rx_irq)
+			goto err_alloc_irq_rx;
+
+		plane->ports[i].tx_irq = ixmap_irq_open(ih_list[i], core_id,
+						IXMAP_IRQ_TX);
+		if(!plane->ports[i].tx_irq)
+			goto err_alloc_irq_tx;
+
+		continue;
+
+err_alloc_irq_tx:
+		ixmap_irq_close(plane->ports[i].rx_irq);
+err_alloc_irq_rx:
+		goto err_alloc_plane;
 	}
 
 	return plane;
 
+err_alloc_plane:
+	for(i = 0; i < ports_assigned; i++){
+		ixmap_irq_close(plane->ports[i].rx_irq);
+		ixmap_irq_close(plane->ports[i].tx_irq);
+	}
+	numa_free(plane->ports, sizeof(struct ixmap_port) * ih_num);
 err_alloc_ports:
 	numa_free(plane, sizeof(struct ixmap_plane));
 err_plane_alloc:
@@ -135,6 +162,13 @@ err_plane_alloc:
 
 void ixmap_plane_release(struct ixmap_plane *plane, int ih_num)
 {
+	int i;
+
+	for(i = 0; i < ih_num; i++){
+		ixmap_irq_close(plane->ports[i].rx_irq);
+		ixmap_irq_close(plane->ports[i].tx_irq);
+	}
+
 	numa_free(plane->ports, sizeof(struct ixmap_port) * ih_num);
 	numa_free(plane, sizeof(struct ixmap_plane));
 
@@ -527,71 +561,81 @@ unsigned int ixmap_mtu_get(struct ixmap_handle *ih)
 	return ih->mtu_frame;
 }
 
-struct ixmap_irqdev_handle *ixmap_irqdev_open(struct ixmap_plane *plane,
-	unsigned int port_index, unsigned int core_id,
-	enum ixmap_irq_direction direction)
+static struct ixmap_irq_handle *ixmap_irq_open(struct ixmap_handle *ih,
+	unsigned int core_id, enum ixmap_irq_type type)
 {
-	struct ixmap_port *port;
-	struct ixmap_irqdev_handle *irqh;
+	struct ixmap_irq_handle *irqh;
 	char filename[FILENAME_SIZE];
 	uint64_t qmask;
+	int efd, ret;
+	struct ixmap_irq_req req;
 
-	port = &plane->ports[port_index];
-
-	if(core_id >= port->num_queues){
+	if(core_id >= ih->num_queues){
 		goto err_invalid_core_id;
 	}
 
-	switch(direction){
+	efd = eventfd();
+	if(efd < 0)
+		goto err_open_efd;
+
+	req.type	= type;
+	req.queue_idx	= core_id;
+	req.event_fd	= efd;
+
+	ret = ioctl(irqh->fd, IXMAP_IRQ, (unsigned long)&req);
+	if(ret < 0){
+		printf("failed to IXMAP_IRQ\n");
+		goto err_irq_assign;
+	}
+
+	ret = ixmap_irq_setaffinity(req.vector, core_id);
+	if(ret < 0){
+		printf("failed to set afinity\n");
+		goto err_irq_setaffinity;
+	}
+
+	switch(type){
 	case IXMAP_IRQ_RX:
-		snprintf(filename, sizeof(filename), "/dev/%s-irqrx%d",
-			port->interface_name, core_id);
 		qmask = 1 << core_id;
 		break;
 	case IXMAP_IRQ_TX:
-		snprintf(filename, sizeof(filename), "/dev/%s-irqtx%d",
-			port->interface_name, core_id);
-		qmask = 1 << (core_id + port->num_queues);
+		qmask = 1 << (core_id + ih->num_queues);
 		break;
 	default:
-		goto err_invalid_direction;
-		break;
+		goto err_undefined_type;
 	}
 
-	irqh = numa_alloc_onnode(sizeof(struct ixmap_irqdev_handle),
+	irqh = numa_alloc_onnode(sizeof(struct ixmap_irq_handle),
 		numa_node_of_cpu(core_id));
 	if(!irqh)
 		goto err_alloc_handle;
 
-	irqh->fd = open(filename, O_RDWR);
-	if(irqh->fd < 0)
-		goto err_open;
-
-	irqh->port_index = port_index;
-	irqh->qmask = qmask;
+	irqh->fd		= efd;
+	irqh->qmask		= qmask;
+	irqh->vector		= req.vector;
 
 	return irqh;
 
-err_open:
-	numa_free(irqh, sizeof(struct ixmap_irqdev_handle));
 err_alloc_handle:
-err_invalid_direction:
+err_undefined_type:
+err_irq_setaffinity:
+err_irq_assign:
+	close(efd);
+err_open_efd:
 err_invalid_core_id:
 	return NULL;
 }
 
-void ixmap_irqdev_close(struct ixmap_irqdev_handle *irqh)
+static void ixmap_irq_close(struct ixmap_irq_handle *irqh)
 {
 	close(irqh->fd);
-	numa_free(irqh, sizeof(struct ixmap_irqdev_handle));
+	numa_free(irqh, sizeof(struct ixmap_irq_handle));
 
 	return;
 }
 
-int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
-	unsigned int core_id)
+static int ixmap_irq_setaffinity(unsigned int vector, unsigned int core_id)
 {
-	struct ixmap_irqdev_info_req req_info;
 	FILE *file;
 	char filename[FILENAME_SIZE];
 	uint32_t mask_low, mask_high;
@@ -600,14 +644,8 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 	mask_low = core_id <= 31 ? 1 << core_id : 0;
 	mask_high = core_id <= 31 ? 0 : 1 << (core_id - 31);
 
-	ret = ioctl(irqh->fd, IXMAP_IRQDEV_INFO, (unsigned long)&req_info);
-	if(ret < 0){
-		printf("failed to UIO_IRQ_INFO\n");
-		goto err_irqdev_info;
-	}
-
 	snprintf(filename, sizeof(filename),
-		"/proc/irq/%d/smp_affinity", req_info.vector);
+		"/proc/irq/%d/smp_affinity", vector);
 	file = fopen(filename, "w");
 	if(!file){
 		printf("failed to open smp_affinity\n");
@@ -626,11 +664,30 @@ int ixmap_irqdev_setaffinity(struct ixmap_irqdev_handle *irqh,
 err_set_affinity:
 	fclose(file);
 err_open_proc:
-err_irqdev_info:
 	return -1;
 }
 
-int ixmap_irqdev_fd(struct ixmap_irqdev_handle *irqh)
+int ixmap_irq_fd(struct ixmap_plane *plane, unsigned int port_index,
+	enum ixmap_irq_type type)
 {
+	struct ixmap_port *port;
+	struct ixmap_irq_handle *irqh;
+
+	port = &plane->ports[port_index];
+
+	switch(type){
+	case IXMAP_IRQ_RX:
+		irqh = port->rx_irq;
+		break;
+	case IXMAP_IRQ_TX:
+		irqh = port->tx_irq;
+		break;
+	default:
+		goto err_undefined_type;
+	}
+
 	return irqh->fd;
+
+err_undefined_type:
+	return -1;
 }

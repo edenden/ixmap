@@ -33,15 +33,6 @@ static void ixmap_vm_close(struct vm_area_struct *vma);
 static int ixmap_vm_fault(struct vm_area_struct *area, struct vm_fault *fdata);
 static int ixmap_mmap(struct file *file, struct vm_area_struct *vma);
 static long ixmap_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
-static unsigned int ixmap_irqdev_poll(struct file *file, poll_table *wait);
-static ssize_t ixmap_irqdev_read(struct file * file, char __user * buf,
-	size_t count, loff_t *pos);
-static int ixmap_irqdev_open(struct inode *inode, struct file *file);
-static int ixmap_irqdev_close(struct inode *inode, struct file *file);
-static int ixmap_irqdev_cmd_info(struct ixmap_irqdev *irqdev,
-	void __user *argp);
-static long ixmap_irqdev_ioctl(struct file *file,
-	unsigned int cmd, unsigned long arg);
 
 static struct file_operations ixmap_fops = {
 	.owner		= THIS_MODULE,
@@ -52,17 +43,6 @@ static struct file_operations ixmap_fops = {
 	.release	= ixmap_close,
 	.mmap		= ixmap_mmap,
 	.unlocked_ioctl	= ixmap_ioctl,
-};
-
-static struct file_operations ixmap_irqdev_fops = {
-	.owner		= THIS_MODULE,
-	.llseek		= no_llseek,
-	.read		= ixmap_irqdev_read,
-	.write		= ixmap_write,
-	.open		= ixmap_irqdev_open,
-	.release	= ixmap_irqdev_close,
-	.poll		= ixmap_irqdev_poll,
-	.unlocked_ioctl	= ixmap_irqdev_ioctl,
 };
 
 static struct vm_operations_struct ixmap_mmap_ops = {
@@ -311,6 +291,27 @@ static int ixmap_cmd_unmap(struct ixmap_adapter *adapter,
 	return 0;
 }
 
+static int ixmap_cmd_irq(struct ixmap_adapter *adapter,
+	void __user *argp)
+{
+	struct ixmap_irq_req req;
+	int ret;
+
+	if (copy_from_user(&req, argp, sizeof(req)))
+		return -EFAULT;
+
+	ret = ixmap_irq_assign(adapter, req.type, req.queue_idx,
+		req.event_fd, &req.vector, &req.entry);
+	if(ret != 0)
+		return ret;
+
+	if (copy_to_user(argp, &req, sizeof(req))) {
+		return -EFAULT;
+        }
+
+	return 0;
+}
+
 static ssize_t ixmap_read(struct file * file, char __user * buf,
 	size_t count, loff_t *pos)
 {
@@ -470,212 +471,16 @@ static long ixmap_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		err = ixmap_cmd_check_link(adapter, argp);
 		break;
 
+	case IXMAP_IRQ:
+		err = ixmap_cmd_irq(adapter, argp);
+		break;
+
 	default:
 		err = -EINVAL;
 		break;
 	};
 
 	up(&adapter->sem);
-
-	return err;
-}
-
-int ixmap_irqdev_misc_register(struct ixmap_irqdev *irqdev,
-	unsigned int id, int direction, int queue_idx)
-{
-	char *irqdev_name;
-	int err;
-
-	irqdev_name = kmalloc(MISCDEV_NAME_SIZE, GFP_KERNEL);
-	if(!irqdev_name){
-		goto err_alloc_irqdev_name;
-	}
-
-	switch(direction){
-	case IRQDEV_RX:
-		snprintf(irqdev_name, MISCDEV_NAME_SIZE,
-			"ixgbe%d-irqrx%d", id, queue_idx);
-		break;
-	case IRQDEV_TX:
-		snprintf(irqdev_name, MISCDEV_NAME_SIZE,
-			"ixgbe%d-irqtx%d", id, queue_idx);
-		break;
-	default:
-		break;
-	}
-
-	irqdev->miscdev.minor = MISC_DYNAMIC_MINOR;
-	irqdev->miscdev.name = irqdev_name;
-	irqdev->miscdev.fops = &ixmap_irqdev_fops;
-
-	err = misc_register(&irqdev->miscdev);
-	if (err) {
-		pr_err("failed to register irq device\n");
-		goto err_misc_register;
-	}
-
-	return 0;
-
-err_misc_register:
-        kfree(irqdev->miscdev.name);
-err_alloc_irqdev_name:
-	return -1;
-}
-
-void ixmap_irqdev_misc_deregister(struct ixmap_irqdev *irqdev)
-{
-	misc_deregister(&irqdev->miscdev);
-	kfree(irqdev->miscdev.name);
-
-	return;
-}
-
-static int ixmap_irqdev_cmd_info(struct ixmap_irqdev *irqdev,
-	void __user *argp)
-{
-	struct ixmap_irqdev_info_req req;
-	int err = 0;
-
-	req.vector = irqdev->msix_entry->vector;
-	req.entry = irqdev->msix_entry->entry;
-
-	if (copy_to_user(argp, &req, sizeof(req))) {
-		return -EFAULT;
-	}
-
-	return err;
-}
-
-static unsigned int ixmap_irqdev_poll(struct file *file, poll_table *wait)
-{
-	struct ixmap_irqdev *irqdev;
-	unsigned int mask = 0;
-	uint32_t count_interrupt;
-
-	irqdev = file->private_data;
-	if (!irqdev)
-		return -EBADFD;
-
-	poll_wait(file, &irqdev->read_wait, wait);
-
-	count_interrupt = atomic_read(&irqdev->count_interrupt);
-	if (count_interrupt)
-		mask |= POLLIN | POLLRDNORM;
-	mask |= POLLOUT | POLLWRNORM;
-
-	return mask;
-}
-
-static ssize_t ixmap_irqdev_read(struct file * file, char __user * buf,
-	size_t count, loff_t *pos)
-{
-	struct ixmap_irqdev *irqdev;
-	DECLARE_WAITQUEUE(wait, current);
-	uint32_t count_interrupt;
-	int err;
-
-	irqdev = file->private_data;
-	if (!irqdev)
-		return -EBADFD;
-
-	if (count < sizeof(count_interrupt))
-		return -EINVAL;
-
-	add_wait_queue(&irqdev->read_wait, &wait);
-	while (count) {
-		set_current_state(TASK_INTERRUPTIBLE);
-
-		count_interrupt = atomic_xchg(&irqdev->count_interrupt, 0);
-		if (!count_interrupt) {
-			if (file->f_flags & O_NONBLOCK) {
-				err = -EAGAIN;
-				break;
-			}
-			if (signal_pending(current)) {
-				err = -ERESTARTSYS;
-				break;
-			}
-
-			/* Nothing to read, let's sleep */
-			schedule();
-			continue;
-		}
-		if (copy_to_user(buf, &count_interrupt, sizeof(count_interrupt)))
-			err = -EFAULT;
-		else
-			err = sizeof(count_interrupt);
-		break;
-	}
-
-	__set_current_state(TASK_RUNNING);
-	remove_wait_queue(&irqdev->read_wait, &wait);
-
-	return err;
-}
-
-static int ixmap_irqdev_open(struct inode *inode, struct file *file)
-{
-	struct ixmap_irqdev *irqdev;
-	struct miscdevice *miscdev = file->private_data;
-	int err;
-
-	pr_info("open req irqdev=%p\n", miscdev);
-	irqdev = container_of(miscdev, struct ixmap_irqdev, miscdev);
-
-	down(&irqdev->sem);
-
-	if (ixmap_irqdev_inuse(irqdev)) {
-		err = -EBUSY;
-		goto out;
-	}
-
-	ixmap_irqdev_get(irqdev);
-	file->private_data = irqdev;
-	err = 0;
-
-out:
-	up(&irqdev->sem);
-	return err;
-}
-
-static int ixmap_irqdev_close(struct inode *inode, struct file *file)
-{
-	struct ixmap_irqdev *irqdev = file->private_data;
-	if (!irqdev)
-		return 0;
-
-	pr_info("close irqdev=%p\n", irqdev);
-
-	down(&irqdev->sem);
-	/* XXX: Should we do something here? */
-	up(&irqdev->sem);
-
-	ixmap_irqdev_put(irqdev);
-	return 0;
-}
-
-static long ixmap_irqdev_ioctl(struct file *file,
-	unsigned int cmd, unsigned long arg)
-{
-	struct ixmap_irqdev *irqdev = file->private_data;
-	void __user * argp = (void __user *) arg;
-	int err;
-
-	if(!irqdev)
-		return -EBADFD;
-
-	down(&irqdev->sem);
-
-	switch (cmd) {
-	case IXMAP_IRQDEV_INFO:
-		err = ixmap_irqdev_cmd_info(irqdev, argp);
-		break;
-	default:
-		err = -EINVAL;
-		break;
-	};
-
-	up(&irqdev->sem);
 
 	return err;
 }
