@@ -581,7 +581,7 @@ static struct ixmap_irq_handle *ixmap_irq_open(struct ixmap_handle *ih,
 	req.queue_idx	= core_id;
 	req.event_fd	= efd;
 
-	ret = ioctl(irqh->fd, IXMAP_IRQ, (unsigned long)&req);
+	ret = ioctl(ih->fd, IXMAP_IRQ, (unsigned long)&req);
 	if(ret < 0){
 		printf("failed to IXMAP_IRQ\n");
 		goto err_irq_assign;
