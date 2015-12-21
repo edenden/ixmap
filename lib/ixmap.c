@@ -573,7 +573,7 @@ static struct ixmap_irq_handle *ixmap_irq_open(struct ixmap_handle *ih,
 		goto err_invalid_core_id;
 	}
 
-	efd = eventfd();
+	efd = eventfd(0, 0);
 	if(efd < 0)
 		goto err_open_efd;
 
