@@ -45,9 +45,12 @@ void forward_process(struct ixmapfwd_thread *thread, unsigned int port_index,
 	struct ethhdr *eth;
 	int i, ret;
 
+	/* software prefetch is not needed when DDIO is available */
+#ifdef DDIO_UNSUPPORTED
 	for(i = 0; i < num_packet; i++){
 		prefetchw(packet[i].slot_buf);
 	}
+#endif
 
 	for(i = 0; i < num_packet; i++){
 #ifdef DEBUG
