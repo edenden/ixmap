@@ -44,7 +44,7 @@ destined to localhost so that you can use any existing network application on it
 ## 3. Setup
 
 In advance, disable Hyper-Threading, VT-d and Power management  
-(or select high performance mode) in the BIOS.
+(or select high performance mode) and enable TurboBoost in the BIOS.
 
 Edit /etc/default/grub:  
 (Needed hugepages X = (Number of cores) * 2)
@@ -63,6 +63,10 @@ Optional: Add udev rules and sytemd unit to load ixmap at boot time
     % cp ./extra/udev/99-ixmap.rules /etc/udev/rules.d/
     % cp ./extra/systemd/ixmap.service /etc/systemd/system/
     % cp ./extra/systemd/ixmap-exec.sh /usr/local/bin/
+
+Optional: Change cpufreq governor policy to performance:
+
+    % cpufreq-set -g performance
 
 After setting all of the above:
 
