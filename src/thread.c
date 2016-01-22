@@ -156,7 +156,6 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 				/* Rx descripter cleaning */
 				ret = ixmap_rx_clean(thread->plane, port_index,
 					thread->buf, packet);
-				ixmap_rx_assign(thread->plane, port_index, thread->buf);
 
 				forward_process(thread, port_index, packet, ret);
 
@@ -176,6 +175,9 @@ static int thread_wait(struct ixmapfwd_thread *thread,
 
 				/* Tx descripter cleaning */
 				ixmap_tx_clean(thread->plane, port_index, thread->buf);
+				for(i = 0; i < thread->num_ports; i++){
+					ixmap_rx_assign(thread->plane, i, thread->buf);
+				}
 
 				ret = read(ep_desc->fd, read_buf, read_size);
 				if(ret < 0)
